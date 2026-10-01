@@ -319,7 +319,7 @@ model Customer {
   phone              String?
   email              String?
   profileImageKey    String?
-  customerType       String
+  customerType       String?
   addressLine1       String?
   addressLine2       String?
   city               String?

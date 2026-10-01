@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -18,10 +18,8 @@ export const findSaleForPayment = (db: Db, companyId: string, invoiceId: string,
 export const lockCustomerAndSale = async (db: Prisma.TransactionClient, companyId: string, customerId: string, invoiceId: string) => {
 	await db.$queryRaw(Prisma.sql`SELECT "id" FROM "Customer" WHERE "id" = ${customerId} AND "companyId" = ${companyId} FOR UPDATE`);
 	await db.$queryRaw(Prisma.sql`SELECT "id" FROM "Sale" WHERE "id" = ${invoiceId} AND "companyId" = ${companyId} FOR UPDATE`);
-	const [customer, sale] = await Promise.all([
-		db.customer.findFirst({ where: { id: customerId, companyId, deletedAt: null } }),
-		db.sale.findFirst({ where: { id: invoiceId, companyId, customerId } }),
-	]);
+	const customer = await db.customer.findFirst({ where: { id: customerId, companyId, deletedAt: null } });
+	const sale = await db.sale.findFirst({ where: { id: invoiceId, companyId, customerId } });
 	return { customer, sale };
 };
 
