@@ -1,12 +1,16 @@
 import type { ErrorRequestHandler } from "express";
 
+import { AppError } from "../utils/errors";
+
 export const errorHandler: ErrorRequestHandler = (
 	error,
 	_request,
 	response,
 	_next,
 ) => {
-	const statusCode = typeof error?.statusCode === "number" ? error.statusCode : 500;
-	const message = error instanceof Error ? error.message : "Internal server error";
-	response.status(statusCode).json({ success: false, error: message });
+	const appError = error instanceof AppError ? error : undefined;
+	const statusCode = appError?.statusCode ?? 500;
+	const message = appError?.message ?? "Internal server error";
+	const code = appError?.code ?? "INTERNAL_SERVER_ERROR";
+	response.status(statusCode).json({ success: false, error: { code, message } });
 };

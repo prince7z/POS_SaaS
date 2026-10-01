@@ -29,6 +29,9 @@ export const env = {
 	port: readPort(),
 	nodeEnv: readOptional("NODE_ENV") ?? "development",
 	databaseUrl: readRequired("PSQL"),
+	jwtSecret: readRequired("JWT_SECRET"),
+	accessTokenTtl: readOptional("ACCESS_TOKEN_TTL") ?? "15m",
+	refreshTokenTtlDays: Number(readOptional("REFRESH_TOKEN_TTL_DAYS") ?? "30"),
 	aws: {
 		region: readOptional("AWS_REGION") ?? "us-east-2",
 		accessKeyId: readOptional("AWS_ACCESS_KEY_ID"),

@@ -109,20 +109,20 @@ enum EmailStatus {
 model Company {
   id                        String    @id @default(uuid())
   name                      String
-  phone                     String
-  email                     String
+  phone                     String?
+  email                     String?
   logoKey                   String?
-  addressLine1              String
+  addressLine1              String?
   addressLine2              String?
-  city                      String
-  state                     String
-  postalCode                String
-  countryCode               String
-  currencyCode              String
-  timezone                  String
-  defaultTaxRate            Decimal   @db.Decimal(5, 2)
-  dateFormat                String
-  timeFormat                String
+  city                      String?
+  state                     String?
+  postalCode                String?
+  countryCode               String    @default("ZA")
+  currencyCode              String    @default("ZAR")
+  timezone                  String    @default("Africa/Johannesburg")
+  defaultTaxRate            Decimal   @default(0) @db.Decimal(14, 2)
+  dateFormat                String    @default("yyyy-MM-dd")
+  timeFormat                String    @default("HH:mm")
   lowStockAlerts            Boolean   @default(true)
   showProductImages         Boolean   @default(true)
   autoGenerateInvoiceNumber Boolean   @default(true)
@@ -154,20 +154,22 @@ model Company {
 }
 
 model User {
-  id           String    @id @default(uuid())
-  companyId    String
-  email        String
-  passwordHash String
-  fullName     String
-  phone        String?
-  roleName     String
-  accesses     Access[]
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  deletedAt    DateTime?
+  id              String    @id @default(uuid())
+  companyId       String
+  email           String
+  passwordHash    String
+  fullName        String
+  phone           String?
+  profileImageKey String?
+  roleName        String
+  accesses        Access[]
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
 
   company                 Company             @relation(fields: [companyId], references: [id])
+  sessions                Session[]
   cashierSales            Sale[]              @relation("SaleCashier")
   createdPurchaseOrders   PurchaseOrder[]     @relation("PurchaseOrderCreator")
   createdSupplierPayments SupplierPayment[]   @relation("SupplierPaymentCreator")
@@ -182,11 +184,26 @@ model User {
   @@index([deletedAt])
 }
 
+model Session {
+  id               String    @id @default(uuid())
+  userId           String
+  refreshTokenHash String
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
+  revokedAt        DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
 model Category {
   id          String    @id @default(uuid())
   companyId   String
   parentId    String?
   name        String
+  logoKey     String?
   description String?
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
