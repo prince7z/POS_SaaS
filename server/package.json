@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "dev": "tsx src/server.ts",
     "test:modules": "tsx scripts/test-auth-company.ts",
-    "test": "npm run test:modules"
+    "test:media": "tsx scripts/test-media.ts",
+    "test": "npm run test:modules && npm run test:media"
   },
   "keywords": [],
   "author": "",

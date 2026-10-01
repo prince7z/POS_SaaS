@@ -12,17 +12,27 @@ export type MediaResource =
 	| "COMPANY_LOGO"
 	| "PRODUCT_IMAGE"
 	| "BRAND_LOGO"
-	| "CATEGORY_LOGO";
+ 	| "CATEGORY_LOGO"
+	| "INVOICE_PDF"
+	| "DOCUMENT";
 
 const ALLOWED_CONTENT_TYPES = {
 	"image/jpeg": "jpg",
 	"image/png": "png",
 	"image/webp": "webp",
+	"application/pdf": "pdf",
+	"application/msword": "doc",
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+	"application/vnd.ms-excel": "xls",
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+	"application/vnd.ms-powerpoint": "ppt",
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+	"text/csv": "csv",
 } as const;
 
 const safePathSegment = (value: string): boolean => /^[A-Za-z0-9_-]+$/.test(value);
 
-export const getExtensionFromContentType = (contentType: string): "jpg" | "png" | "webp" => {
+export const getExtensionFromContentType = (contentType: string): string => {
 	const extension = ALLOWED_CONTENT_TYPES[contentType as keyof typeof ALLOWED_CONTENT_TYPES];
 	if (!extension) throw mediaError("INVALID_MEDIA_TYPE", "Unsupported media type");
 	return extension;
@@ -45,6 +55,10 @@ const createKey = (companyId: string, resource: MediaResource, resourceId: strin
 			return `companies/${companyId}/brands/${resourceId}/logo/${fileName}`;
 		case "CATEGORY_LOGO":
 			return `companies/${companyId}/categories/${resourceId}/logo/${fileName}`;
+		case "INVOICE_PDF":
+			return `companies/${companyId}/invoices/${resourceId}/${fileName}`;
+		case "DOCUMENT":
+			return `companies/${companyId}/documents/${resourceId}/${fileName}`;
 		default:
 			throw mediaError("MEDIA_KEY_INVALID", "Invalid media resource");
 	}
