@@ -10,7 +10,8 @@
     "dev": "tsx src/server.ts",
     "test:modules": "tsx scripts/test-auth-company.ts",
     "test:media": "tsx scripts/test-media.ts",
-    "test": "npm run test:modules && npm run test:media"
+    "test:catalog": "tsx scripts/test-catalog.ts",
+    "test": "npm run test:modules && npm run test:media && npm run test:catalog"
   },
   "keywords": [],
   "author": "",

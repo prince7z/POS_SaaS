@@ -316,8 +316,9 @@ model Customer {
   id                 String    @id @default(uuid())
   companyId          String
   name               String
-  phone              String
-  email              String
+  phone              String?
+  email              String?
+  profileImageKey    String?
   customerType       String
   addressLine1       String?
   addressLine2       String?

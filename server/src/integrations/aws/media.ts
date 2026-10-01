@@ -9,6 +9,7 @@ import {
 
 export type MediaResource =
 	| "USER_PROFILE"
+	| "CUSTOMER_PROFILE"
 	| "COMPANY_LOGO"
 	| "PRODUCT_IMAGE"
 	| "BRAND_LOGO"
@@ -47,6 +48,8 @@ const createKey = (companyId: string, resource: MediaResource, resourceId: strin
 	switch (resource) {
 		case "USER_PROFILE":
 			return `companies/${companyId}/users/${resourceId}/profile/${fileName}`;
+		case "CUSTOMER_PROFILE":
+			return `companies/${companyId}/customers/${resourceId}/profile/${fileName}`;
 		case "COMPANY_LOGO":
 			return `companies/${companyId}/logo/${fileName}`;
 		case "PRODUCT_IMAGE":
