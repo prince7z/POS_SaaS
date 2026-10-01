@@ -652,14 +652,18 @@ export const createReturn = async (companyId: string, userId: string, saleId: st
 			products.push(product);
 		}
 		const saleItemMap = new Map(saleItems.map((item) => [item.id, item]));
+		const requestedQuantities = new Map<string, Prisma.Decimal>();
+		for (const item of input.items) {
+			const quantity = parseDecimal(item.quantity);
+			requestedQuantities.set(item.saleItemId, (requestedQuantities.get(item.saleItemId) ?? new Prisma.Decimal(0)).plus(quantity));
+		}
 		let refundAmount = new Prisma.Decimal(0);
-		const requestedItems = input.items.map((item) => {
-			const saleItem = saleItemMap.get(item.saleItemId);
+		const requestedItems = [...requestedQuantities.entries()].map(([saleItemId, quantity]) => {
+			const saleItem = saleItemMap.get(saleItemId);
 			if (!saleItem) throw error("RETURN_NOT_ALLOWED", "Sale item is invalid", 400);
 			const returnedQuantity = saleItem.returnItems.reduce((sum: Prisma.Decimal, entry: any) => sum.plus(entry.quantity), new Prisma.Decimal(0));
 			const soldQuantity = parseDecimal(saleItem.quantity);
 			const remainingQuantity = soldQuantity.minus(returnedQuantity);
-			const quantity = parseDecimal(item.quantity);
 			if (quantity.lte(0)) throw error("RETURN_QUANTITY_EXCEEDED", "Return quantity must be greater than zero", 400);
 			if (quantity.gt(remainingQuantity)) throw error("RETURN_QUANTITY_EXCEEDED", "Return quantity exceeds available quantity", 409);
 			const lineRefund = roundMoney(quantity.times(saleItem.unitPrice));

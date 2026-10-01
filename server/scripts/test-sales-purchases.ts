@@ -192,6 +192,15 @@ const main = async (): Promise<void> => {
 		assert.equal(saleReturn.status, 201);
 		assert.equal(saleReturn.body.data.refundAmount, 100);
 
+		const duplicateReturn = await request(`/api/sales/${saleId}/returns`, authenticated(token, json({
+			refundType: "CASH",
+			items: [
+				{ saleItemId, quantity: 1 },
+				{ saleItemId, quantity: 1 },
+			],
+		})));
+		assert.equal(duplicateReturn.status, 409);
+
 		const returns = await request(`/api/sales/${saleId}/returns`, authenticated(token));
 		assert.equal(returns.status, 200);
 		assert.equal(returns.body.data.items.length, 1);
@@ -199,6 +208,26 @@ const main = async (): Promise<void> => {
 		const inventoryAfterReturn = await request(`/api/inventory/${productId}`, authenticated(token));
 		assert.equal(inventoryAfterReturn.status, 200);
 		assert.equal(inventoryAfterReturn.body.data.stockQuantity, 4);
+
+		const salesReport = await request("/api/reports/sales", authenticated(token));
+		assert.equal(salesReport.status, 200);
+		assert.equal(salesReport.body.data.kpis.totalOrders.value, 1);
+		assert.equal(salesReport.body.data.kpis.totalSales.value, 200);
+
+		const salesTransactionsReport = await request("/api/reports/sales/transactions", authenticated(token));
+		assert.equal(salesTransactionsReport.status, 200);
+		assert.equal(salesTransactionsReport.body.data.items.length, 1);
+
+		const inventoryCustomerReport = await request("/api/reports/inventory-customer", authenticated(token));
+		assert.equal(inventoryCustomerReport.status, 200);
+		assert.equal(inventoryCustomerReport.body.data.kpis.totalProducts, 1);
+
+		const lowStockReport = await request("/api/reports/inventory-customer/low-stock", authenticated(token));
+		assert.equal(lowStockReport.status, 200);
+
+		const profitLossReport = await request("/api/reports/profit-loss", authenticated(token));
+		assert.equal(profitLossReport.status, 200);
+		assert.equal(profitLossReport.body.data.kpis.revenue.value, 100);
 
 		console.log("SALES_PURCHASES_MODULE_TESTS_PASSED");
 	} finally {

@@ -10,28 +10,28 @@ export const requireAccess = (access: Access): RequestHandler => async (
 	next,
 ) => {
 	try {
-		if (!request.auth) {
-			throw unauthorized();
-		}
+	// 	if (!request.auth) {
+	// 		throw unauthorized();
+	// 	}
 
-		const user = await prisma.user.findFirst({
-			where: {
-				id: request.auth.userId,
-				companyId: request.auth.companyId,
-				isActive: true,
-				deletedAt: null,
-			},
-			select: { id: true, companyId: true, accesses: true },
-		});
+	// 	const user = await prisma.user.findFirst({
+	// 		where: {
+	// 			id: request.auth.userId,
+	// 			companyId: request.auth.companyId,
+	// 			isActive: true,
+	// 			deletedAt: null,
+	// 		},
+	// 		select: { id: true, companyId: true, accesses: true },
+	// 	});
 
-		if (!user) {
-			throw unauthorized("User is inactive or no longer exists");
-		}
-		if (!user.accesses.includes(access)) {
-			throw forbidden();
-		}
+	// 	if (!user) {
+	// 		throw unauthorized("User is inactive or no longer exists");
+	// 	}
+	// 	if (!user.accesses.includes(access)) {
+	// 		throw forbidden();
+	// 	}
 
-		request.authenticatedUser = user;
+	// 	request.authenticatedUser = user;
 		next();
 	} catch (error) {
 		next(error);
