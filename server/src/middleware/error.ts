@@ -8,6 +8,7 @@ export const errorHandler: ErrorRequestHandler = (
 	response,
 	_next,
 ) => {
+	console.error(error);
 	const appError = error instanceof AppError ? error : undefined;
 	const statusCode = appError?.statusCode ?? 500;
 	const message = appError?.message ?? "Internal server error";

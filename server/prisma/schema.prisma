@@ -51,6 +51,8 @@ enum PaymentMethod {
   CASH
   CARD
   STORE_CREDIT
+  BANK_TRANSFER
+  OTHER
 }
 
 enum PurchaseOrderStatus {
@@ -490,6 +492,7 @@ model SupplierPayment {
   companyId       String
   supplierId      String
   purchaseOrderId String?
+  paymentMethod   PaymentMethod
   amount          Decimal  @db.Decimal(12, 2)
   paidAt          DateTime
   reference       String?

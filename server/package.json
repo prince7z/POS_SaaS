@@ -12,7 +12,8 @@
     "test:media": "tsx scripts/test-media.ts",
     "test:catalog": "tsx scripts/test-catalog.ts",
     "test:customer-inventory": "tsx scripts/test-customer-inventory.ts",
-    "test": "npm run test:modules && npm run test:media && npm run test:catalog && npm run test:customer-inventory"
+    "test:sales-purchases": "tsx scripts/test-sales-purchases.ts",
+    "test": "npm run test:modules && npm run test:media && npm run test:catalog && npm run test:customer-inventory && npm run test:sales-purchases"
   },
   "keywords": [],
   "author": "",
