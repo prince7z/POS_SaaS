@@ -1,0 +1,101 @@
+{
+  "kpis": [
+    {
+      "id": "kpi-revenue",
+      "title": "Total Revenue",
+      "value": "$42,850.20",
+      "change": 18.4,
+      "changeLabel": "vs. $36,200 last week",
+      "icon": "DollarSign",
+      "trend": "up"
+    },
+    {
+      "id": "kpi-orders",
+      "title": "Completed Orders",
+      "value": "1,428",
+      "change": 12.1,
+      "changeLabel": "Avg. order value: $30.00",
+      "icon": "ShoppingCart",
+      "trend": "up"
+    },
+    {
+      "id": "kpi-customers",
+      "title": "Active Customers",
+      "value": "892",
+      "change": 8.6,
+      "changeLabel": "42 new loyalty members today",
+      "icon": "Users",
+      "trend": "up"
+    },
+    {
+      "id": "kpi-processing",
+      "title": "Avg. Processing Time",
+      "value": "1m 24s",
+      "change": -4.2,
+      "changeLabel": "14s faster than store average",
+      "icon": "TrendingUp",
+      "trend": "up"
+    }
+  ],
+  "revenueChart": {
+    "labels": ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"],
+    "grossRevenue": [1200, 2400, 3800, 5100, 4300, 6800, 8200, 9400],
+    "orderCount": [400, 900, 1600, 2200, 1900, 3100, 3900, 4500]
+  },
+  "categoryBreakdown": [
+    { "name": "Beverages & Coffee", "value": 14200, "color": "#a855f7" },
+    { "name": "Bakery & Snacks", "value": 9800, "color": "#38bdf8" },
+    { "name": "Main Courses", "value": 7400, "color": "#34d399" },
+    { "name": "Retail Products", "value": 4300, "color": "#fbbf24" },
+    { "name": "Add-ons & Extras", "value": 2100, "color": "#f43f5e" }
+  ],
+  "recentActivity": [
+    {
+      "id": "act-1",
+      "type": "sale",
+      "description": "Sale #TXN-9082 — Sophia Martinez",
+      "amount": 18.5,
+      "time": "2026-10-01T12:16:00Z",
+      "status": "completed"
+    },
+    {
+      "id": "act-2",
+      "type": "sale",
+      "description": "Sale #TXN-9081 — Liam Johnson",
+      "amount": 24.0,
+      "time": "2026-10-01T12:13:00Z",
+      "status": "completed"
+    },
+    {
+      "id": "act-3",
+      "type": "sale",
+      "description": "Sale #TXN-9080 — Emma Davis",
+      "amount": 31.2,
+      "time": "2026-10-01T12:06:00Z",
+      "status": "completed"
+    },
+    {
+      "id": "act-4",
+      "type": "purchase",
+      "description": "Purchase PO-412 — Coffee Beans Co.",
+      "amount": 890.0,
+      "time": "2026-10-01T11:40:00Z",
+      "status": "received"
+    },
+    {
+      "id": "act-5",
+      "type": "return",
+      "description": "Return #RTN-053 — Noah Wilson",
+      "amount": 14.75,
+      "time": "2026-10-01T11:22:00Z",
+      "status": "completed"
+    }
+  ],
+  "topProducts": [
+    { "name": "Espresso", "sold": 342, "revenue": 1710 },
+    { "name": "Iced Caramel Latte", "sold": 289, "revenue": 1734 },
+    { "name": "Avocado Toast", "sold": 204, "revenue": 2244 },
+    { "name": "Blueberry Muffin", "sold": 187, "revenue": 654.5 },
+    { "name": "Cold Brew", "sold": 176, "revenue": 880 }
+  ]
+}

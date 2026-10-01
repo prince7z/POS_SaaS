@@ -1,0 +1,15 @@
+{
+  "inventory": [
+    { "productId": "prod-001", "productName": "Espresso", "sku": "BEV-ESP-001", "category": "Beverages", "currentStock": 980, "minStock": 100, "maxStock": 2000, "unit": "cup", "costPrice": 1.20, "stockValue": 1176.00, "stockStatus": "in_stock", "lastRestocked": "2026-09-28T08:00:00Z" },
+    { "productId": "prod-002", "productName": "Iced Caramel Latte", "sku": "BEV-ICL-002", "category": "Beverages", "currentStock": 720, "minStock": 80, "maxStock": 1500, "unit": "cup", "costPrice": 1.80, "stockValue": 1296.00, "stockStatus": "in_stock", "lastRestocked": "2026-09-27T14:00:00Z" },
+    { "productId": "prod-003", "productName": "Cold Brew", "sku": "BEV-CBR-003", "category": "Beverages", "currentStock": 540, "minStock": 60, "maxStock": 1200, "unit": "cup", "costPrice": 1.30, "stockValue": 702.00, "stockStatus": "in_stock", "lastRestocked": "2026-09-29T09:00:00Z" },
+    { "productId": "prod-007", "productName": "Almond Croissant", "sku": "BAK-ALC-007", "category": "Bakery", "currentStock": 15, "minStock": 20, "maxStock": 200, "unit": "piece", "costPrice": 1.40, "stockValue": 21.00, "stockStatus": "low_stock", "lastRestocked": "2026-09-25T06:00:00Z" },
+    { "productId": "prod-008", "productName": "Lemon Tart", "sku": "BAK-LMT-008", "category": "Bakery", "currentStock": 0, "minStock": 15, "maxStock": 150, "unit": "piece", "costPrice": 1.60, "stockValue": 0, "stockStatus": "out_of_stock", "lastRestocked": "2026-09-20T06:00:00Z" }
+  ],
+  "summary": {
+    "totalProducts": 10,
+    "totalStockValue": 8420.50,
+    "lowStockCount": 1,
+    "outOfStockCount": 1
+  }
+}

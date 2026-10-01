@@ -1,0 +1,43 @@
+export interface ApiSuccess<T> {
+  success: true
+  data: T
+}
+
+export interface ApiFailure {
+  success: false
+  error: { code: string; message: string }
+}
+
+export class ApiError extends Error {
+  readonly code: string
+  readonly status: number
+
+  constructor(message: string, code: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code
+    this.status = status
+  }
+}
+
+const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? '/api'
+
+export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('pos-auth-token')
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
+  })
+
+  const body = (await response.json()) as ApiSuccess<T> | ApiFailure
+  if (!response.ok || !body.success) {
+    const error = body.success ? { code: 'HTTP_ERROR', message: response.statusText } : body.error
+    throw new ApiError(error.message, error.code, response.status)
+  }
+  return body.data
+}
