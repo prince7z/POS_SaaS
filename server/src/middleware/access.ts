@@ -2,7 +2,9 @@ import type { RequestHandler } from "express";
 import { Access } from "@prisma/client";
 
 import { prisma } from "../lib/prisma";
+import { env } from "../config/env";
 import { forbidden, unauthorized } from "../utils/errors";
+import { testAuth } from "./auth";
 
 export const requireAccess = (access: Access): RequestHandler => async (
 	request,
@@ -10,28 +12,39 @@ export const requireAccess = (access: Access): RequestHandler => async (
 	next,
 ) => {
 	try {
-	// 	if (!request.auth) {
-	// 		throw unauthorized();
-	// 	}
+		if (env.testAuthBypass) {
+			request.auth = testAuth;
+			request.authenticatedUser = {
+				id: testAuth.userId,
+				companyId: testAuth.companyId,
+				accesses: Object.values(Access),
+			};
+			next();
+			return;
+		}
 
-	// 	const user = await prisma.user.findFirst({
-	// 		where: {
-	// 			id: request.auth.userId,
-	// 			companyId: request.auth.companyId,
-	// 			isActive: true,
-	// 			deletedAt: null,
-	// 		},
-	// 		select: { id: true, companyId: true, accesses: true },
-	// 	});
+		if (!request.auth) {
+			throw unauthorized();
+		}
 
-	// 	if (!user) {
-	// 		throw unauthorized("User is inactive or no longer exists");
-	// 	}
-	// 	if (!user.accesses.includes(access)) {
-	// 		throw forbidden();
-	// 	}
+		const user = await prisma.user.findFirst({
+			where: {
+				id: request.auth.userId,
+				companyId: request.auth.companyId,
+				isActive: true,
+				deletedAt: null,
+			},
+			select: { id: true, companyId: true, accesses: true },
+		});
 
-	// 	request.authenticatedUser = user;
+		if (!user) {
+			throw unauthorized("User is inactive or no longer exists");
+		}
+		if (!user.accesses.includes(access)) {
+			throw forbidden();
+		}
+
+		request.authenticatedUser = user;
 		next();
 	} catch (error) {
 		next(error);

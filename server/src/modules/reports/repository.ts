@@ -34,7 +34,10 @@ export const salesSummary = (db: Db, companyId: string, range: Range, categoryId
 	`);
 
 export const salesTrend = (db: Db, companyId: string, range: Range, granularity: string) => db.$queryRaw<Array<{ period: string; sales: Prisma.Decimal }>>(Prisma.sql`
-		SELECT date_trunc(${granularity.toLowerCase()}, s."soldAt" AT TIME ZONE c."timezone")::date::text AS period,
+		SELECT CASE WHEN ${granularity} = 'HOUR'
+			THEN to_char(date_trunc('hour', s."soldAt" AT TIME ZONE c."timezone"), 'YYYY-MM-DD"T"HH24:00:00')
+			ELSE date_trunc(${granularity.toLowerCase()}, s."soldAt" AT TIME ZONE c."timezone")::date::text
+		END AS period,
 			SUM(s."total") AS sales
 		FROM "Sale" s JOIN "Company" c ON c."id"=s."companyId"
 		WHERE s."companyId"=${companyId} AND s."status"='COMPLETED'

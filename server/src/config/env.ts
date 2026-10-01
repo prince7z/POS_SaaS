@@ -15,6 +15,12 @@ const readRequired = (name: string): string => {
 	return value;
 };
 
+const readBoolean = (name: string, fallback: boolean): boolean => {
+	const value = readOptional(name);
+	if (value === undefined) return fallback;
+	return value.toLowerCase() === "true";
+};
+
 const readPort = (): number => {
 	const port = Number(readOptional("PORT") ?? "3000");
 
@@ -25,9 +31,12 @@ const readPort = (): number => {
 	return port;
 };
 
+const nodeEnv = readOptional("NODE_ENV") ?? "development";
+
 export const env = {
 	port: readPort(),
-	nodeEnv: readOptional("NODE_ENV") ?? "development",
+	nodeEnv,
+	testAuthBypass: nodeEnv !== "production" && readBoolean("TEST_AUTH_BYPASS", true),
 	databaseUrl: readRequired("PSQL"),
 	jwtSecret: readRequired("JWT_SECRET"),
 	accessTokenTtl: readOptional("ACCESS_TOKEN_TTL") ?? "15m",

@@ -10,13 +10,10 @@ import * as service from "./service";
 const router = Router();
 
 const authContext = (request: import("express").Request) => {
-	//if (!request.auth) throw unauthorized();
-	const testAuth = {
-		userId: "be535207-dc1d-4a47-b57a-498c4aa902dd",
-		companyId: "a2b8e672-7f09-4783-81ba-51a572205b71",
-	};
-	return testAuth;
-	// return request.auth;
+	if (!request.auth) throw unauthorized();
+
+	
+	 return request.auth;
 };
 
 const idFrom = (request: import("express").Request): string => {

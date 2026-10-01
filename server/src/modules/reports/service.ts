@@ -9,7 +9,7 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export const dashboardSchema = z.object({
 	from: date.optional(), to: date.optional(), categoryId: z.string().uuid().optional(),
 	paymentMethod: z.enum(["CASH", "CARD", "STORE_CREDIT"]).optional(),
-	customerType: z.string().trim().min(1).optional(), granularity: z.enum(["DAY", "WEEK", "MONTH"]).default("DAY"),
+	customerType: z.string().trim().min(1).optional(), granularity: z.enum(["HOUR", "DAY", "WEEK", "MONTH"]).default("DAY"),
 });
 export const pageSchema = dashboardSchema.extend({ page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(100).default(50), search: z.string().trim().optional() });
 export const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {

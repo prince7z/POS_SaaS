@@ -10,6 +10,7 @@
     "dev": "tsx watch --ignore node_modules --ignore dist --ignore .git --ignore .vscode --ignore scripts --ignore prisma --ignore .env src/server.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "seed:demo:reset": "tsx scripts/seed-demo.ts --reset",
+    "seed:demo:timings": "tsx scripts/update-demo-timings.ts",
     "test:modules": "tsx scripts/test-auth-company.ts",
     "test:media": "tsx scripts/test-media.ts",
     "test:catalog": "tsx scripts/test-catalog.ts",
