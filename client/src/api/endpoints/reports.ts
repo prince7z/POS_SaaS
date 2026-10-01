@@ -27,7 +27,7 @@ export interface SalesReport {
   trend: Array<{ period: string; sales: number }>
   byCategory: Array<{ categoryId: string | null; categoryName: string; sales: number; percentage: number }>
   byPaymentMethod: Array<{ paymentMethod: string; amount: number; percentage: number }>
-  topProducts: Array<{ productId: string; productName: string; sku: string; quantitySold: number; totalSales: number }>
+  topProducts: Array<{ productId: string; productName: string; sku: string; imageKeys: string[]; quantitySold: number; totalSales: number }>
   recentSales: Array<Record<string, unknown>>
 }
 export interface TransactionsReport {

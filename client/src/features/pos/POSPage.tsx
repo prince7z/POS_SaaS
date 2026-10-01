@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Alert, Box, Button, Card, Flex, Grid, HStack, IconButton, Input, NativeSelect, Separator, Skeleton, Text, VStack } from '@chakra-ui/react'
+import { Alert, Box, Button, Card, Flex, Grid, HStack, IconButton, Input, Menu, Separator, Skeleton, Text, VStack } from '@chakra-ui/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { Banknote, Barcode, Check, CreditCard, Image as ImageIcon, Minus, Plus, ShoppingCart, Trash2, Wallet, X } from 'lucide-react'
+import { Banknote, Barcode, Check, ChevronDown, CreditCard, Image as ImageIcon, Minus, Percent, Plus, ShoppingCart, Trash2, UserRound, Wallet, X } from 'lucide-react'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 import { SearchInput } from '@/components/common/SearchInput'
@@ -61,6 +61,9 @@ function CartRow({ item, onQuantity, onRemove }: { item: CartItem; onQuantity: (
   return (
     <MotionBox layout initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, height: 0 }} overflow="hidden">
       <Flex align="start" gap="2" py="2.5" borderBottomWidth="1px" borderColor="border">
+        <Box w="42px" h="42px" borderRadius="sm" bg="background" overflow="hidden" display="grid" placeItems="center" flexShrink="0">
+          {item.imageKeys[0] ? <img src={item.imageKeys[0]} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : <ShoppingCart size={16} color="var(--chakra-colors-muted)" />}
+        </Box>
         <Box flex="1" minW="0">
           <Text fontSize="sm" fontWeight="600" lineClamp={1}>{item.name}</Text>
           <Text fontSize="xs" color="secondary">${item.sellingPrice.toFixed(2)} each</Text>
@@ -77,6 +80,16 @@ function CartRow({ item, onQuantity, onRemove }: { item: CartItem; onQuantity: (
       </Flex>
     </MotionBox>
   )
+}
+
+function DiscountSelector({ value, onChange }: { value: SaleDiscountType | null; onChange: (value: SaleDiscountType | null) => void }) {
+  const label = value === 'PERCENT' ? 'Percentage' : value === 'FIXED' ? 'Fixed amount' : 'Add discount'
+  return <HStack gap="2"><Button size="sm" variant="outline" onClick={() => onChange(value ? null : 'PERCENT')}><Percent size={14} />{label}</Button><Menu.Root positioning={{ placement: 'bottom-start' }}><Menu.Trigger asChild><Button size="sm" variant="outline" aria-label="Choose discount type">{value === 'PERCENT' ? '%' : value === 'FIXED' ? '$' : 'Type'}<ChevronDown size={14} /></Button></Menu.Trigger><Menu.Positioner><Menu.Content><Menu.Item value="percent" onClick={() => onChange('PERCENT')}>Percentage</Menu.Item><Menu.Item value="fixed" onClick={() => onChange('FIXED')}>Fixed amount</Menu.Item><Menu.Item value="none" onClick={() => onChange(null)}>No discount</Menu.Item></Menu.Content></Menu.Positioner></Menu.Root></HStack>
+}
+
+function CustomerSelector({ customers, value, onChange }: { customers: Customer[]; value: string | null; onChange: (value: string | null) => void }) {
+  const selected = customers.find((customer) => customer.id === value)
+  return <Menu.Root positioning={{ placement: 'bottom-start' }}><Menu.Trigger asChild><Button size="sm" variant="outline" justifyContent="space-between" w="full"><HStack gap="2"><UserRound size={14} /><Text>{selected?.name ?? 'Walk-in customer'}</Text></HStack><ChevronDown size={14} /></Button></Menu.Trigger><Menu.Positioner><Menu.Content minW="240px">{customers.map((customer) => <Menu.Item key={customer.id} value={customer.id} onClick={() => onChange(customer.id)}>{customer.name}</Menu.Item>)}</Menu.Content></Menu.Positioner></Menu.Root>
 }
 
 function PaymentMethodSelector({ value, onChange }: { value: SalePaymentMethod; onChange: (value: SalePaymentMethod) => void }) {
@@ -174,8 +187,8 @@ export function POSPage() {
         <Card.Header py="3"><Flex justify="space-between" align="center"><Box><Text fontWeight="700">Current Cart</Text><Text fontSize="xs" color="secondary">{cart.reduce((count, item) => count + item.quantity, 0)} items</Text></Box>{cart.length > 0 && <Button size="xs" variant="ghost" colorPalette="red" onClick={() => setCart([])}>Clear cart</Button>}</Flex></Card.Header>
         <Card.Body pt="0" pb="3">
           {!cart.length ? <VStack py="10" gap="2"><ShoppingCart size={26} color="var(--chakra-colors-muted)" /><Text fontWeight="600">Your cart is empty</Text><Text color="secondary" fontSize="sm" textAlign="center">Search for a product to start a sale.</Text></VStack> : <><VStack align="stretch" gap="0"><AnimatePresence initial={false}>{cart.map((item) => <CartRow key={item.id} item={item} onQuantity={(quantity) => updateQuantity(item.id, quantity)} onRemove={() => setCart((current) => current.filter((entry) => entry.id !== item.id))} />)}</AnimatePresence></VStack>
-            <VStack align="stretch" gap="2.5" mt="3"><Text fontSize="sm" fontWeight="600">Discount</Text><HStack><NativeSelect.Root size="sm"><NativeSelect.Field value={discountType ?? ''} onChange={(event) => setDiscountType((event.target.value || null) as SaleDiscountType | null)}><option value="">None</option><option value="PERCENT">Percent</option><option value="FIXED">Fixed</option></NativeSelect.Field></NativeSelect.Root><Input size="sm" type="number" min="0" value={discountValue} disabled={!discountType} onChange={(event) => setDiscountValue(Number(event.target.value))} /></HStack>
-              <Text fontSize="sm" fontWeight="600" mt="1">Customer</Text><NativeSelect.Root size="sm"><NativeSelect.Field aria-label="Customer" value={customerId ?? ''} onChange={(event) => setCustomerId(event.target.value || null)}>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</NativeSelect.Field></NativeSelect.Root>
+            <VStack align="stretch" gap="2.5" mt="3"><Text fontSize="sm" fontWeight="600">Discount</Text><HStack><DiscountSelector value={discountType} onChange={setDiscountType} /><Input size="sm" type="number" min="0" value={discountValue} disabled={!discountType} onChange={(event) => setDiscountValue(Number(event.target.value))} /></HStack>
+              <Text fontSize="sm" fontWeight="600" mt="1">Customer</Text><CustomerSelector customers={customers} value={customerId} onChange={setCustomerId} />
               <Text fontSize="sm" fontWeight="600" mt="1">Payment method</Text><PaymentMethodSelector value={paymentMethod} onChange={setPaymentMethod} />
               <SaleSummary totals={totals} />
               <Button size="md" colorPalette="blue" loading={submitting} onClick={submitSale}><Check size={16} />Complete Sale</Button>

@@ -43,6 +43,7 @@ export interface TopSellingProduct {
   rank: number
   productId: string
   productName: string
+  imageKeys: string[]
   unitsSold: number
   revenue: number
 }
@@ -50,6 +51,7 @@ export interface TopSellingProduct {
 export interface LowStockAlert {
   productId: string
   productName: string
+  imageKeys: string[]
   currentStock: number
   threshold: number
   status: StockStatus

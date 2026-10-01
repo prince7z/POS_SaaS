@@ -15,10 +15,11 @@ export function mapDashboardData(sales: SalesReport, inventory: InventoryReport,
     status: transactionStatus(item.paymentStatus) as 'Completed' | 'Pending' | 'Refunded',
     timestamp: String(item.soldAt ?? new Date().toISOString()),
   }))
-  const topSellingProducts = sales.topProducts.map((item, index) => ({ rank: index + 1, productId: item.productId, productName: item.productName, unitsSold: item.quantitySold, revenue: item.totalSales }))
+  const topSellingProducts = sales.topProducts.map((item, index) => ({ rank: index + 1, productId: item.productId, productName: item.productName, imageKeys: item.imageKeys, unitsSold: item.quantitySold, revenue: item.totalSales }))
   const lowStockAlerts = lowStock.items.map((item) => ({
     productId: String(item.productId ?? ''),
     productName: String(item.productName ?? 'Unnamed product'),
+    imageKeys: Array.isArray(item.imageKeys) ? item.imageKeys.map(String) : [],
     currentStock: Number(item.stockQuantity ?? 0),
     threshold: Number(item.lowStockThreshold ?? 0),
     status: Number(item.stockQuantity ?? 0) === 0 ? 'Out of stock' as const : 'Low stock' as const,

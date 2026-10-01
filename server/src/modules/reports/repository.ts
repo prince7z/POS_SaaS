@@ -69,14 +69,15 @@ export const salesByPayment = (db: Db, companyId: string, range: Range) => db.$q
 export const topProducts = (db: Db, companyId: string, range: Range, limit: number, sortBy: string, sortOrder: string) => {
 	const order = sortBy === "quantitySold" ? "quantitySold" : "totalSales";
 	const direction = sortOrder === "asc" ? "ASC" : "DESC";
-	return db.$queryRaw<Array<{ productId: string; productName: string; sku: string; quantitySold: Prisma.Decimal; totalSales: Prisma.Decimal }>>(Prisma.sql`
-		SELECT si."productId", si."productName", si."sku", SUM(si."quantity") AS "quantitySold",
+	return db.$queryRaw<Array<{ productId: string; productName: string; sku: string; imageKeys: string[]; quantitySold: Prisma.Decimal; totalSales: Prisma.Decimal }>>(Prisma.sql`
+		SELECT si."productId", si."productName", si."sku", p."imageKeys", SUM(si."quantity") AS "quantitySold",
 			SUM(si."quantity"*si."unitPrice") AS "totalSales"
 		FROM "SaleItem" si JOIN "Sale" s ON s."id"=si."saleId" JOIN "Company" c ON c."id"=s."companyId"
+		JOIN "Product" p ON p."id"=si."productId"
 		WHERE s."companyId"=${companyId} AND s."status"='COMPLETED'
 		AND (s."soldAt" AT TIME ZONE c."timezone") >= ${range.from}::date
 		AND (s."soldAt" AT TIME ZONE c."timezone") < (${range.to}::date + INTERVAL '1 day')
-		GROUP BY si."productId", si."productName", si."sku"
+		GROUP BY si."productId", si."productName", si."sku", p."imageKeys"
 		ORDER BY "${Prisma.raw(order)}" ${Prisma.raw(direction)} LIMIT ${limit}
 	`);
 };
@@ -114,7 +115,7 @@ export const inventorySummary = (db: Db, companyId: string) => db.$queryRaw<Arra
 	`);
 
 export const lowStock = (db: Db, companyId: string, page: number, limit: number, search?: string) => db.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
-		SELECT p."id" AS "productId", p."name" AS "productName", p."sku", p."stockQuantity", p."lowStockThreshold",
+		SELECT p."id" AS "productId", p."name" AS "productName", p."sku", p."imageKeys", p."stockQuantity", p."lowStockThreshold",
 			CASE WHEN p."stockQuantity"=0 THEN 'OUT_OF_STOCK' ELSE 'LOW_STOCK' END AS status, COUNT(*) OVER()::int AS "totalCount"
 		FROM "Product" p WHERE p."companyId"=${companyId} AND p."isActive" AND p."deletedAt" IS NULL
 		AND p."stockQuantity" <= p."lowStockThreshold"

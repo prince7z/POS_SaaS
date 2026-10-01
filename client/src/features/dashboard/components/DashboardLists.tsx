@@ -1,5 +1,5 @@
-import { Avatar, Badge, Box, Button, HStack, Menu, Table, Text, VStack } from '@chakra-ui/react'
-import { MoreHorizontal } from 'lucide-react'
+import { Badge, Box, Button, HStack, Menu, Table, Text, VStack } from '@chakra-ui/react'
+import { Image as ImageIcon, MoreHorizontal } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/formatters'
 import type { LowStockAlert, RecentInvoice, RecentTransaction, TopSellingProduct } from '../types'
 import { DashboardSection } from './DashboardSection'
@@ -18,13 +18,13 @@ export function RecentTransactions({ items }: { items: RecentTransaction[] }) {
 
 export function TopSellingProducts({ items }: { items: TopSellingProduct[] }) {
   return <DashboardSection title="Top Selling Products" action={<Button variant="ghost" size="xs">View all</Button>}>
-    <VStack align="stretch" gap="0" px="4" pb="2">{items.map((item) => <HStack key={item.productId} py="3" borderBottomWidth="1px" borderColor="border"><Text w="6" color="muted" fontSize="sm">{item.rank}</Text><Avatar.Root size="sm"><Avatar.Fallback name={item.productName} /></Avatar.Root><Box flex="1"><Text fontSize="sm" fontWeight="600">{item.productName}</Text><Text fontSize="xs" color="secondary">{item.unitsSold} units sold</Text></Box><Text fontSize="sm" fontWeight="600">{formatCurrency(item.revenue)}</Text></HStack>)}</VStack>
+    <VStack align="stretch" gap="0" px="4" pb="2">{items.map((item) => <HStack key={item.productId} py="3" borderBottomWidth="1px" borderColor="border"><Text w="6" color="muted" fontSize="sm">{item.rank}</Text><Box w="32px" h="32px" borderRadius="sm" bg="background" overflow="hidden" display="grid" placeItems="center">{item.imageKeys[0] ? <img src={item.imageKeys[0]} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : <ImageIcon size={16} color="var(--chakra-colors-muted)" />}</Box><Box flex="1" minW="0"><Text fontSize="sm" fontWeight="600" lineClamp={1}>{item.productName}</Text><Text fontSize="xs" color="secondary">{item.unitsSold} units sold</Text></Box><Text fontSize="sm" fontWeight="600">{formatCurrency(item.revenue)}</Text></HStack>)}</VStack>
   </DashboardSection>
 }
 
 export function LowStockAlerts({ items }: { items: LowStockAlert[] }) {
   return <DashboardSection title="Low Stock Alerts" action={<Button variant="ghost" size="xs">View all</Button>}>
-    <VStack align="stretch" gap="0" px="4" pb="2">{items.map((item) => <HStack key={item.productId} py="3" borderBottomWidth="1px" borderColor="border"><Box flex="1"><Text fontSize="sm" fontWeight="600">{item.productName}</Text><Text fontSize="xs" color="secondary">Only {item.currentStock} left · threshold {item.threshold}</Text></Box><Badge colorPalette={statusColor(item.status)}>{item.status}</Badge></HStack>)}</VStack>
+    <VStack align="stretch" gap="0" px="4" pb="2">{items.map((item) => <HStack key={item.productId} py="3" borderBottomWidth="1px" borderColor="border"><Box w="32px" h="32px" borderRadius="sm" bg="background" overflow="hidden" display="grid" placeItems="center" flexShrink="0">{item.imageKeys[0] ? <img src={item.imageKeys[0]} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : <ImageIcon size={16} color="var(--chakra-colors-muted)" />}</Box><Box flex="1" minW="0"><Text fontSize="sm" fontWeight="600" lineClamp={1}>{item.productName}</Text><Text fontSize="xs" color="secondary">Only {item.currentStock} left · threshold {item.threshold}</Text></Box><Badge colorPalette={statusColor(item.status)}>{item.status}</Badge></HStack>)}</VStack>
   </DashboardSection>
 }
 
