@@ -33,8 +33,16 @@ router.get("/suppliers", ...supplierAccess, async (request, response) => {
 	return sendSuccess(response, await service.listSuppliers(authContext(request).companyId, service.parse(service.supplierListSchema, request.query)));
 });
 
+router.get("/suppliers/summary", ...supplierAccess, async (request, response) => {
+	return sendSuccess(response, await service.supplierSummary(authContext(request).companyId));
+});
+
 router.get("/suppliers/:id", ...supplierAccess, async (request, response) => {
 	return sendSuccess(response, await service.getSupplier(authContext(request).companyId, supplierIdFrom(request)));
+});
+
+router.get("/suppliers/:id/payments", ...supplierAccess, async (request, response) => {
+	return sendSuccess(response, await service.listSupplierAccountPayments(authContext(request).companyId, supplierIdFrom(request), service.parse(service.paymentListSchema, request.query)));
 });
 
 router.post("/suppliers", ...supplierAccess, async (request, response) => {
@@ -55,6 +63,10 @@ router.delete("/suppliers/:id", ...supplierAccess, async (request, response) => 
 
 router.get("/:id/payments", ...purchaseAccess, async (request, response) => {
 	return sendSuccess(response, await service.listSupplierPayments(authContext(request).companyId, idFrom(request), service.parse(service.paymentListSchema, request.query)));
+});
+
+router.get("/summary", ...purchaseAccess, async (request, response) => {
+	return sendSuccess(response, await service.purchaseOrderSummary(authContext(request).companyId));
 });
 
 router.post("/:id/payments", ...purchaseAccess, async (request, response) => {

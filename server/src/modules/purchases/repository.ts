@@ -28,7 +28,7 @@ export const findPurchaseOrderById = (db: Db, companyId: string, id: string) =>
 		where: { id, companyId },
 		include: {
 			supplier: { select: { id: true, name: true, contactPerson: true, phone: true, email: true } },
-			items: { orderBy: { id: "asc" }, include: { product: { select: { id: true, name: true, sku: true } } } },
+			items: { orderBy: { id: "asc" }, include: { product: { select: { id: true, name: true, sku: true, imageKeys: true } } } },
 			payments: { orderBy: { paidAt: "asc" }, include: { creator: { select: { id: true, fullName: true } } } },
 		},
 	});

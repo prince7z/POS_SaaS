@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { queueTakealotStockSync } from "../../integrations/takealot/client";
+import { toPublicMediaUrl } from "../../integrations/aws/media";
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { AppError, validationError } from "../../utils/errors";
@@ -23,6 +24,7 @@ export const supplierListSchema = z.object({
 	limit: limitSchema,
 	search: z.string().trim().optional(),
 	includeInactive: z.enum(["true", "false"]).transform((value) => value === "true").optional().default("false" as never),
+	includeStats: z.enum(["true", "false"]).transform((value) => value === "true").optional().default("false" as never),
 });
 export const supplierSchema = z.object({
 	name: z.string().trim().min(1).max(150),
@@ -111,6 +113,7 @@ const supplierView = (supplier: any) => ({
 	isActive: supplier.isActive,
 	createdAt: supplier.createdAt,
 	updatedAt: supplier.updatedAt,
+	...(supplier.stats ? { stats: supplier.stats } : {}),
 });
 
 const purchaseItemView = (item: any) => ({
@@ -118,6 +121,7 @@ const purchaseItemView = (item: any) => ({
 	productId: item.productId,
 	productName: item.product?.name ?? item.productName,
 	sku: item.product?.sku ?? item.sku,
+	imageUrl: item.product?.imageKeys?.[0] ? toPublicMediaUrl(item.product.imageKeys[0]) : null,
 	orderedQuantity: numberValue(item.orderedQuantity),
 	receivedQuantity: numberValue(item.receivedQuantity),
 	remainingQuantity: numberValue(item.orderedQuantity) - numberValue(item.receivedQuantity),
@@ -228,19 +232,37 @@ export const listSuppliers = async (companyId: string, input: z.infer<typeof sup
 		repository.listSuppliers(prisma, where, (input.page - 1) * input.limit, input.limit, "asc"),
 		repository.countSuppliers(prisma, where),
 	]);
-	return { items: items.map(supplierView), pagination: pageData(input.page, input.limit, total) };
+	const supplierIds = items.map((item) => item.id);
+	const [orderStats, paymentStats] = input.includeStats && supplierIds.length ? await Promise.all([
+		prisma.purchaseOrder.groupBy({ by: ["supplierId"], where: { companyId, supplierId: { in: supplierIds }, status: { not: "CANCELLED" } }, _count: { _all: true }, _sum: { total: true, balanceDue: true } }),
+		prisma.supplierPayment.groupBy({ by: ["supplierId"], where: { companyId, supplierId: { in: supplierIds } }, _sum: { amount: true } }),
+	]) : [[], []];
+	const orders = new Map(orderStats.map((row) => [row.supplierId, row]));
+	const payments = new Map(paymentStats.map((row) => [row.supplierId, row]));
+	return { items: items.map((item) => supplierView({ ...item, stats: input.includeStats ? { totalOrders: orders.get(item.id)?._count._all ?? 0, totalPurchaseValue: numberValue(orders.get(item.id)?._sum.total), pendingAmount: numberValue(orders.get(item.id)?._sum.balanceDue) } : undefined })), pagination: pageData(input.page, input.limit, total) };
+};
+
+export const supplierSummary = async (companyId: string) => {
+	const [totalSuppliers, activeSuppliers, purchases, payments] = await Promise.all([
+		prisma.supplier.count({ where: { companyId } }),
+		prisma.supplier.count({ where: { companyId, isActive: true } }),
+		prisma.purchaseOrder.aggregate({ where: { companyId, status: { not: "CANCELLED" } }, _sum: { total: true } }),
+		prisma.purchaseOrder.aggregate({ where: { companyId, status: { not: "CANCELLED" } }, _sum: { balanceDue: true } }),
+	]);
+	return { totalSuppliers, activeSuppliers, totalPurchaseValue: numberValue(purchases._sum.total), pendingPayments: numberValue(payments._sum.balanceDue) };
 };
 
 export const getSupplier = async (companyId: string, supplierId: string) => {
 	const supplier = await repository.findSupplierById(prisma, companyId, supplierId);
 	if (!supplier) throw error("SUPPLIER_NOT_FOUND", "Supplier not found", 404);
-	const [purchaseTotals, paymentTotals] = await Promise.all([
-		prisma.purchaseOrder.aggregate({ where: { companyId, supplierId }, _sum: { total: true } }),
+	const [purchaseTotals, purchaseCount, paymentTotals] = await Promise.all([
+		prisma.purchaseOrder.aggregate({ where: { companyId, supplierId, status: { not: "CANCELLED" } }, _sum: { total: true } }),
+		prisma.purchaseOrder.count({ where: { companyId, supplierId, status: { not: "CANCELLED" } } }),
 		prisma.supplierPayment.aggregate({ where: { companyId, supplierId }, _sum: { amount: true } }),
 	]);
 	const totalPurchaseValue = numberValue(purchaseTotals._sum.total ?? 0);
 	const totalPaid = numberValue(paymentTotals._sum.amount ?? 0);
-	return { ...supplierView(supplier), totalPurchaseValue, totalPaid, outstandingBalance: totalPurchaseValue - totalPaid };
+	return { ...supplierView(supplier), stats: { totalOrders: purchaseCount, totalPurchaseValue, pendingAmount: totalPurchaseValue - totalPaid }, totalPurchaseValue, totalPaid, outstandingBalance: totalPurchaseValue - totalPaid };
 };
 
 export const createSupplier = async (companyId: string, userId: string, input: z.infer<typeof supplierSchema>) => {
@@ -322,11 +344,21 @@ export const listPurchaseOrders = async (companyId: string, input: z.infer<typeo
 			],
 		} : {}),
 	};
+
 	const [items, total] = await Promise.all([
 		repository.listPurchaseOrders(prisma, where, (input.page - 1) * input.limit, input.limit, input.sortBy, input.sortOrder),
 		repository.countPurchaseOrders(prisma, where),
 	]);
 	return { items: items.map(purchaseSummaryView), pagination: pageData(input.page, input.limit, total) };
+};
+
+export const purchaseOrderSummary = async (companyId: string) => {
+	const [orders, spend, pending] = await Promise.all([
+		prisma.purchaseOrder.groupBy({ by: ["status"], where: { companyId }, _count: { _all: true } }),
+		prisma.purchaseOrder.aggregate({ where: { companyId, status: { not: PurchaseOrderStatus.CANCELLED } }, _sum: { total: true } }),
+		prisma.purchaseOrder.aggregate({ where: { companyId, status: { in: [PurchaseOrderStatus.PENDING, PurchaseOrderStatus.PARTIALLY_RECEIVED] } }, _sum: { balanceDue: true } }),
+	]);
+	return { totalOrders: orders.reduce((sum, row) => sum + row._count._all, 0), totalSpend: numberValue(spend._sum.total), pendingAmount: numberValue(pending._sum.balanceDue), byStatus: orders.map((row) => ({ status: row.status, count: row._count._all })) };
 };
 
 export const getPurchaseOrder = async (companyId: string, orderId: string) => {
@@ -534,6 +566,15 @@ export const listSupplierPayments = async (companyId: string, orderId: string, i
 		repository.countSupplierPayments(prisma, { purchaseOrderId: orderId, companyId }),
 	]);
 	if (!order) throw error("PURCHASE_ORDER_NOT_FOUND", "Purchase order not found", 404);
+	return { items: items.map(paymentView), pagination: pageData(input.page, input.limit, total) };
+};
+
+export const listSupplierAccountPayments = async (companyId: string, supplierId: string, input: z.infer<typeof paymentListSchema>) => {
+	const where = { supplierId, companyId };
+	const [items, total] = await Promise.all([
+		repository.listSupplierPayments(prisma, where, (input.page - 1) * input.limit, input.limit),
+		repository.countSupplierPayments(prisma, where),
+	]);
 	return { items: items.map(paymentView), pagination: pageData(input.page, input.limit, total) };
 };
 
