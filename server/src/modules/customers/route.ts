@@ -29,6 +29,9 @@ router.get("/summary", ...customerAccess, async (request, response) => {
 	const query = request.query as { from?: string; to?: string };
 	return sendSuccess(response, await service.getSummary(authContext(request).companyId, query.from, query.to));
 });
+router.get("/:id/summary", ...customerAccess, async (request, response) => {
+	return sendSuccess(response, await service.getCustomerSummary(authContext(request).companyId, idFrom(request)));
+});
 router.get("/:id", ...customerAccess, async (request, response) => {
 	return sendSuccess(response, await service.getCustomer(authContext(request).companyId, idFrom(request)));
 });

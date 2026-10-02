@@ -1,7 +1,7 @@
 import { PaymentMethod, PaymentStatus, SaleStatus, type Prisma } from "@prisma/client";
 import { z } from "zod";
 
-import { createMediaDownloadUrl, createMediaUploadUrl, deleteMediaObject } from "../../integrations/aws/media";
+import { createMediaDownloadUrl, createMediaUploadUrl, deleteMediaObject, toPublicMediaUrl } from "../../integrations/aws/media";
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { AppError, validationError } from "../../utils/errors";
@@ -19,6 +19,7 @@ export const listSchema = z.object({
 	isWalkIn: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
 	hasBalance: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
 	includeInactive: z.enum(["true", "false"]).transform((value) => value === "true").default("false" as never),
+	isActive: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
 	customerType: z.string().trim().min(1).max(80).optional(),
 	includeStats: z.enum(["true", "false"]).transform((value) => value === "true").default("false" as never),
 	sortBy: z.enum(["name", "createdAt", "creditBalance"]).default("createdAt"),
@@ -66,6 +67,7 @@ const customerView = (customer: any) => ({
 	phone: customer.phone,
 	email: customer.email,
 	profileImageKey: customer.profileImageKey,
+	profileImageUrl: customer.profileImageKey ? toPublicMediaUrl(customer.profileImageKey) : null,
 	customerType: customer.customerType,
 	addressLine1: customer.addressLine1,
 	addressLine2: customer.addressLine2,
@@ -87,7 +89,8 @@ const customerError = (code: string, message: string, statusCode = 400) => new A
 export const listCustomers = async (companyId: string, input: z.infer<typeof listSchema>) => {
 	const where: Prisma.CustomerWhereInput = {
 		companyId,
-		...(input.includeInactive ? {} : { deletedAt: null, isActive: true }),
+		...(input.includeInactive ? { deletedAt: null } : { deletedAt: null, isActive: true }),
+		...(input.isActive !== undefined && { isActive: input.isActive }),
 		...(input.isWalkIn !== undefined && { isWalkIn: input.isWalkIn }),
 		...(input.customerType && { customerType: input.customerType }),
 		...(input.search && { OR: [{ name: { contains: input.search, mode: "insensitive" } }, { phone: { contains: input.search, mode: "insensitive" } }, { email: { contains: input.search, mode: "insensitive" } }] }),
@@ -130,6 +133,49 @@ export const getCustomer = async (companyId: string, id: string) => {
 	const customer = await repository.findCustomerById(prisma, companyId, id);
 	if (!customer) throw customerError("CUSTOMER_NOT_FOUND", "Customer not found", 404);
 	return customerView(customer);
+};
+
+export const getCustomerSummary = async (companyId: string, id: string) => {
+	const customer = await repository.findCustomerById(prisma, companyId, id);
+	if (!customer) throw customerError("CUSTOMER_NOT_FOUND", "Customer not found", 404);
+	const [sales, payments] = await Promise.all([
+		prisma.sale.findMany({
+			where: { companyId, customerId: id, status: SaleStatus.COMPLETED },
+			orderBy: { soldAt: "asc" },
+			select: {
+				id: true, invoiceNumber: true, soldAt: true, total: true, paidAmount: true, balanceDue: true,
+				items: { select: { productId: true, productName: true, sku: true, quantity: true, unitPrice: true, product: { select: { imageKeys: true } } } },
+			},
+		}),
+		prisma.customerPayment.findMany({
+			where: { companyId, customerId: id },
+			orderBy: { paidAt: "desc" },
+			take: 50,
+			select: { id: true, invoiceId: true, amount: true, paymentMethod: true, reference: true, notes: true, paidAt: true },
+		}),
+	]);
+	const trend = new Map<string, { date: string; amount: number }>();
+	const productMap = new Map<string, { productId: string; name: string; sku: string; quantity: number; total: number; imageUrl: string | null }>();
+	for (const sale of sales) {
+		const date = sale.soldAt.toISOString().slice(0, 10);
+		const point = trend.get(date) ?? { date, amount: 0 };
+		point.amount += Number(sale.total);
+		trend.set(date, point);
+		for (const item of sale.items) {
+			const product = productMap.get(item.productId) ?? { productId: item.productId, name: item.productName, sku: item.sku, quantity: 0, total: 0, imageUrl: item.product.imageKeys[0] ? toPublicMediaUrl(item.product.imageKeys[0]) : null };
+			product.quantity += Number(item.quantity);
+			product.total += Number(item.quantity) * Number(item.unitPrice);
+			productMap.set(item.productId, product);
+		}
+	}
+	return {
+		customer: customerView(customer),
+		purchases: sales.map((sale) => ({ id: sale.id, invoiceNumber: sale.invoiceNumber, soldAt: sale.soldAt, total: Number(sale.total), paidAmount: Number(sale.paidAmount), balanceDue: Number(sale.balanceDue), items: sale.items.map((item) => ({ productId: item.productId, name: item.productName, sku: item.sku, quantity: Number(item.quantity), unitPrice: Number(item.unitPrice), imageUrl: item.product.imageKeys[0] ? toPublicMediaUrl(item.product.imageKeys[0]) : null })) })),
+		payments: payments.map((payment) => ({ ...payment, amount: Number(payment.amount) })),
+		trend: [...trend.values()],
+		products: [...productMap.values()].sort((a, b) => b.quantity - a.quantity),
+		stats: { totalPurchases: sales.reduce((sum, sale) => sum + Number(sale.total), 0), totalOrders: sales.length, averageOrderValue: sales.length ? sales.reduce((sum, sale) => sum + Number(sale.total), 0) / sales.length : 0, creditLimit: Number(customer.creditLimit), creditBalance: Number(customer.creditBalance), storeCreditBalance: Number(customer.storeCreditBalance), lastPurchaseAt: sales.at(-1)?.soldAt ?? null },
+	};
 };
 
 export const createCustomer = async (companyId: string, userId: string, input: z.infer<typeof createSchema>) => {

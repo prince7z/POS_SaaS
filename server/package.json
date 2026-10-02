@@ -11,6 +11,7 @@
     "seed:demo": "tsx scripts/seed-demo.ts",
     "seed:demo:reset": "tsx scripts/seed-demo.ts --reset",
     "seed:demo:timings": "tsx scripts/update-demo-timings.ts",
+    "seed:images": "tsx scripts/seed-person-images.ts",
     "test:modules": "tsx scripts/test-auth-company.ts",
     "test:media": "tsx scripts/test-media.ts",
     "test:catalog": "tsx scripts/test-catalog.ts",
