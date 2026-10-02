@@ -5,6 +5,7 @@ export interface CatalogProduct {
   id: string
   name: string
   sku: string
+  brand?: { id: string; name: string } | null
   barcode: string | null
   sellingPrice: number
   stockQuantity: number

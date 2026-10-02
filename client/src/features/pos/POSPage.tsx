@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Box, Button, Card, Flex, Grid, HStack, IconButton, Input, Menu, Separator, Skeleton, Text, VStack } from '@chakra-ui/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { Banknote, Barcode, Check, ChevronDown, CreditCard, Image as ImageIcon, Minus, Percent, Plus, ShoppingCart, Trash2, UserRound, Wallet, X } from 'lucide-react'
+import { Banknote, Barcode, Check, ChevronDown, CreditCard, Minus, Percent, Plus, ShoppingCart, Trash2, UserRound, Wallet, X } from 'lucide-react'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 import { SearchInput } from '@/components/common/SearchInput'
@@ -10,48 +10,10 @@ import { createSaleDraft, completeSale, type SaleDiscountType, type SalePaymentM
 import { loadPOSData } from './pos.service'
 import { calculateSaleTotals } from './pos.calculations'
 import type { CartItem, CatalogCategory, CatalogProduct, Customer } from './types'
+import { ProductCard12 } from '@/components/shadcn-studio/card/card-12'
 
 const MotionBox = motion.create(Box)
 const TAX_RATE = appConfig.tax.defaultRate * 100
-
-function ProductCard({ product, added, onAdd }: { product: CatalogProduct; added: boolean; onAdd: (product: CatalogProduct) => void }) {
-  const prefersReducedMotion = useReducedMotion()
-  const imageUrl = product.imageKeys[0]
-  const outOfStock = product.stockQuantity <= 0
-  const lowStock = !outOfStock && product.stockQuantity <= product.lowStockThreshold
-
-  return (
-    <MotionBox
-      whileHover={prefersReducedMotion ? undefined : { y: -2 }}
-      transition={{ duration: 0.16 }}
-      h="full"
-    >
-      <Card.Root variant="outline" size="sm" h="full" borderRadius="sm" overflow="hidden">
-        <Card.Body display="flex" flexDirection="column" gap="2" p="3">
-          <Box h="84px" bg="background" borderRadius="sm" overflow="hidden" display="grid" placeItems="center">
-            {imageUrl ? <img src={imageUrl} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : <ImageIcon size={24} color="var(--chakra-colors-muted)" />}
-          </Box>
-          <Box flex="1" minW="0">
-            <Text fontWeight="600" lineClamp={2}>{product.name}</Text>
-            <Text fontSize="xs" color="secondary" mt="0.5">{product.sku}</Text>
-          </Box>
-          <Flex justify="space-between" align="end" gap="2">
-            <Box>
-              <Text fontWeight="700">${product.sellingPrice.toFixed(2)}</Text>
-              <Text fontSize="xs" color={outOfStock ? 'danger' : lowStock ? 'warning' : 'secondary'}>
-                {outOfStock ? 'Out of stock' : lowStock ? `${product.stockQuantity} left` : `${product.stockQuantity} in stock`}
-              </Text>
-            </Box>
-            <Button size="sm" variant={added ? 'solid' : 'outline'} colorPalette={added ? 'success' : undefined} disabled={outOfStock} onClick={() => onAdd(product)}>
-              {added ? <Check size={14} /> : <Plus size={14} />}
-              {added ? 'Added' : 'Add'}
-            </Button>
-          </Flex>
-        </Card.Body>
-      </Card.Root>
-    </MotionBox>
-  )
-}
 
 function ProductSkeleton() {
   return <Card.Root variant="outline" size="sm"><Card.Body p="3"><Skeleton h="84px" borderRadius="sm" /><Skeleton h="16px" mt="3" /><Skeleton h="13px" mt="2" w="55%" /><Skeleton h="28px" mt="3" /></Card.Body></Card.Root>
@@ -181,7 +143,7 @@ export function POSPage() {
       <Box minW="0">
         <HStack gap="2"><Box flex="1"><SearchInput value={search} onChange={setSearch} placeholder="Search products by name, SKU or barcode..." /></Box><IconButton size="sm" variant="outline" aria-label="Scan barcode" onClick={() => setError('Barcode scanning is ready for scanner integration.')}><Barcode size={17} /></IconButton></HStack>
         <HStack mt="3" gap="1.5" overflowX="auto" pb="1"><Button size="sm" variant={!categoryId ? 'solid' : 'outline'} colorPalette={!categoryId ? 'blue' : undefined} onClick={() => setCategoryId(undefined)}>All</Button>{categories.map((category) => <Button key={category.id} size="sm" variant={categoryId === category.id ? 'solid' : 'outline'} colorPalette={categoryId === category.id ? 'blue' : undefined} onClick={() => setCategoryId(category.id)} whiteSpace="nowrap">{category.name}</Button>)}</HStack>
-        {loading ? <Grid mt="3" templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', md: 'repeat(3, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' }} gap="2.5">{Array.from({ length: 8 }, (_, index) => <ProductSkeleton key={index} />)}</Grid> : <AnimatePresence mode="popLayout"><Grid mt="3" templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', md: 'repeat(3, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' }} gap="2.5">{products.map((product) => <MotionBox key={product.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><ProductCard product={product} added={addedProductId === product.id} onAdd={addToCart} /></MotionBox>)}</Grid>{!products.length && <Box py="12" textAlign="center"><Text fontWeight="600">No products found.</Text><Text color="secondary" fontSize="sm" mt="1">Try a different search or category.</Text></Box>}</AnimatePresence>}
+        {loading ? <Grid mt="3" templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', md: 'repeat(3, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' }} gap="2.5">{Array.from({ length: 8 }, (_, index) => <ProductSkeleton key={index} />)}</Grid> : <AnimatePresence mode="popLayout"><Grid mt="3" templateColumns={{ base: 'repeat(2, minmax(0, 1fr))', md: 'repeat(3, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' }} gap="2.5">{products.map((product) => <MotionBox key={product.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><ProductCard12 product={product} added={addedProductId === product.id} onAdd={addToCart} /></MotionBox>)}</Grid>{!products.length && <Box py="12" textAlign="center"><Text fontWeight="600">No products found.</Text><Text color="secondary" fontSize="sm" mt="1">Try a different search or category.</Text></Box>}</AnimatePresence>}
       </Box>
       <Card.Root variant="outline" borderRadius="sm" position={{ base: 'static', xl: 'sticky' }} top="80px">
         <Card.Header py="3"><Flex justify="space-between" align="center"><Box><Text fontWeight="700">Current Cart</Text><Text fontSize="xs" color="secondary">{cart.reduce((count, item) => count + item.quantity, 0)} items</Text></Box>{cart.length > 0 && <Button size="xs" variant="ghost" colorPalette="red" onClick={() => setCart([])}>Clear cart</Button>}</Flex></Card.Header>
