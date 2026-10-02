@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { queueTakealotStockSync } from "../../integrations/takealot/client";
+import { toPublicMediaUrl } from "../../integrations/aws/media";
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { AppError, validationError } from "../../utils/errors";
@@ -175,7 +176,7 @@ const returnView = (value: any) => ({
 	returnNumber: value.returnNumber,
 	saleId: value.saleId,
 	invoiceNumber: value.sale?.invoiceNumber ?? null,
-	customer: value.customer ? { id: value.customer.id, name: value.customer.name, phone: value.customer.phone } : null,
+	customer: value.customer ? { id: value.customer.id, name: value.customer.name, phone: value.customer.phone, imageUrl: value.customer.profileImageKey ? toPublicMediaUrl(value.customer.profileImageKey) : null } : null,
 	refundType: value.refundType,
 	refundAmount: numberValue(value.refundAmount),
 	status: value.status,
@@ -188,6 +189,11 @@ const returnView = (value: any) => ({
 		quantity: numberValue(item.quantity),
 		unitRefundPrice: numberValue(item.unitRefundPrice),
 		refundAmount: numberValue(item.refundAmount),
+		reason: item.reason,
+		notes: item.notes,
+		productName: item.product?.name ?? null,
+		sku: item.product?.sku ?? null,
+		imageUrl: item.product?.imageKeys?.[0] ? toPublicMediaUrl(item.product.imageKeys[0]) : null,
 	})) ?? undefined,
 });
 
@@ -610,6 +616,9 @@ export const getReturnableItems = async (companyId: string, saleId: string) => {
 	return {
 		saleId: sale.id,
 		invoiceNumber: sale.invoiceNumber,
+		soldAt: sale.soldAt,
+		total: numberValue(sale.total),
+		customer: sale.customer ? { id: sale.customer.id, name: sale.customer.name, phone: sale.customer.phone, imageUrl: sale.customer.profileImageKey ? toPublicMediaUrl(sale.customer.profileImageKey) : null } : null,
 		items: sale.items.map((item: any) => {
 			const returnedQuantity = item.returnItems.reduce((sum: Prisma.Decimal, entry: any) => sum.plus(entry.quantity), new Prisma.Decimal(0));
 			const soldQuantity = parseDecimal(item.quantity);
@@ -619,6 +628,7 @@ export const getReturnableItems = async (companyId: string, saleId: string) => {
 				productId: item.productId,
 				productName: item.productName,
 				sku: item.sku,
+				imageUrl: item.product?.imageKeys?.[0] ? toPublicMediaUrl(item.product.imageKeys[0]) : null,
 				soldQuantity: numberValue(soldQuantity),
 				returnedQuantity: numberValue(returnedQuantity),
 				returnableQuantity: numberValue(returnableQuantity),
@@ -778,13 +788,31 @@ export const listReturns = async (companyId: string, input: z.infer<typeof retur
 			id: item.id,
 			returnNumber: item.returnNumber,
 			invoiceNumber: item.sale?.invoiceNumber ?? null,
-			customer: item.customer ? { id: item.customer.id, name: item.customer.name, phone: item.customer.phone } : null,
+			customer: item.customer ? { id: item.customer.id, name: item.customer.name, phone: item.customer.phone, imageUrl: item.customer.profileImageKey ? toPublicMediaUrl(item.customer.profileImageKey) : null } : null,
+			items: item.items?.map((returnItem: any) => ({ productId: returnItem.productId, productName: returnItem.product?.name ?? null, sku: returnItem.product?.sku ?? null, imageUrl: returnItem.product?.imageKeys?.[0] ? toPublicMediaUrl(returnItem.product.imageKeys[0]) : null, quantity: numberValue(returnItem.quantity), refundAmount: numberValue(returnItem.refundAmount) })) ?? [],
 			refundType: item.refundType,
 			refundAmount: numberValue(item.refundAmount),
+			reason: item.reason,
+			notes: item.notes,
 			status: item.status,
 			processedBy: item.processor ? { id: item.processor.id, name: item.processor.fullName } : null,
 			processedAt: item.processedAt,
 		})),
 		pagination: pageData(input.page, input.limit, total),
+	};
+};
+
+export const returnSummary = async (companyId: string, input: Pick<z.infer<typeof returnListSchema>, "from" | "to" | "refundType">) => {
+	const where: Prisma.ReturnWhereInput = {
+		companyId,
+		...(input.refundType && { refundType: input.refundType }),
+		...(input.from || input.to ? { processedAt: { ...(input.from && { gte: new Date(`${input.from}T00:00:00.000Z`) }), ...(input.to && { lte: new Date(`${input.to}T23:59:59.999Z`) }) } } : {}),
+	};
+	const rows = await prisma.return.findMany({ where, select: { status: true, refundAmount: true, items: { select: { quantity: true } } } });
+	return {
+		totalReturns: rows.length,
+		totalRefunded: rows.reduce((sum, row) => sum + numberValue(row.refundAmount), 0),
+		totalItemsReturned: rows.reduce((sum, row) => sum + row.items.reduce((itemSum, item) => itemSum + numberValue(item.quantity), 0), 0),
+		pendingReturns: rows.filter((row) => row.status !== "COMPLETED").length,
 	};
 };

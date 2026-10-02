@@ -1,4 +1,5 @@
 import type { Company, User } from "@prisma/client";
+import { toPublicMediaUrl } from "../integrations/aws/media";
 
 export const sanitizeUser = (user: User) => ({
 	id: user.id,
@@ -18,6 +19,7 @@ export const sanitizeCompany = (company: Company) => ({
 	phone: company.phone,
 	email: company.email,
 	logoKey: company.logoKey,
+	logoUrl: company.logoKey ? toPublicMediaUrl(company.logoKey) : null,
 	addressLine1: company.addressLine1,
 	addressLine2: company.addressLine2,
 	city: company.city,

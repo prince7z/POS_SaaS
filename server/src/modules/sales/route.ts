@@ -37,6 +37,10 @@ router.patch("/:id/draft", ...saleAccess, async (request, response) => {
 router.get("/returns", ...returnsAccess, async (request, response) => {
 	return sendSuccess(response, await service.listReturns(authContext(request).companyId, service.parse(service.returnListSchema, request.query)));
 });
+router.get("/returns/summary", ...returnsAccess, async (request, response) => {
+	const input = service.parse(service.returnListSchema, request.query);
+	return sendSuccess(response, await service.returnSummary(authContext(request).companyId, input));
+});
 
 router.get("/", ...salesReadAccess, async (request, response) => {
 	return sendSuccess(response, await service.listSales(authContext(request).companyId, service.parse(service.saleListSchema, request.query)));

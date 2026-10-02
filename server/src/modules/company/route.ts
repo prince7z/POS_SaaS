@@ -30,6 +30,21 @@ router.patch("/", requireAuth, requireAccess(Access.SETTINGS), async (request, r
 	return sendSuccess(response, await service.updateCompany(auth.companyId, auth.userId, input));
 });
 
+router.post("/logo/upload-url", requireAuth, requireAccess(Access.SETTINGS), async (request, response) => {
+	return sendSuccess(response, await service.createCompanyLogoUploadUrl(currentAuth(request).companyId, service.parse(service.contentTypeSchema, request.body).contentType));
+});
+
+router.patch("/logo", requireAuth, requireAccess(Access.SETTINGS), async (request, response) => {
+	const auth = currentAuth(request);
+	return sendSuccess(response, await service.updateCompanyLogo(auth.companyId, auth.userId, service.parse(service.logoKeySchema, request.body).logoKey));
+});
+
+router.delete("/logo", requireAuth, requireAccess(Access.SETTINGS), async (request, response) => {
+	const auth = currentAuth(request);
+	await service.removeCompanyLogo(auth.companyId, auth.userId);
+	return sendMessage(response, "Company logo removed successfully");
+});
+
 router.get("/users", requireAuth, requireAccess(Access.USERS_ROLES), async (request, response) => {
 	const auth = currentAuth(request);
 	const { page, limit } = service.parse(service.paginationSchema, request.query);

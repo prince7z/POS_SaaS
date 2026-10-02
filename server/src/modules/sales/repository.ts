@@ -8,7 +8,7 @@ export const findSaleById = (db: Db, companyId: string, id: string) =>
 	db.sale.findFirst({
 		where: { id, companyId },
 		include: {
-			customer: { select: { id: true, name: true, phone: true, email: true, isWalkIn: true } },
+			customer: { select: { id: true, name: true, phone: true, email: true, isWalkIn: true, profileImageKey: true } },
 			cashier: { select: { id: true, fullName: true } },
 			items: { orderBy: { createdAt: "asc" } },
 			payments: { orderBy: { paidAt: "asc" } },
@@ -102,9 +102,10 @@ export const listReturns = (
 		skip,
 		take,
 		include: {
-			sale: { select: { id: true, invoiceNumber: true, customer: { select: { id: true, name: true, phone: true } } } },
-			customer: { select: { id: true, name: true, phone: true } },
+			sale: { select: { id: true, invoiceNumber: true, customer: { select: { id: true, name: true, phone: true, profileImageKey: true } } } },
+			customer: { select: { id: true, name: true, phone: true, profileImageKey: true } },
 			processor: { select: { id: true, fullName: true } },
+			items: { include: { product: { select: { id: true, name: true, sku: true, imageKeys: true } } } },
 		},
 	});
 
@@ -116,7 +117,7 @@ export const findReturnBySale = (db: Db, companyId: string, saleId: string) =>
 		orderBy: { processedAt: "desc" },
 		include: {
 			items: { orderBy: { id: "asc" } },
-			customer: { select: { id: true, name: true, phone: true, email: true, isWalkIn: true } },
+			customer: { select: { id: true, name: true, phone: true, email: true, isWalkIn: true, profileImageKey: true } },
 			processor: { select: { id: true, fullName: true } },
 			sale: { select: { id: true, invoiceNumber: true } },
 		},
@@ -128,9 +129,9 @@ export const findReturnableSale = (db: Db, companyId: string, saleId: string) =>
 		include: {
 			items: {
 				orderBy: { createdAt: "asc" },
-				include: { returnItems: { select: { quantity: true } } },
+				include: { returnItems: { select: { quantity: true } }, product: { select: { imageKeys: true } } },
 			},
-			customer: { select: { id: true, name: true, phone: true, email: true, isWalkIn: true } },
+			customer: { select: { id: true, name: true, phone: true, email: true, isWalkIn: true, profileImageKey: true } },
 		},
 	});
 

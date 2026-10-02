@@ -2,6 +2,8 @@ import bcrypt from "bcryptjs";
 import { Access, type Prisma } from "@prisma/client";
 import { z } from "zod";
 
+import { createMediaUploadUrl, deleteMediaObject } from "../../integrations/aws/media";
+import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { AppError, forbidden, validationError } from "../../utils/errors";
 import { sanitizeCompany, sanitizeUser } from "../../utils/sanitizers";
@@ -55,6 +57,8 @@ export const paginationSchema = z.object({
 	page: z.coerce.number().int().min(1).default(1),
 	limit: z.coerce.number().int().min(1).max(100).default(20),
 });
+export const contentTypeSchema = z.object({ contentType: z.enum(["image/jpeg", "image/png", "image/webp"]) });
+export const logoKeySchema = z.object({ logoKey: z.string().regex(/^companies\/[A-Za-z0-9_-]+\/logo\/[0-9a-f-]{36}\.(jpg|png|webp)$/i, "Invalid company logo key") });
 
 const safeAudit = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 
@@ -68,6 +72,36 @@ export const getCompany = async (companyId: string) => {
 	const company = await repository.findCompany(prisma, companyId);
 	if (!company) throw new AppError("Company not found", 404, "COMPANY_NOT_FOUND");
 	return sanitizeCompany(company);
+};
+
+export const createCompanyLogoUploadUrl = async (companyId: string, contentType: string) =>
+	createMediaUploadUrl({ companyId, resource: "COMPANY_LOGO", resourceId: "company", contentType });
+
+export const updateCompanyLogo = async (companyId: string, actorUserId: string, logoKey: string) => {
+	const company = await repository.findCompany(prisma, companyId);
+	if (!company) throw new AppError("Company not found", 404, "COMPANY_NOT_FOUND");
+	if (!logoKey.startsWith(`companies/${companyId}/logo/`)) throw validationError("Invalid company logo key");
+	const updated = await prisma.$transaction(async (tx) => {
+		const result = await repository.updateCompany(tx, companyId, { logoKey });
+		await repository.createAuditLog(tx, { companyId, actorUserId, action: "COMPANY_LOGO_UPDATED", entityType: "Company", entityId: companyId });
+		return result;
+	});
+	if (company.logoKey && company.logoKey !== logoKey) {
+		try { await deleteMediaObject(company.logoKey); } catch (error) { logger.error("Failed to delete replaced company logo", error); }
+	}
+	return sanitizeCompany(updated);
+};
+
+export const removeCompanyLogo = async (companyId: string, actorUserId: string) => {
+	const company = await repository.findCompany(prisma, companyId);
+	if (!company) throw new AppError("Company not found", 404, "COMPANY_NOT_FOUND");
+	await prisma.$transaction(async (tx) => {
+		await repository.updateCompany(tx, companyId, { logoKey: null });
+		await repository.createAuditLog(tx, { companyId, actorUserId, action: "COMPANY_LOGO_REMOVED", entityType: "Company", entityId: companyId });
+	});
+	if (company.logoKey) {
+		try { await deleteMediaObject(company.logoKey); } catch (error) { logger.error("Failed to delete company logo", error); }
+	}
 };
 
 export const updateCompany = async (companyId: string, actorUserId: string, input: z.infer<typeof companyUpdateSchema>) => {
@@ -86,6 +120,9 @@ export const updateCompany = async (companyId: string, actorUserId: string, inpu
 		});
 		return company;
 	});
+	if (input.logoKey && before.logoKey && input.logoKey !== before.logoKey) {
+		try { await deleteMediaObject(before.logoKey); } catch (error) { logger.error("Failed to delete replaced company logo", error); }
+	}
 	return sanitizeCompany(updated);
 };
 

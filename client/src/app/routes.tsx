@@ -14,6 +14,9 @@ import { CustomersPage } from '@/features/customers/CustomersPage'
 const ReportsPage = lazy(() => import('@/features/reports/ReportsPage').then((module) => ({ default: module.ReportsPage })))
 const SuppliersPage = lazy(() => import('@/features/purchases/SuppliersPage'))
 const PurchaseOrdersPage = lazy(() => import('@/features/purchases/PurchaseOrdersPage'))
+const ExpensesPage = lazy(() => import('@/features/expenses/ExpensesPage'))
+const ReturnsPage = lazy(() => import('@/features/returns/ReturnsPage'))
+const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'))
 
 function PlaceholderRoute() {
   return (
@@ -35,6 +38,9 @@ export function AppRoutes() {
         <Route path={ROUTES.STOCK_MOVEMENTS} element={<StockMovementsPage />} />
         <Route path={ROUTES.STOCK_ADJUSTMENTS} element={<StockAdjustmentsPage />} />
         <Route path={ROUTES.CUSTOMERS} element={<CustomersPage />} />
+        <Route path={ROUTES.EXPENSES} element={<Suspense fallback={<PageContainer><SkeletonPage /></PageContainer>}><ExpensesPage /></Suspense>} />
+        <Route path={ROUTES.RETURNS} element={<Suspense fallback={<PageContainer><SkeletonPage /></PageContainer>}><ReturnsPage /></Suspense>} />
+        <Route path={ROUTES.SETTINGS} element={<Suspense fallback={<PageContainer><SkeletonPage /></PageContainer>}><SettingsPage /></Suspense>} />
         <Route path={ROUTES.PRODUCTS} element={<CatalogPage />} />
         <Route path={ROUTES.CATEGORIES} element={<CatalogPage />} />
         <Route path={ROUTES.BRANDS} element={<CatalogPage />} />
