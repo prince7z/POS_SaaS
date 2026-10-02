@@ -10,6 +10,9 @@ import {
   Receipt,
   RotateCcw,
   Settings,
+  ArrowDownUp,
+  SlidersHorizontal,
+  Tags,
 } from 'lucide-react'
 import { ROUTES } from './constants'
 import type { NavGroup } from '@/types/navigation'
@@ -39,8 +42,8 @@ export const navigationConfig: NavGroup[] = [
         icon: Package,
         children: [
           { id: 'products', label: 'Products', path: ROUTES.PRODUCTS, icon: Package },
-          { id: 'categories', label: 'Categories', path: ROUTES.CATEGORIES, icon: Package },
-          { id: 'brands', label: 'Brands', path: ROUTES.BRANDS, icon: Package },
+          { id: 'categories', label: 'Categories', path: ROUTES.CATEGORIES, icon: Tags },
+          { id: 'brands', label: 'Brands', path: ROUTES.BRANDS, icon: Tags },
         ],
       },
       {
@@ -49,8 +52,8 @@ export const navigationConfig: NavGroup[] = [
         path: ROUTES.INVENTORY,
         icon: Warehouse,
         children: [
-          { id: 'stock-movements', label: 'Stock Movements', path: ROUTES.STOCK_MOVEMENTS, icon: Warehouse },
-          { id: 'stock-adjustments', label: 'Stock Adjustments', path: ROUTES.STOCK_ADJUSTMENTS, icon: Warehouse },
+          { id: 'stock-movements', label: 'Stock Movements', path: ROUTES.STOCK_MOVEMENTS, icon: ArrowDownUp },
+          { id: 'stock-adjustments', label: 'Stock Adjustments', path: ROUTES.STOCK_ADJUSTMENTS, icon: SlidersHorizontal },
         ],
       },
       {
@@ -66,19 +69,13 @@ export const navigationConfig: NavGroup[] = [
     label: 'Transactions',
     items: [
       {
-        id: 'sales',
-        label: 'Sales',
-        path: ROUTES.SALES,
-        icon: ShoppingCart,
-      },
-      {
         id: 'purchases',
         label: 'Purchases',
         path: ROUTES.PURCHASES,
         icon: Truck,
         children: [
-          { id: 'purchase-orders', label: 'Purchase Orders', path: ROUTES.PURCHASE_ORDERS, icon: Truck },
           { id: 'suppliers', label: 'Suppliers', path: ROUTES.SUPPLIERS, icon: Truck },
+          { id: 'purchase-orders', label: 'Purchase Orders', path: ROUTES.PURCHASE_ORDERS, icon: Truck },
         ],
       },
       {
