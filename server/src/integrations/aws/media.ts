@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { mediaError } from "../../utils/errors";
+import { env } from "../../config/env";
 import {
 	deleteS3Object,
 	generateDownloadUrl,
@@ -67,10 +68,25 @@ const createKey = (companyId: string, resource: MediaResource, resourceId: strin
 	}
 };
 
+const createStagedKey = (companyId: string, resource: MediaResource, extension: string): string => {
+	if (!safePathSegment(companyId)) {
+		throw mediaError("MEDIA_KEY_INVALID", "Invalid media resource identifier");
+	}
+
+	return `companies/${companyId}/pending/${resource.toLowerCase()}/${randomUUID()}.${extension}`;
+};
+
 const validateKey = (key: string): void => {
 	if (!key.startsWith("companies/") || key.includes("..") || key.includes("\\") || key.startsWith("/")) {
 		throw mediaError("MEDIA_KEY_INVALID", "Invalid media key");
 	}
+};
+
+export const toPublicMediaUrl = (key: string): string => {
+	if (/^https?:\/\//i.test(key)) return key;
+	const baseUrl = env.aws.publicBaseUrl?.replace(/\/$/, "");
+	if (!baseUrl) return key;
+	return `${baseUrl}/${key.split("/").map(encodeURIComponent).join("/")}`;
 };
 
 type MediaUploadInput = {
@@ -104,6 +120,25 @@ export const createMediaUploadUrls = async ({
 	expiresIn,
 }: Omit<MediaUploadInput, "contentType"> & { contentTypes: string[] }) =>
 	Promise.all(contentTypes.map((contentType) => upload({ companyId, resource, resourceId, contentType, expiresIn })));
+
+export const createStagedMediaUploadUrls = async ({
+	companyId,
+	resource,
+	contentTypes,
+	expiresIn,
+}: Omit<MediaUploadInput, "resourceId" | "contentType"> & { contentTypes: string[] }) =>
+	Promise.all(contentTypes.map(async (contentType) => {
+		const extension = getExtensionFromContentType(contentType);
+		const key = createStagedKey(companyId, resource, extension);
+		const result = await generateUploadUrl({ key, contentType, expiresIn });
+		return {
+			key,
+			uploadUrl: result.url,
+			expiresIn: result.expiresIn,
+			expiresAt: new Date(Date.now() + result.expiresIn * 1000).toISOString(),
+			contentType,
+		};
+	}));
 
 export const createMediaDownloadUrl = async ({ key, expiresIn }: { key: string; expiresIn?: number }) => {
 	validateKey(key);

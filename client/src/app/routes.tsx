@@ -7,6 +7,7 @@ import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { ROUTES } from '@/config/constants'
 import { POSPage } from '@/features/pos/POSPage'
 import { CatalogPage } from '@/features/catalog/CatalogPage'
+import { InventoryPage, StockAdjustmentsPage, StockMovementsPage } from '@/features/inventory/InventoryPage'
 
 function PlaceholderRoute() {
   return (
@@ -22,7 +23,11 @@ export function AppRoutes() {
     <Routes>
       <Route element={<AppShell />}>
         <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+        <Route path={ROUTES.CATALOG} element={<CatalogPage />} />
         <Route path={ROUTES.POS} element={<POSPage />} />
+        <Route path={ROUTES.INVENTORY} element={<InventoryPage />} />
+        <Route path={ROUTES.STOCK_MOVEMENTS} element={<StockMovementsPage />} />
+        <Route path={ROUTES.STOCK_ADJUSTMENTS} element={<StockAdjustmentsPage />} />
         <Route path={ROUTES.PRODUCTS} element={<CatalogPage />} />
         <Route path={ROUTES.CATEGORIES} element={<CatalogPage />} />
         <Route path={ROUTES.BRANDS} element={<CatalogPage />} />

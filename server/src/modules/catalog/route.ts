@@ -100,6 +100,12 @@ router.delete("/brands/:id/logo", ...brandAccess, async (request, response) => {
 router.get("/products", ...productAccess, async (request, response) => {
 	return sendSuccess(response, await service.listProducts(authContext(request).companyId, service.parse(service.productListSchema, request.query)));
 });
+router.post("/media/upload-urls", ...productAccess, async (request, response) => {
+	const auth = authContext(request);
+	const input = service.parse(service.stagedUploadSchema, request.body);
+	const uploads = await service.createCatalogMediaUploadUrls(auth.companyId, input.resource, input.contentTypes);
+	return sendSuccess(response, { uploads });
+});
 router.get("/products/:id", ...productAccess, async (request, response) => {
 	return sendSuccess(response, await service.getProduct(authContext(request).companyId, idFrom(request)));
 });

@@ -1,7 +1,7 @@
 import { apiRequest } from '../client'
 
-export interface CatalogCategory { id: string; name: string; description?: string | null; parentId: string | null; logoKey?: string | null; isActive?: boolean; createdAt?: string; updatedAt?: string; productCount?: number; children?: CatalogCategory[] }
-export interface CatalogBrand { id: string; name: string; description?: string | null; logoKey?: string | null; isActive?: boolean; createdAt?: string; updatedAt?: string; productCount?: number }
+export interface CatalogCategory { id: string; name: string; description?: string | null; parentId: string | null; logoKey?: string | null; logoUrl?: string | null; isActive?: boolean; createdAt?: string; updatedAt?: string; productCount?: number; children?: CatalogCategory[] }
+export interface CatalogBrand { id: string; name: string; description?: string | null; logoKey?: string | null; logoUrl?: string | null; isActive?: boolean; createdAt?: string; updatedAt?: string; productCount?: number }
 export interface CatalogPage<T> { items: T[]; pagination: { page: number; limit: number; total: number; totalPages: number } }
 export interface CatalogProduct {
   id: string
@@ -18,14 +18,15 @@ export interface CatalogProduct {
   stockQuantity: number
   lowStockThreshold: number
   imageKeys: string[]
+  imageUrls?: string[]
   categoryId: string
 }
 export interface ProductFilters { page: number; limit: number; search?: string; categoryId?: string; brandId?: string; supplierId?: string; lowStock?: boolean; sortBy?: 'name' | 'sellingPrice' | 'stockQuantity' | 'createdAt'; sortOrder?: 'asc' | 'desc'; includeInactive?: boolean }
 export interface CategoryFilters { page: number; limit: number; search?: string; includeChildren?: boolean }
 export interface BrandFilters { page: number; limit: number; search?: string; sortBy?: 'name' | 'createdAt'; sortOrder?: 'asc' | 'desc' }
-export interface ProductPayload { name: string; sku: string; barcode?: string | null; description?: string | null; categoryId: string; brandId?: string | null; supplierId?: string | null; rrp: number; sellingPrice: number; purchaseCost: number; lowStockThreshold: number; warrantyMonths?: number | null; productCode?: string | null; takealotProductId?: string | null; takealotSync?: boolean }
-export interface CategoryPayload { name: string; description?: string | null; parentId?: string | null }
-export interface BrandPayload { name: string; description?: string | null }
+export interface ProductPayload { name: string; sku: string; barcode?: string | null; description?: string | null; categoryId: string; brandId?: string | null; supplierId?: string | null; rrp: number; sellingPrice: number; purchaseCost: number; stockQuantity?: number; lowStockThreshold: number; warrantyMonths?: number | null; productCode?: string | null; takealotProductId?: string | null; takealotSync?: boolean; imageKeys?: string[] }
+export interface CategoryPayload { name: string; description?: string | null; parentId?: string | null; logoKey?: string | null }
+export interface BrandPayload { name: string; description?: string | null; logoKey?: string | null }
 export interface MediaUpload { key: string; uploadUrl: string; contentType: string; expiresIn: number; expiresAt: string }
 
 function params(values: Record<string, string | number | boolean | undefined>) {
@@ -55,6 +56,9 @@ export function deleteBrand(id: string) { return apiRequest<void>(`/catalog/bran
 
 export function requestProductImageUploadUrls(id: string, contentTypes: string[]) {
   return apiRequest<{ uploads: MediaUpload[] }>(`/catalog/products/${id}/images/upload-urls`, { method: 'POST', body: JSON.stringify({ contentTypes }) })
+}
+export function requestCatalogMediaUploadUrls(resource: 'PRODUCT_IMAGE' | 'BRAND_LOGO' | 'CATEGORY_LOGO', contentTypes: string[]) {
+  return apiRequest<{ uploads: MediaUpload[] }>('/catalog/media/upload-urls', { method: 'POST', body: JSON.stringify({ resource, contentTypes }) })
 }
 export function addProductImages(id: string, imageKeys: string[]) {
   return apiRequest<{ imageKeys: string[] }>(`/catalog/products/${id}/images`, { method: 'POST', body: JSON.stringify({ imageKeys }) })

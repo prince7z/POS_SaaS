@@ -1,7 +1,7 @@
 import { Access, type Prisma } from "@prisma/client";
 import { z } from "zod";
 
-import { createMediaDownloadUrl, createMediaUploadUrls, deleteMediaObject } from "../../integrations/aws/media";
+import { createMediaDownloadUrl, createMediaUploadUrls, createStagedMediaUploadUrls, deleteMediaObject, toPublicMediaUrl } from "../../integrations/aws/media";
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { AppError, validationError } from "../../utils/errors";
@@ -21,10 +21,12 @@ export const categoryListSchema = z.object({
 	parentId: uuid.optional(),
 	includeChildren: booleanQuery.optional().default(false),
 });
-export const categorySchema = z.object({ name: z.string().trim().min(1).max(150), description: optionalText(1000), parentId: uuid.nullable().optional() });
-export const categoryUpdateSchema = categorySchema.partial();
 export const brandListSchema = z.object({ page: pageSchema, limit: limitSchema, search: z.string().trim().optional(), sortBy: z.enum(["name", "createdAt"]).default("name"), sortOrder: z.enum(["asc", "desc"]).default("asc") });
-export const brandSchema = z.object({ name: z.string().trim().min(1).max(150), description: optionalText(1000) });
+const stagedImageKeySchema = z.string().regex(/^companies\/[A-Za-z0-9_-]+\/(?:pending\/product_image\/[0-9a-f-]{36}\.(jpg|png|webp)|products\/[A-Za-z0-9-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp))$/i, "Invalid media key");
+const stagedLogoKeySchema = z.string().regex(/^companies\/[A-Za-z0-9_-]+\/(?:pending\/(?:brand_logo|category_logo)\/[0-9a-f-]{36}\.(jpg|png|webp)|(?:brands|categories)\/[A-Za-z0-9-]{36}\/logo\/[0-9a-f-]{36}\.(jpg|png|webp))$/i, "Invalid media key");
+export const categorySchema = z.object({ name: z.string().trim().min(1).max(150), description: optionalText(1000), parentId: uuid.nullable().optional(), logoKey: stagedLogoKeySchema.nullable().optional() });
+export const categoryUpdateSchema = categorySchema.partial();
+export const brandSchema = z.object({ name: z.string().trim().min(1).max(150), description: optionalText(1000), logoKey: stagedLogoKeySchema.nullable().optional() });
 export const brandUpdateSchema = brandSchema.partial();
 export const productListSchema = z.object({
 	page: pageSchema,
@@ -50,11 +52,13 @@ export const productSchema = z.object({
 	rrp: price,
 	sellingPrice: price,
 	purchaseCost: price,
+	stockQuantity: price.optional().default(0),
 	lowStockThreshold: price.optional().default(0),
 	warrantyMonths: z.coerce.number().int().min(0).max(1200).nullable().optional(),
 	productCode: optionalText(100),
 	takealotProductId: optionalText(150),
 	takealotSync: z.boolean().optional().default(false),
+	imageKeys: z.array(stagedImageKeySchema).max(10).default([]),
 });
 export const productUpdateSchema = productSchema.partial();
 const imageContentType = z.enum(["image/jpeg", "image/png", "image/webp"]);
@@ -63,11 +67,20 @@ export const imageKeysSchema = z.object({ imageKeys: z.array(z.string().min(1)).
 export const imageKeySchema = z.object({ imageKey: z.string().min(1) });
 export const contentTypeSchema = z.object({ contentType: imageContentType });
 export const logoKeySchema = z.object({ logoKey: z.string().min(1) });
+export const stagedUploadSchema = z.object({
+	resource: z.enum(["PRODUCT_IMAGE", "BRAND_LOGO", "CATEGORY_LOGO"]),
+	contentTypes: z.array(imageContentType).min(1).max(10),
+});
 
 const safeAudit = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const catalogError = (code: string, message: string, statusCode = 400) => new AppError(message, statusCode, code);
 const ensureImageContentType = (contentType: string): void => {
 	if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) throw catalogError("INVALID_MEDIA_TYPE", "Catalog media must be JPEG, PNG, or WebP");
+};
+
+export const createCatalogMediaUploadUrls = async (companyId: string, resource: z.infer<typeof stagedUploadSchema>["resource"], contentTypes: string[]) => {
+	contentTypes.forEach(ensureImageContentType);
+	return createStagedMediaUploadUrls({ companyId, resource, contentTypes });
 };
 
 export const parse = <T>(schema: z.ZodType<T>, input: unknown): T => {
@@ -85,10 +98,11 @@ const categoryView = (category: any) => ({
 	description: category.description,
 	parentId: category.parentId,
 	logoKey: category.logoKey,
+	logoUrl: category.logoKey ? toPublicMediaUrl(category.logoKey) : null,
 	isActive: category.isActive,
 	createdAt: category.createdAt,
 	updatedAt: category.updatedAt,
-	...(category.children !== undefined && { children: category.children.map((child: any) => ({ id: child.id, name: child.name, description: child.description, parentId: child.parentId, logoKey: child.logoKey, isActive: child.isActive })) }),
+	...(category.children !== undefined && { children: category.children.map((child: any) => ({ id: child.id, name: child.name, description: child.description, parentId: child.parentId, logoKey: child.logoKey, logoUrl: child.logoKey ? toPublicMediaUrl(child.logoKey) : null, isActive: child.isActive })) }),
 	...(category._count && { productCount: category._count.products }),
 });
 
@@ -97,6 +111,7 @@ const brandView = (brand: any) => ({
 	name: brand.name,
 	description: brand.description,
 	logoKey: brand.logoKey,
+	logoUrl: brand.logoKey ? toPublicMediaUrl(brand.logoKey) : null,
 	isActive: brand.isActive,
 	createdAt: brand.createdAt,
 	updatedAt: brand.updatedAt,
@@ -126,6 +141,7 @@ const productView = (product: any) => ({
 	warrantyMonths: product.warrantyMonths,
 	productCode: product.productCode,
 	imageKeys: product.imageKeys,
+	imageUrls: product.imageKeys.map(toPublicMediaUrl),
 	takealotProductId: product.takealotProductId,
 	takealotSync: product.takealotSync,
 	isActive: product.isActive,
@@ -164,8 +180,9 @@ export const getCategory = async (companyId: string, id: string) => {
 export const createCategory = async (companyId: string, userId: string, input: z.infer<typeof categorySchema>) => {
 	await validateParent(companyId, input.parentId);
 	if (await repository.findCategoryByName(prisma, companyId, input.name, input.parentId ?? null)) throw catalogError("CATEGORY_ALREADY_EXISTS", "Category name already exists", 409);
+	if (input.logoKey) validateLogoKey(input.logoKey, companyId, "categories", "", true);
 	const category = await prisma.$transaction(async (tx) => {
-		const created = await repository.createCategory(tx, { companyId, name: input.name, description: input.description, parentId: input.parentId });
+		const created = await repository.createCategory(tx, { companyId, name: input.name, description: input.description, parentId: input.parentId, logoKey: input.logoKey });
 		await repository.createAuditLog(tx, { companyId, actorUserId: userId, action: "CATEGORY_CREATED", entityType: "Category", entityId: created.id, afterData: safeAudit({ name: created.name, parentId: created.parentId }) });
 		return created;
 	});
@@ -178,11 +195,13 @@ export const updateCategory = async (companyId: string, userId: string, id: stri
 	const parentId = input.parentId === undefined ? before.parentId : input.parentId;
 	await validateParent(companyId, parentId, id);
 	if (input.name && await repository.findCategoryByName(prisma, companyId, input.name, parentId ?? null, id)) throw catalogError("CATEGORY_ALREADY_EXISTS", "Category name already exists", 409);
+	if (input.logoKey !== undefined && input.logoKey !== null) validateLogoKey(input.logoKey, companyId, "categories", id, true);
 	const updated = await prisma.$transaction(async (tx) => {
 		const category = await repository.updateCategory(tx, id, input);
 		await repository.createAuditLog(tx, { companyId, actorUserId: userId, action: "CATEGORY_UPDATED", entityType: "Category", entityId: id, beforeData: safeAudit({ name: before.name, parentId: before.parentId, description: before.description }), afterData: safeAudit({ name: category.name, parentId: category.parentId, description: category.description }) });
 		return category;
 	});
+	if (input.logoKey !== undefined && input.logoKey !== before.logoKey && before.logoKey) await deleteOldObject(before.logoKey);
 	return categoryView(updated);
 };
 
@@ -211,8 +230,9 @@ export const getBrand = async (companyId: string, id: string) => {
 
 export const createBrand = async (companyId: string, userId: string, input: z.infer<typeof brandSchema>) => {
 	if (await repository.findBrandByName(prisma, companyId, input.name)) throw catalogError("BRAND_ALREADY_EXISTS", "Brand name already exists", 409);
+	if (input.logoKey) validateLogoKey(input.logoKey, companyId, "brands", "", true);
 	const brand = await prisma.$transaction(async (tx) => {
-		const created = await repository.createBrand(tx, { companyId, name: input.name, description: input.description });
+		const created = await repository.createBrand(tx, { companyId, name: input.name, description: input.description, logoKey: input.logoKey });
 		await repository.createAuditLog(tx, { companyId, actorUserId: userId, action: "BRAND_CREATED", entityType: "Brand", entityId: created.id, afterData: safeAudit({ name: created.name }) });
 		return created;
 	});
@@ -223,11 +243,13 @@ export const updateBrand = async (companyId: string, userId: string, id: string,
 	const before = await repository.findBrand(prisma, companyId, id);
 	if (!before) throw catalogError("BRAND_NOT_FOUND", "Brand not found", 404);
 	if (input.name && await repository.findBrandByName(prisma, companyId, input.name, id)) throw catalogError("BRAND_ALREADY_EXISTS", "Brand name already exists", 409);
+	if (input.logoKey !== undefined && input.logoKey !== null) validateLogoKey(input.logoKey, companyId, "brands", id, true);
 	const brand = await prisma.$transaction(async (tx) => {
 		const updated = await repository.updateBrand(tx, id, input);
 		await repository.createAuditLog(tx, { companyId, actorUserId: userId, action: "BRAND_UPDATED", entityType: "Brand", entityId: id, beforeData: safeAudit({ name: before.name, description: before.description }), afterData: safeAudit({ name: updated.name, description: updated.description }) });
 		return updated;
 	});
+	if (input.logoKey !== undefined && input.logoKey !== before.logoKey && before.logoKey) await deleteOldObject(before.logoKey);
 	return brandView(brand);
 };
 
@@ -241,7 +263,8 @@ export const deleteBrand = async (companyId: string, userId: string, id: string)
 	});
 };
 
-const validateLogoKey = (key: string, companyId: string, resource: "brands" | "categories", id: string) => {
+const validateLogoKey = (key: string, companyId: string, resource: "brands" | "categories", id: string, allowStaged = false) => {
+	if (allowStaged && key.startsWith(`companies/${companyId}/pending/`)) return;
 	const escaped = [companyId, id].map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 	if (!new RegExp(`^companies/${escaped[0]}/${resource}/${escaped[1]}/logo/[0-9a-f-]{36}\.(jpg|png|webp)$`).test(key)) throw catalogError("INVALID_IMAGE_KEY", "Invalid logo key");
 };
@@ -337,7 +360,8 @@ export const createProduct = async (companyId: string, userId: string, input: z.
 	if (await repository.findProductBySku(prisma, companyId, input.sku)) throw catalogError("PRODUCT_SKU_EXISTS", "SKU already exists", 409);
 	if (input.barcode && await repository.findProductByBarcode(prisma, companyId, input.barcode)) throw catalogError("PRODUCT_BARCODE_EXISTS", "Barcode already exists", 409);
 	const product = await prisma.$transaction(async (tx) => {
-		const created = await repository.createProduct(tx, { ...input, companyId, stockQuantity: 0, averageCost: 0, imageKeys: [], takealotProductId: input.takealotProductId, takealotSync: input.takealotSync });
+		input.imageKeys.forEach((key) => validateProductImageKey(key, companyId, "pending"));
+		const created = await repository.createProduct(tx, { ...input, companyId, stockQuantity: input.stockQuantity, averageCost: input.purchaseCost, imageKeys: input.imageKeys, takealotProductId: input.takealotProductId, takealotSync: input.takealotSync });
 		await repository.createAuditLog(tx, { companyId, actorUserId: userId, action: "PRODUCT_CREATED", entityType: "Product", entityId: created.id, afterData: safeAudit({ name: created.name, sku: created.sku, sellingPrice: created.sellingPrice }) });
 		return created;
 	});
@@ -350,6 +374,7 @@ export const updateProduct = async (companyId: string, userId: string, id: strin
 	if (input.categoryId || input.brandId !== undefined || input.supplierId !== undefined) await validateProductRelations(companyId, { categoryId: input.categoryId ?? before.categoryId, brandId: input.brandId === undefined ? before.brandId : input.brandId, supplierId: input.supplierId === undefined ? before.supplierId : input.supplierId });
 	if (input.sku && await repository.findProductBySku(prisma, companyId, input.sku, id)) throw catalogError("PRODUCT_SKU_EXISTS", "SKU already exists", 409);
 	if (input.barcode && await repository.findProductByBarcode(prisma, companyId, input.barcode, id)) throw catalogError("PRODUCT_BARCODE_EXISTS", "Barcode already exists", 409);
+	if (input.imageKeys) input.imageKeys.forEach((key) => validateProductImageKey(key, companyId, id));
 	const resultingTakealotId = input.takealotProductId === undefined ? before.takealotProductId : input.takealotProductId;
 	const resultingSync = input.takealotProductId === null ? false : input.takealotSync === undefined ? before.takealotSync : input.takealotSync;
 	if (resultingSync && !resultingTakealotId) throw catalogError("INVALID_TAKEALOT_CONFIGURATION", "Takealot product ID is required when sync is enabled");
@@ -372,6 +397,7 @@ export const deleteProduct = async (companyId: string, userId: string, id: strin
 };
 
 const validateProductImageKey = (key: string, companyId: string, productId: string) => {
+	if (key.startsWith(`companies/${companyId}/pending/product_image/`) && /\/[0-9a-f-]{36}\.(jpg|png|webp)$/i.test(key)) return;
 	const escaped = [companyId, productId].map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 	if (!new RegExp(`^companies/${escaped[0]}/products/${escaped[1]}/[0-9a-f-]{36}\.(jpg|png|webp)$`).test(key)) throw catalogError("INVALID_IMAGE_KEY", "Invalid product image key");
 };

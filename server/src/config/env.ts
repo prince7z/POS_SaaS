@@ -47,7 +47,8 @@ export const env = {
 		secretAccessKey: readOptional("AWS_SECRET_ACCESS_KEY"),
 		sessionToken: readOptional("AWS_SESSION_TOKEN"),
 		endpoint: readOptional("AWS_ENDPOINT_URL_S3"),
-		bucket: readOptional("AWS_S3_BUCKET"),
+		bucket: readOptional("AWS_S3_BUCKET") ?? readOptional("BUCKET_NAME"),
+		publicBaseUrl: readOptional("AWS_S3_PUBLIC_BASE_URL"),
 	},
 	redis: {
 		url: readOptional("REDIS_URL") ?? "redis://localhost:6379",
