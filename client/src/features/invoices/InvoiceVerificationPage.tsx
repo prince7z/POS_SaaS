@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import {
-  Badge,
   Box,
   Button,
   Card,
@@ -18,6 +17,8 @@ import { useParams } from 'react-router-dom'
 import { getPublicInvoice, type InvoiceDetail } from '@/api/endpoints/invoices'
 import QRCode from 'qrcode'
 import { formatInvoiceTime } from './invoiceFormatting'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 
 const money = (value: number) => value.toFixed(2)
 
@@ -46,27 +47,30 @@ export function InvoiceVerificationPage() {
       .catch(() => setQrCode(''))
   }, [invoice?.invoiceNumber])
 
-  const downloadInvoice = () => {
+  const downloadInvoice = async () => {
     if (!invoice) return
-    const html = document.querySelector('.public-invoice')?.outerHTML
-    if (!html) return
-    const blob = new Blob(
-      [
-        `<!doctype html><html><head><meta charset="utf-8"><title>${invoice.invoiceNumber}</title><style>
-          body{font-family:Arial,sans-serif;color:#111;margin:32px;max-width:800px}
-          table{width:100%;border-collapse:collapse;margin:24px 0}
-          th,td{text-align:left;border-bottom:1px solid #ddd;padding:8px}
-          .right{text-align:right}.muted{color:#666}.actions{display:none}
-        </style></head><body>${html}</body></html>`,
-      ],
-      { type: 'text/html' },
-    )
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${invoice.invoiceNumber ?? 'invoice'}.html`
-    link.click()
-    URL.revokeObjectURL(url)
+    const element = document.querySelector<HTMLElement>('.public-invoice')
+    if (!element) return
+
+    const canvas = await html2canvas(element, {
+      backgroundColor: '#ffffff',
+      scale: 2,
+      useCORS: true,
+    })
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    const imageHeight = (canvas.height * pageWidth) / canvas.width
+    let remainingHeight = imageHeight
+    let offset = 0
+
+    while (remainingHeight > 0) {
+      if (offset > 0) pdf.addPage()
+      pdf.addImage(canvas, 'PNG', 0, offset, pageWidth, imageHeight)
+      remainingHeight -= pageHeight
+      offset -= pageHeight
+    }
+    pdf.save(`${invoice.invoiceNumber ?? 'invoice'}.pdf`)
   }
 
   if (error)
@@ -131,7 +135,9 @@ export function InvoiceVerificationPage() {
                 {qrCode && <img src={qrCode} alt="Invoice verification QR code" width={88} height={88} />}
                 <Heading size="sm">Invoice</Heading>
                 <Text>{invoice.invoiceNumber}</Text>
-                <Badge colorPalette="green">Verified completed invoice</Badge>
+                <Text fontSize="xs" color="secondary">
+                  Copy — not original
+                </Text>
               </VStack>
             </Grid>
             <Separator />

@@ -143,6 +143,16 @@ input {
   }
 
   @media print {
+    @page {
+      size: A4;
+      margin: 12mm;
+    }
+
+    html,
+    body {
+      background: #fff !important;
+    }
+
     body * {
       visibility: hidden;
     }
@@ -154,8 +164,12 @@ input {
 
     .invoice-preview {
       position: absolute;
-      inset: 0;
+      top: 0;
+      left: 0;
       width: 100%;
+      max-width: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
       border: 0;
       box-shadow: none;
     }
