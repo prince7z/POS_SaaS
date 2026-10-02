@@ -2,6 +2,74 @@ import { Button, HStack, Input, NativeSelect, VStack } from '@chakra-ui/react'
 import { Filter, Search } from 'lucide-react'
 import type { CatalogBrand, CatalogCategory } from '@/api/endpoints/catalog'
 
-export function InventoryToolbar({ search, onSearch, categoryId, onCategory, brandId, onBrand, status, onStatus, categories, brands }: { search: string; onSearch: (value: string) => void; categoryId: string; onCategory: (value: string) => void; brandId: string; onBrand: (value: string) => void; status: string; onStatus: (value: string) => void; categories: CatalogCategory[]; brands: CatalogBrand[] }) {
-  return <VStack align="stretch" gap="3"><HStack flexWrap="wrap" gap="2"><HStack flex="1" minW="220px"><Search size={15} /><Input size="sm" value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search products, SKU or barcode..." /></HStack><NativeSelect.Root size="sm" w="160px"><NativeSelect.Field value={categoryId} onChange={(event) => onCategory(event.target.value)}><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</NativeSelect.Field></NativeSelect.Root><NativeSelect.Root size="sm" w="140px"><NativeSelect.Field value={brandId} onChange={(event) => onBrand(event.target.value)}><option value="">All brands</option>{brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</NativeSelect.Field></NativeSelect.Root><NativeSelect.Root size="sm" w="140px"><NativeSelect.Field value={status} onChange={(event) => onStatus(event.target.value)}><option value="">All stock</option><option value="in">In stock</option><option value="low">Low stock</option><option value="out">Out of stock</option></NativeSelect.Field></NativeSelect.Root><Button size="sm" variant="outline"><Filter size={14} />Filters</Button></HStack></VStack>
+export function InventoryToolbar({
+  search,
+  onSearch,
+  categoryId,
+  onCategory,
+  brandId,
+  onBrand,
+  status,
+  onStatus,
+  categories,
+  brands,
+}: {
+  search: string
+  onSearch: (value: string) => void
+  categoryId: string
+  onCategory: (value: string) => void
+  brandId: string
+  onBrand: (value: string) => void
+  status: string
+  onStatus: (value: string) => void
+  categories: CatalogCategory[]
+  brands: CatalogBrand[]
+}) {
+  return (
+    <VStack align="stretch" gap="3">
+      <HStack flexWrap="wrap" gap="2">
+        <HStack flex="1" minW="220px">
+          <Search size={15} />
+          <Input
+            size="sm"
+            value={search}
+            onChange={(event) => onSearch(event.target.value)}
+            placeholder="Search products, SKU or barcode..."
+          />
+        </HStack>
+        <NativeSelect.Root size="sm" w="160px">
+          <NativeSelect.Field value={categoryId} onChange={(event) => onCategory(event.target.value)}>
+            <option value="">All categories</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </NativeSelect.Field>
+        </NativeSelect.Root>
+        <NativeSelect.Root size="sm" w="140px">
+          <NativeSelect.Field value={brandId} onChange={(event) => onBrand(event.target.value)}>
+            <option value="">All brands</option>
+            {brands.map((brand) => (
+              <option key={brand.id} value={brand.id}>
+                {brand.name}
+              </option>
+            ))}
+          </NativeSelect.Field>
+        </NativeSelect.Root>
+        <NativeSelect.Root size="sm" w="140px">
+          <NativeSelect.Field value={status} onChange={(event) => onStatus(event.target.value)}>
+            <option value="">All stock</option>
+            <option value="in">In stock</option>
+            <option value="low">Low stock</option>
+            <option value="out">Out of stock</option>
+          </NativeSelect.Field>
+        </NativeSelect.Root>
+        <Button size="sm" variant="outline">
+          <Filter size={14} />
+          Filters
+        </Button>
+      </HStack>
+    </VStack>
+  )
 }

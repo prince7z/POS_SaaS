@@ -1,10 +1,45 @@
 {
   "kpis": [
-    { "id": "sales", "label": "Today's Sales", "value": 18420.5, "format": "currency", "change": 12.4, "comparison": "vs. yesterday" },
-    { "id": "orders", "label": "Today's Orders", "value": 246, "format": "number", "change": 8.1, "comparison": "vs. yesterday" },
-    { "id": "profit", "label": "Gross Profit", "value": 6248.3, "format": "currency", "change": 9.6, "comparison": "vs. yesterday" },
-    { "id": "stock", "label": "Low Stock Items", "value": 12, "format": "number", "change": -16.7, "comparison": "vs. yesterday" },
-    { "id": "payments", "label": "Pending Payments", "value": 2840, "format": "currency", "change": -5.2, "comparison": "vs. yesterday" }
+    {
+      "id": "sales",
+      "label": "Today's Sales",
+      "value": 18420.5,
+      "format": "currency",
+      "change": 12.4,
+      "comparison": "vs. yesterday"
+    },
+    {
+      "id": "orders",
+      "label": "Today's Orders",
+      "value": 246,
+      "format": "number",
+      "change": 8.1,
+      "comparison": "vs. yesterday"
+    },
+    {
+      "id": "profit",
+      "label": "Gross Profit",
+      "value": 6248.3,
+      "format": "currency",
+      "change": 9.6,
+      "comparison": "vs. yesterday"
+    },
+    {
+      "id": "stock",
+      "label": "Low Stock Items",
+      "value": 12,
+      "format": "number",
+      "change": -16.7,
+      "comparison": "vs. yesterday"
+    },
+    {
+      "id": "payments",
+      "label": "Pending Payments",
+      "value": 2840,
+      "format": "currency",
+      "change": -5.2,
+      "comparison": "vs. yesterday"
+    }
   ],
   "trend": {
     "DAY": [
@@ -40,10 +75,42 @@
     { "category": "Add-ons", "sales": 1520, "percentage": 8.3 }
   ],
   "recentTransactions": [
-    { "id": "INV-10482", "customer": "Sophia Martinez", "itemCount": 4, "total": 128.5, "paymentMethod": "Card", "status": "Completed", "timestamp": "2026-10-02T08:42:00Z" },
-    { "id": "INV-10481", "customer": "Liam Johnson", "itemCount": 2, "total": 64, "paymentMethod": "Cash", "status": "Completed", "timestamp": "2026-10-02T08:31:00Z" },
-    { "id": "INV-10480", "customer": "Emma Davis", "itemCount": 7, "total": 246.2, "paymentMethod": "Card", "status": "Pending", "timestamp": "2026-10-02T08:18:00Z" },
-    { "id": "INV-10479", "customer": "Noah Wilson", "itemCount": 1, "total": 18.5, "paymentMethod": "Transfer", "status": "Completed", "timestamp": "2026-10-02T08:04:00Z" }
+    {
+      "id": "INV-10482",
+      "customer": "Sophia Martinez",
+      "itemCount": 4,
+      "total": 128.5,
+      "paymentMethod": "Card",
+      "status": "Completed",
+      "timestamp": "2026-10-02T08:42:00Z"
+    },
+    {
+      "id": "INV-10481",
+      "customer": "Liam Johnson",
+      "itemCount": 2,
+      "total": 64,
+      "paymentMethod": "Cash",
+      "status": "Completed",
+      "timestamp": "2026-10-02T08:31:00Z"
+    },
+    {
+      "id": "INV-10480",
+      "customer": "Emma Davis",
+      "itemCount": 7,
+      "total": 246.2,
+      "paymentMethod": "Card",
+      "status": "Pending",
+      "timestamp": "2026-10-02T08:18:00Z"
+    },
+    {
+      "id": "INV-10479",
+      "customer": "Noah Wilson",
+      "itemCount": 1,
+      "total": 18.5,
+      "paymentMethod": "Transfer",
+      "status": "Completed",
+      "timestamp": "2026-10-02T08:04:00Z"
+    }
   ],
   "topSellingProducts": [
     { "rank": 1, "productId": "PRD-001", "productName": "Iced Caramel Latte", "unitsSold": 289, "revenue": 1734 },
@@ -53,15 +120,73 @@
     { "rank": 5, "productId": "PRD-005", "productName": "Cold Brew", "unitsSold": 176, "revenue": 880 }
   ],
   "lowStockAlerts": [
-    { "productId": "PRD-011", "productName": "Arabica Coffee Beans", "currentStock": 4, "threshold": 12, "status": "Low stock" },
+    {
+      "productId": "PRD-011",
+      "productName": "Arabica Coffee Beans",
+      "currentStock": 4,
+      "threshold": 12,
+      "status": "Low stock"
+    },
     { "productId": "PRD-012", "productName": "Oat Milk", "currentStock": 0, "threshold": 8, "status": "Out of stock" },
-    { "productId": "PRD-013", "productName": "Chocolate Croissant", "currentStock": 6, "threshold": 15, "status": "Low stock" },
-    { "productId": "PRD-014", "productName": "Vanilla Syrup", "currentStock": 2, "threshold": 10, "status": "Low stock" }
+    {
+      "productId": "PRD-013",
+      "productName": "Chocolate Croissant",
+      "currentStock": 6,
+      "threshold": 15,
+      "status": "Low stock"
+    },
+    {
+      "productId": "PRD-014",
+      "productName": "Vanilla Syrup",
+      "currentStock": 2,
+      "threshold": 10,
+      "status": "Low stock"
+    }
   ],
   "recentInvoices": [
-    { "invoiceNumber": "INV-10482", "customer": "Sophia Martinez", "date": "2026-10-02", "itemCount": 4, "subtotal": 115, "tax": 13.5, "total": 128.5, "paymentStatus": "Paid", "status": "Issued" },
-    { "invoiceNumber": "INV-10481", "customer": "Liam Johnson", "date": "2026-10-02", "itemCount": 2, "subtotal": 57.3, "tax": 6.7, "total": 64, "paymentStatus": "Paid", "status": "Issued" },
-    { "invoiceNumber": "INV-10480", "customer": "Emma Davis", "date": "2026-10-02", "itemCount": 7, "subtotal": 219.8, "tax": 26.4, "total": 246.2, "paymentStatus": "Pending", "status": "Issued" },
-    { "invoiceNumber": "INV-10479", "customer": "Noah Wilson", "date": "2026-10-02", "itemCount": 1, "subtotal": 16.5, "tax": 2, "total": 18.5, "paymentStatus": "Overdue", "status": "Issued" }
+    {
+      "invoiceNumber": "INV-10482",
+      "customer": "Sophia Martinez",
+      "date": "2026-10-02",
+      "itemCount": 4,
+      "subtotal": 115,
+      "tax": 13.5,
+      "total": 128.5,
+      "paymentStatus": "Paid",
+      "status": "Issued"
+    },
+    {
+      "invoiceNumber": "INV-10481",
+      "customer": "Liam Johnson",
+      "date": "2026-10-02",
+      "itemCount": 2,
+      "subtotal": 57.3,
+      "tax": 6.7,
+      "total": 64,
+      "paymentStatus": "Paid",
+      "status": "Issued"
+    },
+    {
+      "invoiceNumber": "INV-10480",
+      "customer": "Emma Davis",
+      "date": "2026-10-02",
+      "itemCount": 7,
+      "subtotal": 219.8,
+      "tax": 26.4,
+      "total": 246.2,
+      "paymentStatus": "Pending",
+      "status": "Issued"
+    },
+    {
+      "invoiceNumber": "INV-10479",
+      "customer": "Noah Wilson",
+      "date": "2026-10-02",
+      "itemCount": 1,
+      "subtotal": 16.5,
+      "tax": 2,
+      "total": 18.5,
+      "paymentStatus": "Overdue",
+      "status": "Issued"
+    }
   ]
 }

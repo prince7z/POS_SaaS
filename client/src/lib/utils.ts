@@ -30,9 +30,7 @@ export function capitalize(str: string): string {
  * Replaces underscores and hyphens with spaces, then capitalises.
  */
 export function humanize(str: string): string {
-  return str
-    .replace(/[_-]/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase())
+  return str.replace(/[_-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 /**

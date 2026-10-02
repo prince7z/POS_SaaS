@@ -27,7 +27,14 @@ export interface SalesReport {
   trend: Array<{ period: string; sales: number; orders: number; itemsSold: number; averageOrderValue: number }>
   byCategory: Array<{ categoryId: string | null; categoryName: string; sales: number; percentage: number }>
   byPaymentMethod: Array<{ paymentMethod: string; amount: number; percentage: number }>
-  topProducts: Array<{ productId: string; productName: string; sku: string; imageKeys: string[]; quantitySold: number; totalSales: number }>
+  topProducts: Array<{
+    productId: string
+    productName: string
+    sku: string
+    imageKeys: string[]
+    quantitySold: number
+    totalSales: number
+  }>
   recentSales: Array<Record<string, unknown>>
   salesActivity: Array<{ dayOfWeek: string; hour: number; salesAmount: number; orderCount: number }>
   productPerformance: Array<{ product: string; unitsSold: number; revenue: number; cost: number; profit: number }>
@@ -37,13 +44,25 @@ export interface TransactionsReport {
   pagination: { page: number; limit: number; total: number; totalPages: number }
 }
 export interface InventoryReport {
-  kpis: { totalProducts: number; totalUnits: number; lowStockItems: number; outOfStock: number; totalStockValue: number }
+  kpis: {
+    totalProducts: number
+    totalUnits: number
+    lowStockItems: number
+    outOfStock: number
+    totalStockValue: number
+  }
   customerKpis: { totalCustomers: number; newCustomers: number; activeCustomers: number; totalPurchases: number }
   stockStatus: { inStock: number; lowStock: number; outOfStock: number }
   inventoryValueByCategory: Array<{ category: string; value: number }>
   newVsReturning: Array<{ period: string; newCustomers: number; returningCustomers: number }>
   customerTypeDistribution: Array<{ type: string; customers: number }>
-  customerPerformance: Array<{ customerId: string; name: string; orders: number; purchaseValue: number; averageOrderValue: number }>
+  customerPerformance: Array<{
+    customerId: string
+    name: string
+    orders: number
+    purchaseValue: number
+    averageOrderValue: number
+  }>
 }
 export interface LowStockReport {
   items: Array<Record<string, unknown>>
@@ -68,7 +87,9 @@ export function getSalesReport(filters: ReportFilters) {
   return apiRequest<SalesReport>(`/reports/sales${query(filters)}`)
 }
 export function getSalesTransactions(filters: PageFilters) {
-  return apiRequest<TransactionsReport>(`/reports/sales/transactions${query({ ...filters, page: filters.page ?? 1, limit: filters.limit ?? 5 })}`)
+  return apiRequest<TransactionsReport>(
+    `/reports/sales/transactions${query({ ...filters, page: filters.page ?? 1, limit: filters.limit ?? 5 })}`,
+  )
 }
 export function exportSalesReport(filters: PageFilters) {
   return apiBlob(`/reports/sales/export${query(filters)}`)
@@ -77,13 +98,19 @@ export function getInventoryCustomerReport(filters: ReportFilters) {
   return apiRequest<InventoryReport>(`/reports/inventory-customer${query(filters)}`)
 }
 export function getLowStockItems(filters: PageFilters) {
-  return apiRequest<LowStockReport>(`/reports/inventory-customer/low-stock${query({ ...filters, page: filters.page ?? 1, limit: filters.limit ?? 5 })}`)
+  return apiRequest<LowStockReport>(
+    `/reports/inventory-customer/low-stock${query({ ...filters, page: filters.page ?? 1, limit: filters.limit ?? 5 })}`,
+  )
 }
 export function getTopCustomers(filters: ReportFilters) {
-  return apiRequest<{ items: Array<Record<string, unknown>> }>(`/reports/inventory-customer/top-customers${query(filters)}`)
+  return apiRequest<{ items: Array<Record<string, unknown>> }>(
+    `/reports/inventory-customer/top-customers${query(filters)}`,
+  )
 }
 export function getRecentCustomers(filters: ReportFilters) {
-  return apiRequest<{ items: Array<Record<string, unknown>> }>(`/reports/inventory-customer/recent-customers${query(filters)}`)
+  return apiRequest<{ items: Array<Record<string, unknown>> }>(
+    `/reports/inventory-customer/recent-customers${query(filters)}`,
+  )
 }
 export function exportInventoryReport(filters: PageFilters) {
   return apiBlob(`/reports/inventory-customer/export${query(filters)}`)

@@ -46,7 +46,16 @@ export function formatDate(dateStr: string): string {
 export function formatReportDate(dateStr: string): string {
   const date = new Date(dateStr)
   const day = date.getDate()
-  const suffix = day % 100 >= 11 && day % 100 <= 13 ? 'th' : day % 10 === 1 ? 'st' : day % 10 === 2 ? 'nd' : day % 10 === 3 ? 'rd' : 'th'
+  const suffix =
+    day % 100 >= 11 && day % 100 <= 13
+      ? 'th'
+      : day % 10 === 1
+        ? 'st'
+        : day % 10 === 2
+          ? 'nd'
+          : day % 10 === 3
+            ? 'rd'
+            : 'th'
   return `${day}${suffix} ${date.toLocaleDateString('en-US', { month: 'long' })}`
 }
 

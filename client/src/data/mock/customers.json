@@ -1,10 +1,88 @@
 {
   "customers": [
-    { "id": "cust-001", "name": "Sophia Martinez", "email": "sophia@example.com", "phone": "5551234001", "address": "123 Main St", "city": "New York", "totalOrders": 47, "totalSpent": 1420.50, "loyaltyPoints": 2840, "status": "active", "createdAt": "2025-03-10T10:00:00Z", "updatedAt": "2026-10-01T12:00:00Z" },
-    { "id": "cust-002", "name": "Liam Johnson", "email": "liam.j@example.com", "phone": "5551234002", "address": "456 Oak Ave", "city": "Brooklyn", "totalOrders": 32, "totalSpent": 890.00, "loyaltyPoints": 1780, "status": "active", "createdAt": "2025-05-22T10:00:00Z", "updatedAt": "2026-10-01T11:30:00Z" },
-    { "id": "cust-003", "name": "Emma Davis", "email": "emma.d@example.com", "phone": "5551234003", "address": "789 Pine Rd", "city": "Queens", "totalOrders": 28, "totalSpent": 760.20, "loyaltyPoints": 1520, "status": "active", "createdAt": "2025-06-15T10:00:00Z", "updatedAt": "2026-09-30T16:00:00Z" },
-    { "id": "cust-004", "name": "Noah Wilson", "email": "noah.w@example.com", "phone": "5551234004", "address": "321 Elm Blvd", "city": "Manhattan", "totalOrders": 19, "totalSpent": 410.75, "loyaltyPoints": 820, "status": "active", "createdAt": "2025-08-01T10:00:00Z", "updatedAt": "2026-09-28T14:00:00Z" },
-    { "id": "cust-005", "name": "Olivia Brown", "email": "olivia.b@example.com", "phone": "5551234005", "address": "654 Maple Dr", "city": "Bronx", "totalOrders": 8, "totalSpent": 185.00, "loyaltyPoints": 370, "status": "active", "createdAt": "2026-01-10T10:00:00Z", "updatedAt": "2026-09-25T09:00:00Z" },
-    { "id": "cust-006", "name": "James Taylor", "email": "james.t@example.com", "phone": "5551234006", "address": "987 Cedar Ln", "city": "Staten Island", "totalOrders": 3, "totalSpent": 62.50, "loyaltyPoints": 125, "status": "inactive", "createdAt": "2026-04-20T10:00:00Z", "updatedAt": "2026-07-15T12:00:00Z" }
+    {
+      "id": "cust-001",
+      "name": "Sophia Martinez",
+      "email": "sophia@example.com",
+      "phone": "5551234001",
+      "address": "123 Main St",
+      "city": "New York",
+      "totalOrders": 47,
+      "totalSpent": 1420.5,
+      "loyaltyPoints": 2840,
+      "status": "active",
+      "createdAt": "2025-03-10T10:00:00Z",
+      "updatedAt": "2026-10-01T12:00:00Z"
+    },
+    {
+      "id": "cust-002",
+      "name": "Liam Johnson",
+      "email": "liam.j@example.com",
+      "phone": "5551234002",
+      "address": "456 Oak Ave",
+      "city": "Brooklyn",
+      "totalOrders": 32,
+      "totalSpent": 890.0,
+      "loyaltyPoints": 1780,
+      "status": "active",
+      "createdAt": "2025-05-22T10:00:00Z",
+      "updatedAt": "2026-10-01T11:30:00Z"
+    },
+    {
+      "id": "cust-003",
+      "name": "Emma Davis",
+      "email": "emma.d@example.com",
+      "phone": "5551234003",
+      "address": "789 Pine Rd",
+      "city": "Queens",
+      "totalOrders": 28,
+      "totalSpent": 760.2,
+      "loyaltyPoints": 1520,
+      "status": "active",
+      "createdAt": "2025-06-15T10:00:00Z",
+      "updatedAt": "2026-09-30T16:00:00Z"
+    },
+    {
+      "id": "cust-004",
+      "name": "Noah Wilson",
+      "email": "noah.w@example.com",
+      "phone": "5551234004",
+      "address": "321 Elm Blvd",
+      "city": "Manhattan",
+      "totalOrders": 19,
+      "totalSpent": 410.75,
+      "loyaltyPoints": 820,
+      "status": "active",
+      "createdAt": "2025-08-01T10:00:00Z",
+      "updatedAt": "2026-09-28T14:00:00Z"
+    },
+    {
+      "id": "cust-005",
+      "name": "Olivia Brown",
+      "email": "olivia.b@example.com",
+      "phone": "5551234005",
+      "address": "654 Maple Dr",
+      "city": "Bronx",
+      "totalOrders": 8,
+      "totalSpent": 185.0,
+      "loyaltyPoints": 370,
+      "status": "active",
+      "createdAt": "2026-01-10T10:00:00Z",
+      "updatedAt": "2026-09-25T09:00:00Z"
+    },
+    {
+      "id": "cust-006",
+      "name": "James Taylor",
+      "email": "james.t@example.com",
+      "phone": "5551234006",
+      "address": "987 Cedar Ln",
+      "city": "Staten Island",
+      "totalOrders": 3,
+      "totalSpent": 62.5,
+      "loyaltyPoints": 125,
+      "status": "inactive",
+      "createdAt": "2026-04-20T10:00:00Z",
+      "updatedAt": "2026-07-15T12:00:00Z"
+    }
   ]
 }

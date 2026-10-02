@@ -53,7 +53,12 @@ export const navigationConfig: NavGroup[] = [
         icon: Warehouse,
         children: [
           { id: 'stock-movements', label: 'Stock Movements', path: ROUTES.STOCK_MOVEMENTS, icon: ArrowDownUp },
-          { id: 'stock-adjustments', label: 'Stock Adjustments', path: ROUTES.STOCK_ADJUSTMENTS, icon: SlidersHorizontal },
+          {
+            id: 'stock-adjustments',
+            label: 'Stock Adjustments',
+            path: ROUTES.STOCK_ADJUSTMENTS,
+            icon: SlidersHorizontal,
+          },
         ],
       },
       {
@@ -109,7 +114,12 @@ export const navigationConfig: NavGroup[] = [
         icon: BarChart3,
         children: [
           { id: 'sales-report', label: 'Sales', path: ROUTES.SALES_REPORT, icon: BarChart3 },
-          { id: 'inventory-customers-report', label: 'Inventory & Customers', path: ROUTES.INVENTORY_CUSTOMERS_REPORT, icon: BarChart3 },
+          {
+            id: 'inventory-customers-report',
+            label: 'Inventory & Customers',
+            path: ROUTES.INVENTORY_CUSTOMERS_REPORT,
+            icon: BarChart3,
+          },
           { id: 'profit-loss-report', label: 'Profit & Loss', path: ROUTES.PROFIT_LOSS_REPORT, icon: BarChart3 },
         ],
       },

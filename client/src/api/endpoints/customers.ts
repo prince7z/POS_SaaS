@@ -9,10 +9,40 @@ export interface CustomerStats {
 
 export interface CustomerSummary {
   customer: Customer
-  purchases: Array<{ id: string; invoiceNumber: string; soldAt: string; total: number; paidAmount: number; balanceDue: number; items: Array<{ productId: string; name: string; sku: string; quantity: number; unitPrice: number; imageUrl: string | null }> }>
-  payments: Array<{ id: string; invoiceId: string | null; amount: number; paymentMethod: string; reference: string | null; notes: string | null; paidAt: string }>
+  purchases: Array<{
+    id: string
+    invoiceNumber: string
+    soldAt: string
+    total: number
+    paidAmount: number
+    balanceDue: number
+    items: Array<{
+      productId: string
+      name: string
+      sku: string
+      quantity: number
+      unitPrice: number
+      imageUrl: string | null
+    }>
+  }>
+  payments: Array<{
+    id: string
+    invoiceId: string | null
+    amount: number
+    paymentMethod: string
+    reference: string | null
+    notes: string | null
+    paidAt: string
+  }>
   trend: Array<{ date: string; amount: number }>
-  products: Array<{ productId: string; name: string; sku: string; quantity: number; total: number; imageUrl: string | null }>
+  products: Array<{
+    productId: string
+    name: string
+    sku: string
+    quantity: number
+    total: number
+    imageUrl: string | null
+  }>
   stats: CustomerStats & { creditLimit: number; creditBalance: number; storeCreditBalance: number }
 }
 
@@ -71,7 +101,9 @@ export interface CustomerPayload {
 
 function query(filters: object) {
   const params = new URLSearchParams()
-  Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && value !== '') params.set(key, String(value)) })
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') params.set(key, String(value))
+  })
   return params.toString()
 }
 
@@ -79,15 +111,38 @@ export function getCustomers(filters: CustomerFilters | string = { page: 1, limi
   const values = typeof filters === 'string' ? { page: 1, limit: 10, search: filters, includeInactive: false } : filters
   return apiRequest<CustomerPage>(`/customers?${query(values)}`)
 }
-export function getCustomer(id: string) { return apiRequest<Customer>(`/customers/${id}`) }
-export function getCustomerSummaryDetails(id: string) { return apiRequest<CustomerSummary>(`/customers/${id}/summary`) }
+export function getCustomer(id: string) {
+  return apiRequest<Customer>(`/customers/${id}`)
+}
+export function getCustomerSummaryDetails(id: string) {
+  return apiRequest<CustomerSummary>(`/customers/${id}/summary`)
+}
 export function requestCustomerProfileUpload(id: string, contentType: string) {
-  return apiRequest<{ key: string; uploadUrl: string }>(`/customers/${id}/profile/upload-url`, { method: 'POST', body: JSON.stringify({ contentType }) })
+  return apiRequest<{ key: string; uploadUrl: string }>(`/customers/${id}/profile/upload-url`, {
+    method: 'POST',
+    body: JSON.stringify({ contentType }),
+  })
 }
 export function attachCustomerProfile(id: string, profileImageKey: string) {
-  return apiRequest<{ profileImageKey: string }>(`/customers/${id}/profile`, { method: 'PATCH', body: JSON.stringify({ profileImageKey }) })
+  return apiRequest<{ profileImageKey: string }>(`/customers/${id}/profile`, {
+    method: 'PATCH',
+    body: JSON.stringify({ profileImageKey }),
+  })
 }
-export function getCustomerSummary() { return apiRequest<{ totalCustomers: number; activeCustomers: number; newCustomers: number; totalCustomerSales: number }>('/customers/summary') }
-export function createCustomer(payload: CustomerPayload) { return apiRequest<Customer>('/customers', { method: 'POST', body: JSON.stringify(payload) }) }
-export function updateCustomer(id: string, payload: Partial<CustomerPayload>) { return apiRequest<Customer>(`/customers/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
-export function deleteCustomer(id: string) { return apiRequest<void>(`/customers/${id}`, { method: 'DELETE' }) }
+export function getCustomerSummary() {
+  return apiRequest<{
+    totalCustomers: number
+    activeCustomers: number
+    newCustomers: number
+    totalCustomerSales: number
+  }>('/customers/summary')
+}
+export function createCustomer(payload: CustomerPayload) {
+  return apiRequest<Customer>('/customers', { method: 'POST', body: JSON.stringify(payload) })
+}
+export function updateCustomer(id: string, payload: Partial<CustomerPayload>) {
+  return apiRequest<Customer>(`/customers/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+}
+export function deleteCustomer(id: string) {
+  return apiRequest<void>(`/customers/${id}`, { method: 'DELETE' })
+}

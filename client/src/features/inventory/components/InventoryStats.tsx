@@ -19,7 +19,20 @@ export function InventoryStats({ summary, loading }: { summary?: InventorySummar
             {label}
             <Icon size={17} />
           </Stat.Label>
-          {loading ? <Skeleton mt="3" h="7" w="24" /> : <><Stat.ValueText mt="2">{key === 'inventoryValue' ? `$${summary?.[key].toFixed(2) ?? '—'}` : summary?.[key].toLocaleString() ?? '—'}</Stat.ValueText><Text mt="1" fontSize="xs" color="secondary">{detail}</Text></>}
+          {loading ? (
+            <Skeleton mt="3" h="7" w="24" />
+          ) : (
+            <>
+              <Stat.ValueText mt="2">
+                {key === 'inventoryValue'
+                  ? `$${summary?.[key].toFixed(2) ?? '—'}`
+                  : (summary?.[key].toLocaleString() ?? '—')}
+              </Stat.ValueText>
+              <Text mt="1" fontSize="xs" color="secondary">
+                {detail}
+              </Text>
+            </>
+          )}
         </Stat.Root>
       ))}
     </Grid>

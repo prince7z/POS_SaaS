@@ -2,7 +2,15 @@ import { useEffect, useRef } from 'react'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 
-export function EChart({ option, height = '320px', ariaLabel }: { option: EChartsOption; height?: string; ariaLabel: string }) {
+export function EChart({
+  option,
+  height = '320px',
+  ariaLabel,
+}: {
+  option: EChartsOption
+  height?: string
+  ariaLabel: string
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<echarts.ECharts | null>(null)
 

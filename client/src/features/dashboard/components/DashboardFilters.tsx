@@ -12,7 +12,17 @@ const presets: Array<{ value: DashboardRange; label: string }> = [
   { value: 'lastMonth', label: 'Last month' },
 ]
 
-export function DashboardFilters({ value, customRange, onChange, onCustomRangeChange }: { value: DashboardRange; customRange: DashboardCustomRange | null; onChange: (range: DashboardRange) => void; onCustomRangeChange: (range: DashboardCustomRange) => void }) {
+export function DashboardFilters({
+  value,
+  customRange,
+  onChange,
+  onCustomRangeChange,
+}: {
+  value: DashboardRange
+  customRange: DashboardCustomRange | null
+  onChange: (range: DashboardRange) => void
+  onCustomRangeChange: (range: DashboardCustomRange) => void
+}) {
   const [open, setOpen] = useState(false)
   const [from, setFrom] = useState(customRange?.from ?? '')
   const [to, setTo] = useState(customRange?.to ?? '')
@@ -65,7 +75,15 @@ export function DashboardFilters({ value, customRange, onChange, onCustomRangeCh
       })}
       <Popover.Root open={open} onOpenChange={(event) => setOpen(event.open)}>
         <Popover.Trigger asChild>
-          <Button size="sm" variant={value === 'custom' ? 'solid' : 'ghost'} colorPalette={value === 'custom' ? 'blue' : undefined} aria-label="Choose custom date range" aria-pressed={value === 'custom'} minH="32px" px="2">
+          <Button
+            size="sm"
+            variant={value === 'custom' ? 'solid' : 'ghost'}
+            colorPalette={value === 'custom' ? 'blue' : undefined}
+            aria-label="Choose custom date range"
+            aria-pressed={value === 'custom'}
+            minH="32px"
+            px="2"
+          >
             <CalendarDays size={15} />
             <Text display={{ base: 'none', md: 'block' }}>Custom</Text>
           </Button>
@@ -74,11 +92,32 @@ export function DashboardFilters({ value, customRange, onChange, onCustomRangeCh
           <Popover.Content width="280px">
             <Popover.Body>
               <VStack align="stretch" gap="3">
-                <Text fontSize="sm" fontWeight="700">Choose date range</Text>
-                <Input aria-label="From date" type="date" size="sm" value={from} onChange={(event) => setFrom(event.target.value)} />
-                <Input aria-label="To date" type="date" size="sm" value={to} onChange={(event) => setTo(event.target.value)} />
-                {error && <Text fontSize="xs" color="danger">{error}</Text>}
-                <Button size="sm" colorPalette="blue" onClick={applyCustomRange}><Check size={14} />Apply range</Button>
+                <Text fontSize="sm" fontWeight="700">
+                  Choose date range
+                </Text>
+                <Input
+                  aria-label="From date"
+                  type="date"
+                  size="sm"
+                  value={from}
+                  onChange={(event) => setFrom(event.target.value)}
+                />
+                <Input
+                  aria-label="To date"
+                  type="date"
+                  size="sm"
+                  value={to}
+                  onChange={(event) => setTo(event.target.value)}
+                />
+                {error && (
+                  <Text fontSize="xs" color="danger">
+                    {error}
+                  </Text>
+                )}
+                <Button size="sm" colorPalette="blue" onClick={applyCustomRange}>
+                  <Check size={14} />
+                  Apply range
+                </Button>
               </VStack>
             </Popover.Body>
           </Popover.Content>

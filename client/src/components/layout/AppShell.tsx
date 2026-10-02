@@ -33,7 +33,9 @@ export function AppShell() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
           >
-            <Box minH="calc(100vh - 64px)"><Outlet /></Box>
+            <Box minH="calc(100vh - 64px)">
+              <Outlet />
+            </Box>
           </motion.main>
         </AnimatePresence>
       </Box>

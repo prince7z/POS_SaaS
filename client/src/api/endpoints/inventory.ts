@@ -54,21 +54,58 @@ export function getInventorySummary() {
   return apiRequest<InventorySummary>('/inventory/summary')
 }
 
-export function getInventory(filters: { page: number; limit: number; search?: string; categoryId?: string; brandId?: string; outOfStock?: boolean; lowStock?: boolean; sortBy?: 'name' | 'stockQuantity' | 'createdAt'; sortOrder?: 'asc' | 'desc' }) {
+export function getInventory(filters: {
+  page: number
+  limit: number
+  search?: string
+  categoryId?: string
+  brandId?: string
+  outOfStock?: boolean
+  lowStock?: boolean
+  sortBy?: 'name' | 'stockQuantity' | 'createdAt'
+  sortOrder?: 'asc' | 'desc'
+}) {
   const query = new URLSearchParams()
-  Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && String(value) !== '') query.set(key, String(value)) })
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && String(value) !== '') query.set(key, String(value))
+  })
   return apiRequest<InventoryPage<InventoryItem>>(`/inventory?${query.toString()}`)
 }
 
-export function getProductInventory(productId: string) { return apiRequest<InventoryItem>(`/inventory/${productId}`) }
-export function getProductMovements(productId: string, filters: { page: number; limit: number; movementType?: InventoryMovement['movementType']; from?: string; to?: string }) {
+export function getProductInventory(productId: string) {
+  return apiRequest<InventoryItem>(`/inventory/${productId}`)
+}
+export function getProductMovements(
+  productId: string,
+  filters: {
+    page: number
+    limit: number
+    movementType?: InventoryMovement['movementType']
+    from?: string
+    to?: string
+  },
+) {
   const query = new URLSearchParams()
-  Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && String(value) !== '') query.set(key, String(value)) })
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && String(value) !== '') query.set(key, String(value))
+  })
   return apiRequest<InventoryPage<InventoryMovement>>(`/inventory/${productId}/movements?${query.toString()}`)
 }
-export function adjustStock(payload: { items: Array<{ productId: string; action: 'ADD' | 'REMOVE'; quantity: number; unitCost?: number; reason?: string; note?: string }> }) {
+export function adjustStock(payload: {
+  items: Array<{
+    productId: string
+    action: 'ADD' | 'REMOVE'
+    quantity: number
+    unitCost?: number
+    reason?: string
+    note?: string
+  }>
+}) {
   return apiRequest<{ operationId: string }>('/inventory/adjust', { method: 'POST', body: JSON.stringify(payload) })
 }
 export function setOpeningStock(payload: { productId: string; quantity: number; unitCost?: number; note?: string }) {
-  return apiRequest<{ productId: string; stockQuantity: number; averageCost: number }>('/inventory/opening-stock', { method: 'POST', body: JSON.stringify(payload) })
+  return apiRequest<{ productId: string; stockQuantity: number; averageCost: number }>('/inventory/opening-stock', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }

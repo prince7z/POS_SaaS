@@ -15,5 +15,9 @@ export function AnimatedMetric({ value, formatter }: { value: number | null; for
     return () => controls.stop()
   }, [motionValue, value])
 
-  return <Text fontSize="xl" fontWeight="700" letterSpacing="-0.02em">{value === null ? '—' : formatter(displayValue)}</Text>
+  return (
+    <Text fontSize="xl" fontWeight="700" letterSpacing="-0.02em">
+      {value === null ? '—' : formatter(displayValue)}
+    </Text>
+  )
 }

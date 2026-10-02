@@ -12,7 +12,7 @@ export const EXPENSE_CATEGORIES = [
   'OTHER',
 ] as const
 
-export type ExpenseCategory = typeof EXPENSE_CATEGORIES[number]
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number]
 export type ExpenseSortBy = 'expenseDate' | 'amount' | 'createdAt'
 
 export interface Expense {
@@ -72,7 +72,10 @@ function query(filters: object) {
 }
 
 export function getExpenses(filters: ExpenseFilters) {
-  return apiRequest<{ items: Expense[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(`/expenses${query({ ...filters, page: filters.page ?? 1, limit: filters.limit ?? 20 })}`)
+  return apiRequest<{
+    items: Expense[]
+    pagination: { page: number; limit: number; total: number; totalPages: number }
+  }>(`/expenses${query({ ...filters, page: filters.page ?? 1, limit: filters.limit ?? 20 })}`)
 }
 
 export function getExpense(id: string) {

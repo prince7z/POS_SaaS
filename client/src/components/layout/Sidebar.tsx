@@ -55,7 +55,11 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           <NavLink to={item.path} title={collapsed ? item.label : undefined} style={{ flex: 1 }}>
             <HStack gap="3">
               <item.icon size={17} />
-              {!collapsed && <Text fontSize="sm" fontWeight={active ? '600' : '500'}>{item.label}</Text>}
+              {!collapsed && (
+                <Text fontSize="sm" fontWeight={active ? '600' : '500'}>
+                  {item.label}
+                </Text>
+              )}
             </HStack>
           </NavLink>
           {!collapsed && hasChildren && (
@@ -110,7 +114,13 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
     >
       <Flex h="navbar" px="4" align="center" justify="space-between">
         <Logo collapsed={collapsed} />
-        <Button aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} variant="ghost" size="sm" onClick={onToggle} px="2">
+        <Button
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          variant="ghost"
+          size="sm"
+          onClick={onToggle}
+          px="2"
+        >
           <motion.span animate={{ rotate: collapsed ? 180 : 0 }} transition={{ duration: 0.18 }}>
             {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </motion.span>
@@ -120,13 +130,21 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       <VStack as="nav" align="stretch" gap="5" flex="1" overflowY="auto" py="5" px="3">
         {navigationConfig.map((group) => (
           <Box key={group.id}>
-            {!collapsed && <Text textStyle="label" color="muted" px="3" mb="2">{group.label}</Text>}
-            <VStack align="stretch" gap="1">{group.items.map((item) => renderItem(item))}</VStack>
+            {!collapsed && (
+              <Text textStyle="label" color="muted" px="3" mb="2">
+                {group.label}
+              </Text>
+            )}
+            <VStack align="stretch" gap="1">
+              {group.items.map((item) => renderItem(item))}
+            </VStack>
           </Box>
         ))}
       </VStack>
       <Separator />
-      <Box p="3"><UserMenu collapsed={collapsed} /></Box>
+      <Box p="3">
+        <UserMenu collapsed={collapsed} />
+      </Box>
     </MotionBox>
   )
 }

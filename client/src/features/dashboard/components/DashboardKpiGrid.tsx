@@ -16,8 +16,13 @@ export function DashboardKpiGrid({ kpis }: { kpis: DashboardKpi[] }) {
           <GridItem key={kpi.id} borderWidth="1px" borderColor="border" borderRadius="lg" bg="surface" p="4">
             <HStack justify="space-between" align="start">
               <VStack align="start" gap="2">
-                <Text fontSize="sm" color="secondary">{kpi.label}</Text>
-                <AnimatedMetric value={kpi.value} formatter={kpi.format === 'currency' ? formatCurrency : formatNumber} />
+                <Text fontSize="sm" color="secondary">
+                  {kpi.label}
+                </Text>
+                <AnimatedMetric
+                  value={kpi.value}
+                  formatter={kpi.format === 'currency' ? formatCurrency : formatNumber}
+                />
               </VStack>
               <Icon size={18} color="var(--chakra-colors-secondary)" />
             </HStack>

@@ -29,21 +29,11 @@ export interface PaginatedResponse<T> {
 
 // ─── Status ────────────────────────────────────────────────────────────
 
-export type OrderStatus =
-  | 'pending'
-  | 'processing'
-  | 'completed'
-  | 'cancelled'
-  | 'refunded'
+export type OrderStatus = 'pending' | 'processing' | 'completed' | 'cancelled' | 'refunded'
 
 export type PaymentStatus = 'paid' | 'unpaid' | 'partial' | 'overdue'
 
-export type PaymentMethod =
-  | 'cash'
-  | 'card'
-  | 'upi'
-  | 'bank_transfer'
-  | 'wallet'
+export type PaymentMethod = 'cash' | 'card' | 'upi' | 'bank_transfer' | 'wallet'
 
 export type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock'
 

@@ -11,11 +11,14 @@ import { CatalogPage } from '@/features/catalog/CatalogPage'
 import { InventoryPage, StockAdjustmentsPage, StockMovementsPage } from '@/features/inventory/InventoryPage'
 import { CustomersPage } from '@/features/customers/CustomersPage'
 
-const ReportsPage = lazy(() => import('@/features/reports/ReportsPage').then((module) => ({ default: module.ReportsPage })))
+const ReportsPage = lazy(() =>
+  import('@/features/reports/ReportsPage').then((module) => ({ default: module.ReportsPage })),
+)
 const SuppliersPage = lazy(() => import('@/features/purchases/SuppliersPage'))
 const PurchaseOrdersPage = lazy(() => import('@/features/purchases/PurchaseOrdersPage'))
 const ExpensesPage = lazy(() => import('@/features/expenses/ExpensesPage'))
 const ReturnsPage = lazy(() => import('@/features/returns/ReturnsPage'))
+const InvoicePage = lazy(() => import('@/features/invoices/InvoicePage').then((module) => ({ default: module.InvoicePage })))
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'))
 
 function PlaceholderRoute() {
@@ -38,19 +41,163 @@ export function AppRoutes() {
         <Route path={ROUTES.STOCK_MOVEMENTS} element={<StockMovementsPage />} />
         <Route path={ROUTES.STOCK_ADJUSTMENTS} element={<StockAdjustmentsPage />} />
         <Route path={ROUTES.CUSTOMERS} element={<CustomersPage />} />
-        <Route path={ROUTES.EXPENSES} element={<Suspense fallback={<PageContainer><SkeletonPage /></PageContainer>}><ExpensesPage /></Suspense>} />
-        <Route path={ROUTES.RETURNS} element={<Suspense fallback={<PageContainer><SkeletonPage /></PageContainer>}><ReturnsPage /></Suspense>} />
-        <Route path={ROUTES.SETTINGS} element={<Suspense fallback={<PageContainer><SkeletonPage /></PageContainer>}><SettingsPage /></Suspense>} />
+        <Route
+          path={ROUTES.EXPENSES}
+          element={
+            <Suspense
+              fallback={
+                <PageContainer>
+                  <SkeletonPage />
+                </PageContainer>
+              }
+            >
+              <ExpensesPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path={ROUTES.RETURNS}
+          element={
+            <Suspense
+              fallback={
+                <PageContainer>
+                  <SkeletonPage />
+                </PageContainer>
+              }
+            >
+              <ReturnsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path={ROUTES.INVOICES}
+          element={
+            <Suspense
+              fallback={
+                <PageContainer>
+                  <SkeletonPage />
+                </PageContainer>
+              }
+            >
+              <InvoicePage />
+            </Suspense>
+          }
+        />
+        <Route
+          path={ROUTES.SETTINGS}
+          element={
+            <Suspense
+              fallback={
+                <PageContainer>
+                  <SkeletonPage />
+                </PageContainer>
+              }
+            >
+              <SettingsPage />
+            </Suspense>
+          }
+        />
         <Route path={ROUTES.PRODUCTS} element={<CatalogPage />} />
         <Route path={ROUTES.CATEGORIES} element={<CatalogPage />} />
         <Route path={ROUTES.BRANDS} element={<CatalogPage />} />
-        <Route path={ROUTES.SUPPLIERS} element={<Suspense fallback={<PageContainer><SkeletonPage /></PageContainer>}><SuppliersPage /></Suspense>} />
-        <Route path={ROUTES.PURCHASE_ORDERS} element={<Suspense fallback={<PageContainer><SkeletonPage /></PageContainer>}><PurchaseOrdersPage /></Suspense>} />
-        <Route path={ROUTES.PURCHASES} element={<Suspense fallback={<PageContainer><SkeletonPage /></PageContainer>}><PurchaseOrdersPage /></Suspense>} />
-        <Route path={ROUTES.SALES_REPORT} element={<Suspense fallback={<PageContainer><SkeletonPage /></PageContainer>}><ReportsPage kind="sales" /></Suspense>} />
-        <Route path={ROUTES.PROFIT_LOSS_REPORT} element={<Suspense fallback={<PageContainer><SkeletonPage /></PageContainer>}><ReportsPage kind="profit-loss" /></Suspense>} />
-        <Route path={ROUTES.INVENTORY_CUSTOMERS_REPORT} element={<Suspense fallback={<PageContainer><SkeletonPage /></PageContainer>}><ReportsPage kind="inventory-customer" /></Suspense>} />
-        <Route path="/reports/inventory-customer" element={<Suspense fallback={<PageContainer><SkeletonPage /></PageContainer>}><ReportsPage kind="inventory-customer" /></Suspense>} />
+        <Route
+          path={ROUTES.SUPPLIERS}
+          element={
+            <Suspense
+              fallback={
+                <PageContainer>
+                  <SkeletonPage />
+                </PageContainer>
+              }
+            >
+              <SuppliersPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path={ROUTES.PURCHASE_ORDERS}
+          element={
+            <Suspense
+              fallback={
+                <PageContainer>
+                  <SkeletonPage />
+                </PageContainer>
+              }
+            >
+              <PurchaseOrdersPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path={ROUTES.PURCHASES}
+          element={
+            <Suspense
+              fallback={
+                <PageContainer>
+                  <SkeletonPage />
+                </PageContainer>
+              }
+            >
+              <PurchaseOrdersPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path={ROUTES.SALES_REPORT}
+          element={
+            <Suspense
+              fallback={
+                <PageContainer>
+                  <SkeletonPage />
+                </PageContainer>
+              }
+            >
+              <ReportsPage kind="sales" />
+            </Suspense>
+          }
+        />
+        <Route
+          path={ROUTES.PROFIT_LOSS_REPORT}
+          element={
+            <Suspense
+              fallback={
+                <PageContainer>
+                  <SkeletonPage />
+                </PageContainer>
+              }
+            >
+              <ReportsPage kind="profit-loss" />
+            </Suspense>
+          }
+        />
+        <Route
+          path={ROUTES.INVENTORY_CUSTOMERS_REPORT}
+          element={
+            <Suspense
+              fallback={
+                <PageContainer>
+                  <SkeletonPage />
+                </PageContainer>
+              }
+            >
+              <ReportsPage kind="inventory-customer" />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/reports/inventory-customer"
+          element={
+            <Suspense
+              fallback={
+                <PageContainer>
+                  <SkeletonPage />
+                </PageContainer>
+              }
+            >
+              <ReportsPage kind="inventory-customer" />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<PlaceholderRoute />} />
       </Route>
     </Routes>
@@ -58,5 +205,11 @@ export function AppRoutes() {
 }
 
 function SkeletonPage() {
-  return <div style={{ display: 'grid', gap: '16px' }}><div style={{ height: '48px' }} /><div style={{ height: '120px', background: 'var(--chakra-colors-bg-subtle)' }} /><div style={{ height: '320px', background: 'var(--chakra-colors-bg-subtle)' }} /></div>
+  return (
+    <div style={{ display: 'grid', gap: '16px' }}>
+      <div style={{ height: '48px' }} />
+      <div style={{ height: '120px', background: 'var(--chakra-colors-bg-subtle)' }} />
+      <div style={{ height: '320px', background: 'var(--chakra-colors-bg-subtle)' }} />
+    </div>
+  )
 }
