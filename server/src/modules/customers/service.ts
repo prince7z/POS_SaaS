@@ -19,6 +19,8 @@ export const listSchema = z.object({
 	isWalkIn: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
 	hasBalance: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
 	includeInactive: z.enum(["true", "false"]).transform((value) => value === "true").default("false" as never),
+	customerType: z.string().trim().min(1).max(80).optional(),
+	includeStats: z.enum(["true", "false"]).transform((value) => value === "true").default("false" as never),
 	sortBy: z.enum(["name", "createdAt", "creditBalance"]).default("createdAt"),
 	sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
@@ -87,16 +89,41 @@ export const listCustomers = async (companyId: string, input: z.infer<typeof lis
 		companyId,
 		...(input.includeInactive ? {} : { deletedAt: null, isActive: true }),
 		...(input.isWalkIn !== undefined && { isWalkIn: input.isWalkIn }),
+		...(input.customerType && { customerType: input.customerType }),
 		...(input.search && { OR: [{ name: { contains: input.search, mode: "insensitive" } }, { phone: { contains: input.search, mode: "insensitive" } }, { email: { contains: input.search, mode: "insensitive" } }] }),
+	};
+	const withStats = async (items: any[]) => {
+		if (!input.includeStats || items.length === 0) return items.map(customerView);
+		const sales = await prisma.sale.groupBy({
+			by: ["customerId"],
+			where: { companyId, customerId: { in: items.map((item) => item.id) }, status: "COMPLETED" },
+			_sum: { total: true },
+			_count: { _all: true },
+			_max: { soldAt: true },
+		});
+		const stats = new Map(sales.map((sale) => [sale.customerId, { totalPurchases: Number(sale._sum.total ?? 0), totalOrders: sale._count._all, lastPurchaseAt: sale._max.soldAt }]));
+		return items.map((item) => ({ ...customerView(item), stats: stats.get(item.id) ?? { totalPurchases: 0, totalOrders: 0, averageOrderValue: 0, lastPurchaseAt: null }, ...(stats.has(item.id) ? { stats: { ...stats.get(item.id), averageOrderValue: Number(stats.get(item.id)!.totalPurchases) / stats.get(item.id)!.totalOrders } } : {}) }));
 	};
 	if (input.hasBalance === undefined) {
 		const [items, total] = await Promise.all([repository.listCustomers(prisma, where, (input.page - 1) * input.limit, input.limit, input.sortBy, input.sortOrder), repository.countCustomers(prisma, where)]);
-		return { items: items.map(customerView), pagination: pageData(input.page, input.limit, total) };
+		return { items: await withStats(items), pagination: pageData(input.page, input.limit, total) };
 	}
 	const all = await repository.listCustomers(prisma, where, undefined, undefined, input.sortBy, input.sortOrder);
 	const filtered = all.filter((customer) => (Number(customer.creditBalance) > 0) === input.hasBalance);
 	const start = (input.page - 1) * input.limit;
-	return { items: filtered.slice(start, start + input.limit).map(customerView), pagination: pageData(input.page, input.limit, filtered.length) };
+	return { items: await withStats(filtered.slice(start, start + input.limit)), pagination: pageData(input.page, input.limit, filtered.length) };
+};
+
+export const getSummary = async (companyId: string, from?: string, to?: string) => {
+	const dateFilter = from || to ? { createdAt: { ...(from && { gte: new Date(`${from}T00:00:00.000Z`) }), ...(to && { lte: new Date(`${to}T23:59:59.999Z`) }) } } : {};
+	const saleDateFilter = from || to ? { soldAt: { ...(from && { gte: new Date(`${from}T00:00:00.000Z`) }), ...(to && { lte: new Date(`${to}T23:59:59.999Z`) }) } } : {};
+	const [totalCustomers, activeCustomers, newCustomers, sales] = await Promise.all([
+		prisma.customer.count({ where: { companyId, deletedAt: null } }),
+		prisma.customer.count({ where: { companyId, deletedAt: null, isActive: true } }),
+		prisma.customer.count({ where: { companyId, deletedAt: null, ...dateFilter } }),
+		prisma.sale.aggregate({ where: { companyId, customerId: { not: null }, status: "COMPLETED", ...saleDateFilter }, _sum: { total: true } }),
+	]);
+	return { totalCustomers, activeCustomers, newCustomers, totalCustomerSales: Number(sales._sum.total ?? 0) };
 };
 
 export const getCustomer = async (companyId: string, id: string) => {

@@ -18,6 +18,10 @@ export interface InventoryItem {
   name: string
   sku: string
   barcode: string | null
+  description?: string | null
+  supplier?: { id: string; name: string } | null
+  imageKeys: string[]
+  imageUrls?: string[]
   category?: { id: string; name: string } | null
   brand?: { id: string; name: string } | null
   stockQuantity: number
@@ -57,7 +61,7 @@ export function getInventory(filters: { page: number; limit: number; search?: st
 }
 
 export function getProductInventory(productId: string) { return apiRequest<InventoryItem>(`/inventory/${productId}`) }
-export function getProductMovements(productId: string, filters: { page: number; limit: number; movementType?: InventoryMovement['movementType'] }) {
+export function getProductMovements(productId: string, filters: { page: number; limit: number; movementType?: InventoryMovement['movementType']; from?: string; to?: string }) {
   const query = new URLSearchParams()
   Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && String(value) !== '') query.set(key, String(value)) })
   return apiRequest<InventoryPage<InventoryMovement>>(`/inventory/${productId}/movements?${query.toString()}`)

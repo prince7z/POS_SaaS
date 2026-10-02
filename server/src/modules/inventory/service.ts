@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { queueTakealotStockSync } from "../../integrations/takealot/client";
+import { toPublicMediaUrl } from "../../integrations/aws/media";
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
 import { AppError, validationError } from "../../utils/errors";
@@ -46,6 +47,10 @@ const productView = (product: any) => ({
 	name: product.name,
 	sku: product.sku,
 	barcode: product.barcode,
+	description: product.description,
+	supplier: product.supplier,
+	imageKeys: product.imageKeys ?? [],
+	imageUrls: (product.imageKeys ?? []).map(toPublicMediaUrl),
 	category: product.category,
 	brand: product.brand,
 	stockQuantity: numberValue(product.stockQuantity),

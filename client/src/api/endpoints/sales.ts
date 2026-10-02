@@ -22,6 +22,10 @@ export interface SaleCompletionPayload {
   notes?: string | null
 }
 export interface CompletedSale { id: string; invoiceNumber?: string | null; total?: number }
+export interface SaleSummary { id: string; invoiceNumber: string; status: string; paymentStatus: string; total: number; paidAmount: number; balanceDue: number; soldAt: string }
+export function getCustomerSales(customerId: string, page = 1) {
+  return apiRequest<{ items: SaleSummary[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(`/sales?${new URLSearchParams({ customerId, page: String(page), limit: '10', sortBy: 'soldAt', sortOrder: 'desc' })}`)
+}
 export function createSaleDraft(payload: SaleDraftPayload) {
   return apiRequest<CompletedSale>('/sales/drafts', { method: 'POST', body: JSON.stringify(payload) })
 }

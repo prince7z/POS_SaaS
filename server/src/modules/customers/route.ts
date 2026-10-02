@@ -25,6 +25,10 @@ const customerAccess = [requireAuth, requireAccess(Access.CUSTOMERS)] as const;
 router.get("/", ...customerAccess, async (request, response) => {
 	return sendSuccess(response, await service.listCustomers(authContext(request).companyId, service.parse(service.listSchema, request.query)));
 });
+router.get("/summary", ...customerAccess, async (request, response) => {
+	const query = request.query as { from?: string; to?: string };
+	return sendSuccess(response, await service.getSummary(authContext(request).companyId, query.from, query.to));
+});
 router.get("/:id", ...customerAccess, async (request, response) => {
 	return sendSuccess(response, await service.getCustomer(authContext(request).companyId, idFrom(request)));
 });

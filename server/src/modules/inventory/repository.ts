@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-const productInclude = { category: { select: { id: true, name: true } }, brand: { select: { id: true, name: true } } } as const;
+const productInclude = { category: { select: { id: true, name: true } }, brand: { select: { id: true, name: true } }, supplier: { select: { id: true, name: true } } } as const;
 
 export const listInventory = (db: Db, where: Prisma.ProductWhereInput, skip: number | undefined, take: number | undefined, sortBy: "name" | "stockQuantity" | "createdAt", sortOrder: "asc" | "desc") =>
 	db.product.findMany({ where, orderBy: { [sortBy]: sortOrder }, ...(skip !== undefined && { skip }), ...(take !== undefined && { take }), include: productInclude });
