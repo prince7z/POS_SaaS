@@ -9,7 +9,7 @@ import { DashboardFilters } from './components/DashboardFilters'
 import { DashboardKpiGrid } from './components/DashboardKpiGrid'
 import { SalesProfitTrend } from './components/SalesProfitTrend'
 import { SalesByCategory } from './components/SalesByCategory'
-import { LowStockAlerts, RecentInvoices, RecentTransactions, TopSellingProducts } from './components/DashboardLists'
+import { LowStockAlerts, RecentInvoices, TopSellingProducts } from './components/DashboardLists'
 
 const MotionBox = motion.create(Box)
 
@@ -47,8 +47,8 @@ export function DashboardPage() {
               <GridItem><SalesProfitTrend trend={data.trend} granularity={chartGranularity} onGranularityChange={setGranularity} /></GridItem>
               <GridItem><SalesByCategory categories={data.categorySales} /></GridItem>
             </Grid>
-            <Grid templateColumns={{ base: '1fr', lg: 'minmax(0, 1.5fr) minmax(260px, 1fr) minmax(260px, 1fr)' }} gap="4">
-              <GridItem><RecentTransactions items={data.recentTransactions} /></GridItem>
+            <Grid templateColumns={{ base: '1fr', lg: 'repeat(2, minmax(0, 1fr))' }} gap="4">
+              {/* <GridItem><RecentTransactions items={data.recentTransactions} /></GridItem> */}
               <GridItem><TopSellingProducts items={data.topSellingProducts} /></GridItem>
               <GridItem><LowStockAlerts items={data.lowStockAlerts} /></GridItem>
             </Grid>
