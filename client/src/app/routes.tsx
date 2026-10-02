@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { ROUTES } from '@/config/constants'
 import { POSPage } from '@/features/pos/POSPage'
+import { CatalogPage } from '@/features/catalog/CatalogPage'
 
 function PlaceholderRoute() {
   return (
@@ -22,6 +23,9 @@ export function AppRoutes() {
       <Route element={<AppShell />}>
         <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
         <Route path={ROUTES.POS} element={<POSPage />} />
+        <Route path={ROUTES.PRODUCTS} element={<CatalogPage />} />
+        <Route path={ROUTES.CATEGORIES} element={<CatalogPage />} />
+        <Route path={ROUTES.BRANDS} element={<CatalogPage />} />
         <Route path="*" element={<PlaceholderRoute />} />
       </Route>
     </Routes>
