@@ -18,7 +18,12 @@ const SuppliersPage = lazy(() => import('@/features/purchases/SuppliersPage'))
 const PurchaseOrdersPage = lazy(() => import('@/features/purchases/PurchaseOrdersPage'))
 const ExpensesPage = lazy(() => import('@/features/expenses/ExpensesPage'))
 const ReturnsPage = lazy(() => import('@/features/returns/ReturnsPage'))
-const InvoicePage = lazy(() => import('@/features/invoices/InvoicePage').then((module) => ({ default: module.InvoicePage })))
+const InvoicePage = lazy(() =>
+  import('@/features/invoices/InvoicePage').then((module) => ({ default: module.InvoicePage })),
+)
+const InvoiceVerificationPage = lazy(() =>
+  import('@/features/invoices/InvoiceVerificationPage').then((module) => ({ default: module.InvoiceVerificationPage })),
+)
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'))
 
 function PlaceholderRoute() {
@@ -33,6 +38,14 @@ function PlaceholderRoute() {
 export function AppRoutes() {
   return (
     <Routes>
+      <Route
+        path="/invoice-verification/:invoiceid"
+        element={
+          <Suspense fallback={<SkeletonPage />}>
+            <InvoiceVerificationPage />
+          </Suspense>
+        }
+      />
       <Route element={<AppShell />}>
         <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
         <Route path={ROUTES.CATALOG} element={<CatalogPage />} />

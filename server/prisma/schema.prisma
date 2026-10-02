@@ -129,6 +129,8 @@ model Company {
   showProductImages         Boolean   @default(true)
   autoGenerateInvoiceNumber Boolean   @default(true)
   autoPrintInvoice          Boolean   @default(false)
+  invoiceTerms              String[]  @default([])
+  businessHours             Json?
   takealotSellerId          String?
   takealotApiKey            String?
   createdAt                 DateTime  @default(now())

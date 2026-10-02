@@ -141,6 +141,29 @@ input {
   * {
     @apply border-border outline-ring/50;
   }
+
+  @media print {
+    body * {
+      visibility: hidden;
+    }
+
+    .invoice-preview,
+    .invoice-preview * {
+      visibility: visible;
+    }
+
+    .invoice-preview {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      border: 0;
+      box-shadow: none;
+    }
+
+    .actions {
+      display: none !important;
+    }
+  }
   body {
     @apply bg-background text-foreground;
   }

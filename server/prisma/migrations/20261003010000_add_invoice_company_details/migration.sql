@@ -1,0 +1,3 @@
+ALTER TABLE "Company"
+ADD COLUMN "invoiceTerms" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN "businessHours" JSONB;

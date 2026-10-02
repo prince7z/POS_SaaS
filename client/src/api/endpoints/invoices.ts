@@ -1,12 +1,7 @@
 import { apiRequest, apiBlob } from '../client'
 import type { CatalogProduct } from './catalog'
 import type { Customer } from './customers'
-import type {
-  SaleCompletionPayload,
-  SaleDiscountType,
-  SalePaymentMethod,
-  SaleSummary,
-} from './sales'
+import type { SaleCompletionPayload, SaleDiscountType, SalePaymentMethod, SaleSummary } from './sales'
 
 export type InvoiceStatus = 'DRAFT' | 'COMPLETED' | 'CANCELLED'
 export type InvoicePaymentStatus = 'PAID' | 'PENDING' | 'PARTIALLY_PAID'
@@ -46,7 +41,13 @@ export interface InvoiceDetail {
   source: string
   status: InvoiceStatus
   paymentStatus: InvoicePaymentStatus
-  customer: { id: string; name: string; phone: string | null; email: string | null } | null
+  customer: {
+    id: string
+    name: string
+    phone: string | null
+    email: string | null
+    profileImageUrl?: string | null
+  } | null
   cashier: { id: string; name: string } | null
   items: InvoiceItem[]
   payments: Array<{
@@ -79,7 +80,7 @@ export interface InvoiceDraftPayload {
   notes: string | null
 }
 
-function query(values: Record<string, string | number | undefined>) {
+function query(values: Record<string, string | number | boolean | undefined>) {
   const params = new URLSearchParams()
   Object.entries(values).forEach(([key, value]) => {
     if (value !== undefined && value !== '') params.set(key, String(value))
@@ -88,7 +89,9 @@ function query(values: Record<string, string | number | undefined>) {
 }
 
 export function getInvoices(filters: InvoiceFilters) {
-  return apiRequest<InvoicePage>(`/sales?${query(filters)}`)
+  return apiRequest<InvoicePage>(
+    `/sales?${query(filters as unknown as Record<string, string | number | boolean | undefined>)}`,
+  )
 }
 
 export function getInvoice(id: string) {
@@ -123,4 +126,33 @@ export function searchInvoiceProducts(search: string) {
 
 export function downloadInvoicePdf(id: string) {
   return apiBlob(`/sales/${id}/invoice-pdf`)
+}
+
+export function getPublicInvoice(id: string) {
+  return apiRequest<
+    InvoiceDetail & {
+      company: CompanyInvoiceProfile
+    }
+  >(`/sales/public/invoices/${id}`)
+}
+
+export interface CompanyInvoiceProfile {
+  name: string
+  phone: string | null
+  email: string | null
+  logoUrl: string | null
+  addressLine1: string | null
+  addressLine2: string | null
+  city: string | null
+  state: string | null
+  postalCode: string | null
+  countryCode: string
+  currencyCode: string
+  invoiceTerms: string[]
+  businessHours: {
+    weekdays: { open: string; close: string }
+    saturdayClosed: boolean
+    sundayClosed: boolean
+    publicHolidaysClosed: boolean
+  } | null
 }

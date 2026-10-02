@@ -36,6 +36,7 @@ export interface CompletedSale {
 export interface SaleSummary {
   id: string
   invoiceNumber: string
+  customer: { id: string; name: string } | null
   status: string
   paymentStatus: string
   total: number

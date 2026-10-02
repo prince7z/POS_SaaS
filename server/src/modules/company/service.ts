@@ -32,6 +32,16 @@ export const companyUpdateSchema = z.object({
 	showProductImages: z.boolean().optional(),
 	autoGenerateInvoiceNumber: z.boolean().optional(),
 	autoPrintInvoice: z.boolean().optional(),
+	invoiceTerms: z.array(z.string().trim().min(1).max(500)).max(30).optional(),
+	businessHours: z.object({
+		weekdays: z.object({
+			open: z.string().regex(/^\d{2}:\d{2}$/),
+			close: z.string().regex(/^\d{2}:\d{2}$/),
+		}),
+		saturdayClosed: z.boolean(),
+		sundayClosed: z.boolean(),
+		publicHolidaysClosed: z.boolean(),
+	}).optional(),
 	takealotSellerId: optionalText(150),
 	takealotApiKey: optionalText(500),
 });
@@ -107,6 +117,13 @@ export const removeCompanyLogo = async (companyId: string, actorUserId: string) 
 export const updateCompany = async (companyId: string, actorUserId: string, input: z.infer<typeof companyUpdateSchema>) => {
 	const before = await repository.findCompany(prisma, companyId);
 	if (!before) throw new AppError("Company not found", 404, "COMPANY_NOT_FOUND");
+	if (input.invoiceTerms !== undefined || input.businessHours !== undefined) {
+		const actor = await prisma.user.findFirst({
+			where: { id: actorUserId, companyId, isActive: true, deletedAt: null },
+			select: { roleName: true },
+		});
+		if (actor?.roleName !== "Admin") throw forbidden("Only an Admin can update invoice terms and opening hours");
+	}
 	const updated = await prisma.$transaction(async (tx) => {
 		const company = await repository.updateCompany(tx, companyId, input as Prisma.CompanyUpdateInput);
 		await repository.createAuditLog(tx, {

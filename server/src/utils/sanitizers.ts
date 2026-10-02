@@ -35,6 +35,8 @@ export const sanitizeCompany = (company: Company) => ({
 	showProductImages: company.showProductImages,
 	autoGenerateInvoiceNumber: company.autoGenerateInvoiceNumber,
 	autoPrintInvoice: company.autoPrintInvoice,
+	invoiceTerms: company.invoiceTerms,
+	businessHours: company.businessHours,
 	takealotSellerId: company.takealotSellerId,
 	takealotConfigured: Boolean(company.takealotApiKey),
 	createdAt: company.createdAt,

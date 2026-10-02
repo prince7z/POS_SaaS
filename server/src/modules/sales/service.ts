@@ -154,7 +154,7 @@ const saleDetailView = (sale: any) => ({
 	source: sale.source,
 	status: sale.status,
 	paymentStatus: sale.paymentStatus,
-	customer: sale.customer ? { id: sale.customer.id, name: sale.customer.name, phone: sale.customer.phone, email: sale.customer.email } : null,
+	customer: sale.customer ? { id: sale.customer.id, name: sale.customer.name, phone: sale.customer.phone, email: sale.customer.email, ...(sale.customer.profileImageKey !== undefined && { profileImageUrl: sale.customer.profileImageKey ? toPublicMediaUrl(sale.customer.profileImageKey) : null }) } : null,
 	cashier: sale.cashier ? { id: sale.cashier.id, name: sale.cashier.fullName } : null,
 	items: sale.items.map((item: any) => saleItemView(item)),
 	payments: sale.payments.map((payment: any) => salePaymentView(payment)),
@@ -170,6 +170,23 @@ const saleDetailView = (sale: any) => ({
 	notes: sale.notes,
 	soldAt: sale.soldAt,
 });
+
+export const getPublicInvoice = async (identifier: string) => {
+	const sale = await repository.findPublicSale(prisma, identifier);
+	if (!sale) throw error("INVOICE_NOT_FOUND", "Invoice not found", 404);
+	return {
+		...saleDetailView(sale),
+		company: {
+			...sale.company,
+			logoUrl: sale.company.logoKey ? toPublicMediaUrl(sale.company.logoKey) : null,
+			logoKey: undefined,
+		},
+		items: sale.items.map((item: any) => ({
+			...saleItemView(item),
+			imageUrl: item.product.imageKeys[0] ? toPublicMediaUrl(item.product.imageKeys[0]) : null,
+		})),
+	};
+};
 
 const returnView = (value: any) => ({
 	id: value.id,

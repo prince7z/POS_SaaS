@@ -22,6 +22,13 @@ export interface Company {
   showProductImages: boolean
   autoGenerateInvoiceNumber: boolean
   autoPrintInvoice: boolean
+  invoiceTerms: string[]
+  businessHours: {
+    weekdays: { open: string; close: string }
+    saturdayClosed: boolean
+    sundayClosed: boolean
+    publicHolidaysClosed: boolean
+  } | null
   takealotSellerId: string | null
   takealotConfigured: boolean
 }
@@ -46,7 +53,10 @@ export interface MediaUpload {
   expiresIn: number
   expiresAt: string
 }
-export type CompanyUpdate = Record<string, string | number | boolean | null | undefined>
+export type CompanyUpdate = Record<
+  string,
+  string | number | boolean | string[] | Company['businessHours'] | null | undefined
+>
 
 export function getCompany() {
   return apiRequest<Company>('/company')

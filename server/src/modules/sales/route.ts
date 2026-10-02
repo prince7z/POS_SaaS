@@ -24,6 +24,12 @@ const saleAccess = [requireAuth, requireAccess(Access.POS)] as const;
 const salesReadAccess = [requireAuth, requireAccess(Access.POS), requireAccess(Access.INVOICES)] as const;
 const returnsAccess = [requireAuth, requireAccess(Access.RETURNS)] as const;
 
+router.get("/public/invoices/:id", async (request, response) => {
+	const id = request.params.id;
+	if (typeof id !== "string" || id.trim().length === 0 || id.length > 100) throw validationError("Invalid invoice id");
+	return sendSuccess(response, await service.getPublicInvoice(id));
+});
+
 router.post("/drafts", ...saleAccess, async (request, response) => {
 	const auth = authContext(request);
 	return sendSuccess(response, await service.createSaleDraft(auth.companyId, auth.userId, service.parse(service.saleDraftSchema, request.body)), 201);

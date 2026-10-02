@@ -15,6 +15,27 @@ export const findSaleById = (db: Db, companyId: string, id: string) =>
 		},
 	});
 
+export const findPublicSale = (db: Db, identifier: string) =>
+	db.sale.findFirst({
+		where: {
+			status: "COMPLETED",
+			OR: [{ id: identifier }, { invoiceNumber: identifier }],
+		},
+		include: {
+			company: {
+				select: {
+					id: true, name: true, phone: true, email: true, logoKey: true,
+					addressLine1: true, addressLine2: true, city: true, state: true, postalCode: true,
+					countryCode: true, currencyCode: true, timezone: true, invoiceTerms: true, businessHours: true,
+				},
+			},
+			customer: { select: { id: true, name: true, phone: true, email: true, profileImageKey: true } },
+			cashier: { select: { id: true, fullName: true } },
+			items: { orderBy: { createdAt: "asc" }, include: { product: { select: { imageKeys: true } } } },
+			payments: { orderBy: { paidAt: "asc" } },
+		},
+	});
+
 export const findSaleSummaryById = (db: Db, companyId: string, id: string) =>
 	db.sale.findFirst({
 		where: { id, companyId },

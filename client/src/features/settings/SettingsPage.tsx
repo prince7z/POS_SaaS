@@ -26,6 +26,7 @@ import {
   Check,
   ChevronRight,
   CircleDollarSign,
+  Clock3,
   FileText,
   Globe2,
   ImagePlus,
@@ -772,6 +773,13 @@ function SimpleCompanySection({
     defaultTaxRate: String(company.defaultTaxRate),
     takealotSellerId: company.takealotSellerId ?? '',
     takealotApiKey: '',
+    invoiceTerms: company.invoiceTerms ?? [],
+    businessHours: company.businessHours ?? {
+      weekdays: { open: '08:00', close: '16:00' },
+      saturdayClosed: true,
+      sundayClosed: true,
+      publicHolidaysClosed: true,
+    },
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -788,6 +796,8 @@ function SimpleCompanySection({
                 timeFormat: form.timeFormat,
                 autoGenerateInvoiceNumber: form.autoGenerateInvoiceNumber,
                 autoPrintInvoice: form.autoPrintInvoice,
+                invoiceTerms: form.invoiceTerms.filter((term) => term.trim()),
+                businessHours: form.businessHours,
               }
             : {
                 takealotSellerId: form.takealotSellerId,
@@ -818,6 +828,101 @@ function SimpleCompanySection({
             value={form.defaultTaxRate}
             onChange={(e) => setForm({ ...form, defaultTaxRate: e.target.value })}
           />
+        </Box>
+        <ErrorText message={error} />
+        <HStack justify="flex-end">
+          <SaveButton saving={saving} onClick={save} />
+        </HStack>
+      </VStack>
+    )
+  if (section === 'invoice')
+    return (
+      <VStack align="stretch" gap="5">
+        <Box>
+          <Heading size="sm">Invoice defaults</Heading>
+          <Text fontSize="sm" color="secondary">
+            These details appear on printed invoices and the public invoice verification page.
+          </Text>
+        </Box>
+        <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap="4">
+          <Box>
+            <Label icon={CalendarDays}>Date format</Label>
+            <Input value={form.dateFormat} onChange={(e) => setForm({ ...form, dateFormat: e.target.value })} />
+          </Box>
+          <Box>
+            <Label icon={Clock3}>Time format</Label>
+            <Input value={form.timeFormat} onChange={(e) => setForm({ ...form, timeFormat: e.target.value })} />
+          </Box>
+        </Grid>
+        <Box>
+          <Label icon={FileText}>Invoice terms and conditions</Label>
+          <Text fontSize="xs" color="secondary" mb="2">
+            Add one point per line. Empty lines are ignored.
+          </Text>
+          <textarea
+            value={form.invoiceTerms.join('\n')}
+            onChange={(e) => setForm({ ...form, invoiceTerms: e.target.value.split('\n') })}
+            rows={5}
+            style={{ width: '100%', border: '1px solid var(--chakra-colors-border)', borderRadius: 6, padding: 10 }}
+          />
+        </Box>
+        <Box>
+          <Label icon={Clock3}>Store opening hours</Label>
+          <Text fontSize="xs" color="secondary" mb="2">
+            Monday to Friday share the same hours. Weekends and public holidays can be marked closed.
+          </Text>
+          <HStack>
+            <Text w="32" fontSize="sm">
+              Monday to Friday
+            </Text>
+            <Input
+              type="time"
+              value={form.businessHours.weekdays.open}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  businessHours: {
+                    ...form.businessHours,
+                    weekdays: { ...form.businessHours.weekdays, open: e.target.value },
+                  },
+                })
+              }
+            />
+            <Text>to</Text>
+            <Input
+              type="time"
+              value={form.businessHours.weekdays.close}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  businessHours: {
+                    ...form.businessHours,
+                    weekdays: { ...form.businessHours.weekdays, close: e.target.value },
+                  },
+                })
+              }
+            />
+          </HStack>
+          <VStack align="stretch" gap="2" mt="3">
+            {(
+              [
+                ['saturdayClosed', 'Saturday'],
+                ['sundayClosed', 'Sunday'],
+                ['publicHolidaysClosed', 'Public holidays'],
+              ] as const
+            ).map(([key, label]) => (
+              <HStack key={key}>
+                <input
+                  type="checkbox"
+                  checked={form.businessHours[key]}
+                  onChange={(e) =>
+                    setForm({ ...form, businessHours: { ...form.businessHours, [key]: e.target.checked } })
+                  }
+                />
+                <Text fontSize="sm">{label} closed</Text>
+              </HStack>
+            ))}
+          </VStack>
         </Box>
         <ErrorText message={error} />
         <HStack justify="flex-end">
