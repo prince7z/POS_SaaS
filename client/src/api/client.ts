@@ -22,6 +22,15 @@ export class ApiError extends Error {
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? '/api'
 
+export async function apiBlob(path: string): Promise<Blob> {
+  const token = localStorage.getItem('pos-auth-token')
+  const response = await fetch(`${baseUrl}${path}`, {
+    headers: { Accept: 'text/csv', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  })
+  if (!response.ok) throw new ApiError('The report export could not be downloaded.', 'EXPORT_FAILED', response.status)
+  return response.blob()
+}
+
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem('pos-auth-token')
   const response = await fetch(`${baseUrl}${path}`, {

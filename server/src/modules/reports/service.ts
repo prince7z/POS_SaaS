@@ -36,15 +36,16 @@ const previousRange = (r: { from: string; to: string }) => {
 
 export const salesDashboard = async (companyId: string, filters: Filters) => {
 	const r = range(filters); const previous = previousRange(r);
-	const [current, prior, trend, categories, payments, products, recent] = await Promise.all([
+	const [current, prior, trend, categories, payments, products, recent, activity, performance] = await Promise.all([
 		repository.salesSummary(prisma, companyId, r, filters.categoryId, filters.paymentMethod),
 		repository.salesSummary(prisma, companyId, previous, filters.categoryId, filters.paymentMethod),
 		repository.salesTrend(prisma, companyId, r, filters.granularity),
 		repository.salesByCategory(prisma, companyId, r), repository.salesByPayment(prisma, companyId, r),
 		repository.topProducts(prisma, companyId, r, 5, "totalSales", "desc"), repository.recentSales(prisma, companyId, r, 5),
+		repository.salesActivity(prisma, companyId, r), repository.productPerformance(prisma, companyId, r),
 	]);
 	const sales = number(current[0]?.totalSales); const orders = number(current[0]?.totalOrders); const priorSales = number(prior[0]?.totalSales); const priorOrders = number(prior[0]?.totalOrders);
-	return { filters: r, kpis: { totalSales: metric(sales, priorSales), totalOrders: metric(orders, priorOrders), totalItemsSold: number(current[0]?.totalItems), averageOrderValue: metric(orders ? sales / orders : 0, priorOrders ? priorSales / priorOrders : 0) }, trend: trend.map((x) => ({ period: x.period, sales: number(x.sales) })), byCategory: categories.map((x) => ({ ...x, sales: number(x.sales), percentage: sales ? Number((number(x.sales) / sales * 100).toFixed(2)) : 0 })), byPaymentMethod: payments.map((x) => ({ ...x, amount: number(x.amount), percentage: sales ? Number((number(x.amount) / sales * 100).toFixed(2)) : 0 })), topProducts: products.map((x) => ({ ...x, quantitySold: number(x.quantitySold), totalSales: number(x.totalSales) })), recentSales: recent };
+	return { filters: r, kpis: { totalSales: metric(sales, priorSales), totalOrders: metric(orders, priorOrders), totalItemsSold: number(current[0]?.totalItems), averageOrderValue: metric(orders ? sales / orders : 0, priorOrders ? priorSales / priorOrders : 0) }, trend: trend.map((x) => ({ period: x.period, sales: number(x.sales), orders: number(x.orders), itemsSold: number(x.itemsSold), averageOrderValue: number(x.averageOrderValue) })), byCategory: categories.map((x) => ({ ...x, sales: number(x.sales), percentage: sales ? Number((number(x.sales) / sales * 100).toFixed(2)) : 0 })), byPaymentMethod: payments.map((x) => ({ ...x, amount: number(x.amount), percentage: sales ? Number((number(x.amount) / sales * 100).toFixed(2)) : 0 })), topProducts: products.map((x) => ({ ...x, quantitySold: number(x.quantitySold), totalSales: number(x.totalSales) })), recentSales: recent, salesActivity: activity.map((x) => ({ ...x, hour: number(x.hour), salesAmount: number(x.salesAmount), orderCount: number(x.orderCount) })), productPerformance: performance.map((x) => ({ ...x, unitsSold: number(x.unitsSold), revenue: number(x.revenue), cost: number(x.cost), profit: number(x.profit) })) };
 };
 
 export const salesTransactions = async (companyId: string, filters: z.infer<typeof pageSchema>) => {
@@ -54,9 +55,15 @@ export const salesTransactions = async (companyId: string, filters: z.infer<type
 };
 
 export const inventoryDashboard = async (companyId: string, filters: Filters) => {
-	const rows = await repository.inventorySummary(prisma, companyId); const row = rows[0] ?? {};
+	const r = range(filters);
+	const [rows, customers, categories, trend, types, performance] = await Promise.all([
+		repository.inventorySummary(prisma, companyId), repository.customerSummary(prisma, companyId, r),
+		repository.inventoryValueByCategory(prisma, companyId), repository.newVsReturning(prisma, companyId, r, filters.granularity),
+		repository.customerTypeDistribution(prisma, companyId, r), repository.customerPerformance(prisma, companyId, r),
+	]);
+	const row = rows[0] ?? {}; const customer = customers[0] ?? {};
 	const total = number(row.totalProducts); const low = number(row.lowStock); const out = number(row.outOfStock);
-	return { kpis: { totalProducts: total, lowStockItems: low, outOfStock: out, totalStockValue: number(row.stockValue) }, stockStatus: { inStock: total - low - out, lowStock: low, outOfStock: out } };
+	return { kpis: { totalProducts: total, totalUnits: number(row.totalUnits), lowStockItems: low, outOfStock: out, totalStockValue: number(row.stockValue) }, customerKpis: { totalCustomers: number(customer.totalCustomers), newCustomers: number(customer.newCustomers), activeCustomers: number(customer.activeCustomers), totalPurchases: number(customer.totalPurchases) }, stockStatus: { inStock: total - low - out, lowStock: low, outOfStock: out }, inventoryValueByCategory: categories.map((x) => ({ ...x, value: number(x.value) })), newVsReturning: trend.map((x) => ({ ...x, newCustomers: number(x.newCustomers), returningCustomers: number(x.returningCustomers) })), customerTypeDistribution: types.map((x) => ({ ...x, customers: number(x.customers) })), customerPerformance: performance.map((x) => ({ ...x, orders: number(x.orders), purchaseValue: number(x.purchaseValue), averageOrderValue: number(x.averageOrderValue) })) };
 };
 export const lowStockItems = async (companyId: string, filters: z.infer<typeof pageSchema>) => {
 	const rows = await repository.lowStock(prisma, companyId, filters.page, filters.limit, filters.search); const total = number(rows[0]?.totalCount);
@@ -66,10 +73,23 @@ export const topCustomers = async (companyId: string, filters: Filters) => (awai
 export const recentCustomers = async (companyId: string, filters: Filters) => (await repository.recentCustomers(prisma, companyId, range(filters), 5)).map((x) => ({ ...x, totalPurchases: number(x.totalPurchases) }));
 
 export const pnlDashboard = async (companyId: string, filters: Filters) => {
-	const r = range(filters); const row = (await repository.pnlSummary(prisma, companyId, r, filters.categoryId))[0] ?? {};
-	const breakdown = await repository.expenseBreakdown(prisma, companyId, r);
+	const r = range(filters); const previous = previousRange(r);
+	const [currentRows, previousRows, breakdown, trend, expenseTrend] = await Promise.all([
+		repository.pnlSummary(prisma, companyId, r, filters.categoryId),
+		repository.pnlSummary(prisma, companyId, previous, filters.categoryId),
+		repository.expenseBreakdown(prisma, companyId, r),
+		repository.pnlTrend(prisma, companyId, r, filters.granularity),
+		repository.expenseTrend(prisma, companyId, r, filters.granularity),
+	]);
+	const row = currentRows[0] ?? {}; const prior = previousRows[0] ?? {};
 	const revenue = number(row.revenue); const cost = number(row.cost); const expenses = number(row.expenses); const profit = revenue - cost - expenses;
-	return { kpis: { revenue: metric(revenue), cost: metric(cost), expenses: metric(expenses), netProfit: metric(profit) }, trend: [], expenseBreakdown: breakdown.map((x) => ({ ...x, amount: number(x.amount) })) };
+	const priorRevenue = number(prior.revenue); const priorCost = number(prior.cost); const priorExpenses = number(prior.expenses); const priorProfit = priorRevenue - priorCost - priorExpenses;
+	return {
+		kpis: { revenue: metric(revenue, priorRevenue), cost: metric(cost, priorCost), expenses: metric(expenses, priorExpenses), netProfit: metric(profit, priorProfit), netMargin: revenue ? (profit / revenue) * 100 : 0 },
+		trend: trend.map((x) => ({ ...x, revenue: number(x.revenue), cost: number(x.cost), expenses: number(x.expenses), netProfit: number(x.netProfit) })),
+		expenseBreakdown: breakdown.map((x) => ({ ...x, amount: number(x.amount) })),
+		expenseTrend: expenseTrend.map((x) => ({ ...x, amount: number(x.amount) })),
+	};
 };
 export const profitableProducts = async (companyId: string, filters: Filters) => (await repository.profitableProducts(prisma, companyId, range(filters), 5)).map((x) => ({ ...x, quantitySold: number(x.quantitySold), revenue: number(x.revenue), cost: number(x.cost), profit: number(x.profit) }));
 export const recentExpenses = async (companyId: string, filters: Filters) => (await repository.recentExpenses(prisma, companyId, range(filters))).map((x) => ({ ...x, amount: number(x.amount) }));
