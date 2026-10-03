@@ -1,6 +1,9 @@
+import QRCode from "qrcode";
+
 export interface InvoiceTemplateInput {
-	name?: string;
+	id?: string;
 	invoiceNumber?: string;
+	soldAt?: Date | string | null;
 	company?: {
 		name?: string | null;
 		email?: string | null;
@@ -9,6 +12,8 @@ export interface InvoiceTemplateInput {
 		city?: string | null;
 		currencyCode?: string | null;
 		logoUrl?: string | null;
+		businessHours?: any;
+		invoiceTerms?: string[] | null;
 	} | null;
 	customer?: {
 		name?: string | null;
@@ -28,41 +33,78 @@ export interface InvoiceTemplateInput {
 	taxAmount?: number;
 	discountAmount?: number;
 	total?: number;
-	soldAt?: Date | string | null;
 	notes?: string | null;
+	verificationUrl?: string;
+	qrCodeDataUrl?: string;
+}
+
+export const DEFAULT_BUSINESS_HOURS = {
+	weekdays: { open: "08:00", close: "16:00" },
+};
+
+export const DEFAULT_INVOICE_TERMS = [
+	"Goods once sold cannot be returned or exchanged except as per the store's return policy.",
+	"Please check the products and invoice details before leaving the store.",
+	"Warranty, if applicable, is subject to the manufacturer's terms and conditions.",
+	"Any eligible return or exchange must be accompanied by the original invoice.",
+];
+
+export function formatInvoiceTime(value?: string | null): string {
+	if (!value) return "";
+	const [hours, minutes] = value.split(":").map(Number);
+	if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return value;
+	const d = new Date(2000, 0, 1, hours, minutes);
+	return d.toLocaleTimeString("en-US", {
+		hour: "numeric",
+		minute: "2-digit",
+		hour12: true,
+	});
+}
+
+export function money(amount: number): string {
+	const val = Number(amount) || 0;
+	return val.toFixed(2);
+}
+
+export function formatDate(val?: Date | string | null): string {
+	const d = val ? new Date(val) : new Date();
+	return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
 export const invoiceTemplate = (input: InvoiceTemplateInput) => {
 	const company = input.company || {};
 	const customer = input.customer || {};
 	const items = input.items || [];
-	const currency = company.currencyCode || "$";
 
-	const itemRowsHtml = items.map((item) => {
-		const imageUrl = item.imageUrl || null;
-		const lineTotal = item.lineSubtotal ?? (item.quantity * item.unitPrice);
+	const subtotal = input.subtotal ?? items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+	const taxRate = input.taxRate !== undefined && input.taxRate !== null ? input.taxRate : 8;
+	const taxAmount = input.taxAmount ?? (subtotal * taxRate) / 100;
+	const discountAmount = input.discountAmount || 0;
+	const total = input.total ?? Math.max(0, subtotal + taxAmount - discountAmount);
 
-		return `
+	const companyMeta = [company.addressLine1, company.city, company.phone].filter(Boolean).join(" · ");
+	const customerMeta = [customer.email, customer.phone].filter(Boolean).join(" · ") || "No contact details";
+
+	const bHours = company.businessHours?.weekdays ? company.businessHours : DEFAULT_BUSINESS_HOURS;
+	const openingHoursStr = `Weekdays: ${formatInvoiceTime(bHours.weekdays.open)} – ${formatInvoiceTime(bHours.weekdays.close)}`;
+
+	const terms = company.invoiceTerms?.length ? company.invoiceTerms : DEFAULT_INVOICE_TERMS;
+
+	const itemRowsHtml = items
+		.map(
+			(item) => `
 		<tr>
-			<td style="padding: 12px; border-bottom: 1px solid #E5E7EB; vertical-align: middle;">
-				<table border="0" cellpadding="0" cellspacing="0">
-					<tr>
-						${imageUrl ? `<td style="padding-right: 12px;"><img src="${imageUrl}" width="42" height="42" style="border-radius: 6px; object-fit: cover; display: block;" /></td>` : ""}
-						<td>
-							<div style="font-weight: 600; color: #111827; font-size: 14px;">${item.productName || "Product"}</div>
-							${item.sku ? `<div style="color: #6B7280; font-size: 12px; margin-top: 2px;">SKU: ${item.sku}</div>` : ""}
-						</td>
-					</tr>
-				</table>
+			<td style="padding: 12px 0; border-bottom: 1px solid #E2E8F0; text-align: left; vertical-align: top;">
+				<div style="font-weight: 700; color: #1A202C; font-size: 14px; line-height: 1.3;">${item.productName || "Item"}</div>
+				${item.sku ? `<div style="font-size: 12px; color: #718096; margin-top: 2px;">${item.sku}</div>` : ""}
 			</td>
-			<td style="padding: 12px; border-bottom: 1px solid #E5E7EB; text-align: center; color: #374151; font-size: 14px; vertical-align: middle;">${item.quantity}</td>
-			<td style="padding: 12px; border-bottom: 1px solid #E5E7EB; text-align: right; color: #374151; font-size: 14px; vertical-align: middle;">${currency}${Number(item.unitPrice).toFixed(2)}</td>
-			<td style="padding: 12px; border-bottom: 1px solid #E5E7EB; text-align: right; font-weight: 600; color: #111827; font-size: 14px; vertical-align: middle;">${currency}${Number(lineTotal).toFixed(2)}</td>
+			<td style="padding: 12px 0; border-bottom: 1px solid #E2E8F0; text-align: left; vertical-align: top; color: #1A202C; font-size: 14px;">${item.quantity}</td>
+			<td style="padding: 12px 0; border-bottom: 1px solid #E2E8F0; text-align: right; vertical-align: top; color: #1A202C; font-size: 14px;">${money(item.unitPrice)}</td>
+			<td style="padding: 12px 0; border-bottom: 1px solid #E2E8F0; text-align: right; vertical-align: top; color: #1A202C; font-size: 14px;">${money(item.quantity * item.unitPrice)}</td>
 		</tr>
-		`;
-	}).join("");
-
-	const dateStr = input.soldAt ? new Date(input.soldAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "";
+	`,
+		)
+		.join("");
 
 	const html = `
 <!DOCTYPE html>
@@ -72,116 +114,117 @@ export const invoiceTemplate = (input: InvoiceTemplateInput) => {
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Invoice ${input.invoiceNumber || ""}</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #F7F8FA; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-	<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F7F8FA; padding: 30px 15px;">
+<body style="margin: 0; padding: 0; background-color: #FFFFFF; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1A202C;">
+	<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFFFFF; padding: 24px 12px;">
 		<tr>
 			<td align="center">
-				<table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #FFFFFF; border-radius: 12px; border: 1px solid #E5E7EB; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-					<!-- Header -->
+				<table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 32px;">
 					<tr>
-						<td style="padding: 28px 32px; background-color: #FFFFFF; border-bottom: 1px solid #E5E7EB;">
+						<td>
+							<!-- Header -->
 							<table border="0" cellpadding="0" cellspacing="0" width="100%">
 								<tr>
 									<td style="vertical-align: top;">
-										${company.logoUrl ? `<img src="${company.logoUrl}" alt="${company.name || 'Store'}" height="38" style="display: block; max-width: 140px; margin-bottom: 8px;" />` : ""}
-										<div style="font-size: 20px; font-weight: 700; color: #2563EB;">${company.name || "Sales Invoice"}</div>
-										<div style="font-size: 12px; color: #6B7280; margin-top: 4px;">
-											${[company.addressLine1, company.city, company.phone].filter(Boolean).join(" • ")}
+										${
+											company.logoUrl
+												? `<img src="${company.logoUrl}" alt="${company.name || ""}" style="max-height: 42px; max-width: 150px; object-fit: contain; display: block; margin-bottom: 8px;" />`
+												: `<div style="font-size: 28px; line-height: 1; margin-bottom: 8px;">🛒</div>`
+										}
+										<div style="font-size: 16px; font-weight: 700; color: #1A202C; margin-top: 4px;">${company.name || "Harbor & Pine Market"}</div>
+										${companyMeta ? `<div style="font-size: 12px; color: #718096; margin-top: 2px;">${companyMeta}</div>` : ""}
+										<div style="font-size: 12px; color: #718096; margin-top: 12px;">
+											<div style="font-weight: 400; color: #718096;">Opening hours</div>
+											<div>${openingHoursStr}</div>
 										</div>
 									</td>
-									<td style="text-align: right; vertical-align: top;">
-										<div style="font-size: 14px; font-weight: 700; color: #2563EB; letter-spacing: 0.5px;">INVOICE</div>
-										<div style="font-size: 16px; font-weight: 700; color: #111827; margin-top: 4px;">${input.invoiceNumber || "INV-0000"}</div>
-										${dateStr ? `<div style="font-size: 12px; color: #6B7280; margin-top: 2px;">${dateStr}</div>` : ""}
+									<td style="text-align: right; vertical-align: top; width: 160px;">
+										<div style="font-size: 14px; font-weight: 700; color: #1A202C; letter-spacing: 0.5px;">INVOICE</div>
+										${input.qrCodeDataUrl ? `<img src="${input.qrCodeDataUrl}" alt="Invoice verification QR code" width="76" height="76" style="display: block; margin: 4px 0 4px auto; border-radius: 2px;" />` : ""}
+										<div style="font-size: 13px; color: #1A202C; font-weight: 400;">${input.invoiceNumber || "INV-1011"}</div>
+										<div style="font-size: 12px; color: #718096; margin-top: 2px;">${formatDate(input.soldAt)}</div>
 									</td>
 								</tr>
 							</table>
-						</td>
-					</tr>
 
-					<!-- Customer / Bill To -->
-					<tr>
-						<td style="padding: 20px 32px; background-color: #F9FAFB; border-bottom: 1px solid #E5E7EB;">
-							<div style="font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Bill To</div>
-							<div style="font-size: 15px; font-weight: 600; color: #111827;">${customer.name || input.name || "Walk-in Customer"}</div>
-							<div style="font-size: 13px; color: #6B7280; margin-top: 2px;">
-								${[customer.email, customer.phone].filter(Boolean).join(" • ") || "No contact details"}
+							<!-- Separator -->
+							<div style="border-top: 1px solid #E2E8F0; margin: 24px 0;"></div>
+
+							<!-- Bill To -->
+							<div style="margin-bottom: 24px;">
+								<div style="font-size: 12px; color: #718096; margin-bottom: 4px;">Bill to</div>
+								<div style="font-size: 14px; font-weight: 700; color: #1A202C;">${customer.name || "Walk-in Customer"}</div>
+								<div style="font-size: 13px; color: #718096; margin-top: 2px;">${customerMeta}</div>
 							</div>
-						</td>
-					</tr>
 
-					<!-- Items Table -->
-					${items.length > 0 ? `
-					<tr>
-						<td style="padding: 24px 32px;">
-							<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
+							<!-- Items Table -->
+							<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse; margin-bottom: 24px;">
 								<thead>
-									<tr style="background-color: #F3F4F6;">
-										<th style="padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700; color: #374151; border-radius: 6px 0 0 6px;">ITEM</th>
-										<th style="padding: 10px 12px; text-align: center; font-size: 12px; font-weight: 700; color: #374151;">QTY</th>
-										<th style="padding: 10px 12px; text-align: right; font-size: 12px; font-weight: 700; color: #374151;">PRICE</th>
-										<th style="padding: 10px 12px; text-align: right; font-size: 12px; font-weight: 700; color: #374151; border-radius: 0 6px 6px 0;">TOTAL</th>
+									<tr style="border-bottom: 1px solid #E2E8F0;">
+										<th style="padding: 8px 0; text-align: left; font-size: 13px; font-weight: 600; color: #4A5568;">Item</th>
+										<th style="padding: 8px 0; text-align: left; font-size: 13px; font-weight: 600; color: #4A5568;">Qty</th>
+										<th style="padding: 8px 0; text-align: right; font-size: 13px; font-weight: 600; color: #4A5568;">Price</th>
+										<th style="padding: 8px 0; text-align: right; font-size: 13px; font-weight: 600; color: #4A5568;">Total</th>
 									</tr>
 								</thead>
 								<tbody>
 									${itemRowsHtml}
 								</tbody>
 							</table>
-						</td>
-					</tr>` : ""}
 
-					<!-- Financial Summary -->
-					${input.total !== undefined ? `
-					<tr>
-						<td style="padding: 0 32px 24px 32px;">
-							<table border="0" cellpadding="0" cellspacing="0" width="100%">
+							<!-- Summary -->
+							<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 24px;">
 								<tr>
-									<td width="40%"></td>
-									<td width="60%">
-										<table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-size: 13px; color: #374151;">
+									<td></td>
+									<td width="240" style="vertical-align: top;">
+										<table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-size: 14px; color: #1A202C;">
 											<tr>
-												<td style="padding: 4px 0; color: #6B7280;">Subtotal</td>
-												<td style="padding: 4px 0; text-align: right; font-weight: 500;">${currency}${Number(input.subtotal || 0).toFixed(2)}</td>
-											</tr>
-											${input.taxAmount ? `
-											<tr>
-												<td style="padding: 4px 0; color: #6B7280;">Tax (${input.taxRate || 0}%)</td>
-												<td style="padding: 4px 0; text-align: right; font-weight: 500;">${currency}${Number(input.taxAmount).toFixed(2)}</td>
-											</tr>` : ""}
-											${input.discountAmount ? `
-											<tr>
-												<td style="padding: 4px 0; color: #6B7280;">Discount</td>
-												<td style="padding: 4px 0; text-align: right; color: #059669; font-weight: 500;">-${currency}${Number(input.discountAmount).toFixed(2)}</td>
-											</tr>` : ""}
-											<tr>
-												<td colspan="2" style="padding: 8px 0;"><div style="border-top: 1px solid #E5E7EB;"></div></td>
+												<td style="padding: 4px 0; color: #718096;">Subtotal</td>
+												<td style="padding: 4px 0; text-align: right;">${money(subtotal)}</td>
 											</tr>
 											<tr>
-												<td style="padding: 4px 0; font-size: 16px; font-weight: 700; color: #111827;">Total</td>
-												<td style="padding: 4px 0; text-align: right; font-size: 18px; font-weight: 700; color: #2563EB;">${currency}${Number(input.total || 0).toFixed(2)}</td>
+												<td style="padding: 4px 0; color: #718096;">Tax (${taxRate}%)</td>
+												<td style="padding: 4px 0; text-align: right;">${money(taxAmount)}</td>
+											</tr>
+											<tr>
+												<td style="padding: 4px 0; color: #718096;">Discount</td>
+												<td style="padding: 4px 0; text-align: right;">-${money(discountAmount)}</td>
+											</tr>
+											<tr>
+												<td colspan="2" style="padding: 8px 0;"><div style="border-top: 1px solid #E2E8F0;"></div></td>
+											</tr>
+											<tr>
+												<td style="padding: 4px 0; font-weight: 700; color: #1A202C;">Total</td>
+												<td style="padding: 4px 0; text-align: right; font-weight: 700; color: #1A202C;">${money(total)}</td>
 											</tr>
 										</table>
 									</td>
 								</tr>
 							</table>
-						</td>
-					</tr>` : ""}
 
-					<!-- Notes -->
-					${input.notes ? `
-					<tr>
-						<td style="padding: 0 32px 20px 32px;">
-							<div style="padding: 12px; background-color: #F9FAFB; border-radius: 6px; border: 1px solid #F3F4F6; font-size: 12px; color: #4B5563;">
-								<strong style="color: #111827;">Notes:</strong> ${input.notes}
+							<!-- Notes -->
+							${
+								input.notes
+									? `
+								<div style="margin-bottom: 24px;">
+									<div style="font-size: 12px; color: #718096;">Notes</div>
+									<div style="font-size: 14px; color: #1A202C; margin-top: 2px;">${input.notes}</div>
+								</div>
+							`
+									: ""
+							}
+
+							<!-- Terms -->
+							<div style="padding-top: 24px; border-top: 1px solid #E2E8F0; margin-top: 24px; font-size: 12px; color: #2D3748;">
+								<div style="font-weight: 700; color: #1A202C; margin-bottom: 6px;">Terms and conditions</div>
+								<div style="line-height: 1.6; color: #2D3748;">
+									${terms.map((t) => `<div>• ${t}</div>`).join("")}
+								</div>
 							</div>
-						</td>
-					</tr>` : ""}
 
-					<!-- Footer -->
-					<tr>
-						<td style="padding: 24px 32px; background-color: #F9FAFB; border-top: 1px solid #E5E7EB; text-align: center;">
-							<div style="font-size: 14px; font-weight: 600; color: #111827;">Thank you for shopping with ${company.name || "us"}!</div>
-							<div style="font-size: 12px; color: #6B7280; margin-top: 4px;">A PDF copy of this invoice has been attached to this email.</div>
+							<!-- Footer -->
+							<div style="text-align: center; padding-top: 20px; margin-top: 24px; border-top: 1px solid #E2E8F0; font-size: 13px; color: #2D3748;">
+								Thank you for shopping with ${company.name || "Harbor & Pine Market"}.
+							</div>
 						</td>
 					</tr>
 				</table>
@@ -193,8 +236,8 @@ export const invoiceTemplate = (input: InvoiceTemplateInput) => {
 	`;
 
 	return {
-		subject: `Invoice ${input.invoiceNumber || ""} from ${company.name || "POS"}`,
+		subject: `Invoice ${input.invoiceNumber || ""} from ${company.name || "Harbor & Pine Market"}`,
 		html,
-		text: `Invoice ${input.invoiceNumber || ""} from ${company.name || "POS"}\nTotal: ${currency}${Number(input.total || 0).toFixed(2)}\nThank you for shopping with us.`,
+		text: `Invoice ${input.invoiceNumber || ""} from ${company.name || "Harbor & Pine Market"}\nTotal: ${money(total)}\nThank you for shopping with ${company.name || "Harbor & Pine Market"}.`,
 	};
 };
