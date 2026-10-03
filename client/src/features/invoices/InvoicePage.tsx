@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  Alert,
   Badge,
   Box,
   Button,
@@ -39,6 +40,8 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import QRCode from 'qrcode'
+
+const MotionBox = motion.create(Box)
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 import { getCompany, type Company } from '@/api/endpoints/company'
@@ -168,11 +171,12 @@ function InvoicePreview({
             </Text>
             <Text fontWeight="600">{customer?.name ?? invoice?.customer?.name ?? 'Walk-in customer'}</Text>
             <Text fontSize="sm" color="secondary">
-              {customer?.email ??
-                invoice?.customer?.email ??
-                customer?.phone ??
-                invoice?.customer?.phone ??
-                'No contact details'}
+              {[
+                customer?.email || invoice?.customer?.email,
+                customer?.phone || invoice?.customer?.phone,
+              ]
+                .filter(Boolean)
+                .join(' · ') || 'No contact details'}
             </Text>
           </Box>
           <Table.Root size="sm">
