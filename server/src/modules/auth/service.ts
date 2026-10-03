@@ -9,6 +9,10 @@ import { prisma } from "../../lib/prisma";
 import { AppError, unauthorized, validationError } from "../../utils/errors";
 import { sanitizeCompany, sanitizeUser } from "../../utils/sanitizers";
 import * as repository from "./repository";
+import { RedisKeys, redisClient } from "../../infrastructure/redis";
+import { PASSWORD_RESET_TTL_SECONDS } from "../notification/notification.constants";
+import { generateResetToken, hashResetToken, queuePasswordResetEmail, queueWelcomeEmail } from "../notification";
+import { logger } from "../../lib/logger";
 
 const email = z.string().trim().email().transform((value) => value.toLowerCase());
 const optionalText = (max = 255) => z.string().trim().max(max).optional();
@@ -32,6 +36,12 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({ companyId: z.string().uuid(), email, password: z.string().min(1) });
 export const refreshSchema = z.object({ refreshToken: z.string().min(1) });
 export const changePasswordSchema = z.object({ currentPassword: z.string().min(1), newPassword: z.string().min(8).max(128) });
+export const forgotPasswordSchema = z.object({ email });
+export const resetPasswordSchema = z.object({
+	token: z.string().min(1),
+	newPassword: z.string().min(8).max(128),
+	confirmPassword: z.string().min(8).max(128),
+}).refine((input) => input.newPassword === input.confirmPassword, { message: "Passwords do not match", path: ["confirmPassword"] });
 
 const hashToken = (token: string): string => crypto.createHash("sha256").update(token).digest("hex");
 
@@ -80,7 +90,41 @@ export const register = async (input: z.infer<typeof registerSchema>) => {
 		await repository.createAuditLog(tx, { companyId: company.id, actorUserId: user.id, action: "USER_CREATED", entityType: "User", entityId: user.id });
 		return { user: { ...user, company }, tokens };
 	});
+	await queueWelcomeEmail({ companyId: result.user.company.id, userId: result.user.id, email: result.user.email, name: result.user.fullName });
 	return authResponse(result.user, result.tokens);
+};
+
+export const forgotPassword = async (input: z.infer<typeof forgotPasswordSchema>) => {
+	const user = await repository.findActiveUserByEmail(prisma, input.email);
+	if (!user) {
+		throw new AppError("No account found with that email address", 404, "USER_NOT_FOUND");
+	}
+	const token = generateResetToken();
+	await redisClient.set(RedisKeys.passwordReset(hashResetToken(token)), user.id, "EX", PASSWORD_RESET_TTL_SECONDS);
+	logger.info("Password reset requested", JSON.stringify({ userId: user.id }));
+	try {
+		await queuePasswordResetEmail({ userId: user.id, email: user.email, name: user.fullName, resetToken: token });
+	} catch (error) {
+		logger.error("Password reset email could not be queued", error);
+	}
+	return { message: "Password reset link has been sent to your email." };
+};
+
+export const resetPassword = async (input: z.infer<typeof resetPasswordSchema>) => {
+	const key = RedisKeys.passwordReset(hashResetToken(input.token));
+	const userId = await redisClient.get(key);
+	if (!userId) throw new AppError("Invalid or expired reset token", 400, "INVALID_RESET_TOKEN");
+	const passwordHash = await bcrypt.hash(input.newPassword, 12);
+	await prisma.$transaction(async (tx) => {
+		const user = await tx.user.findFirst({ where: { id: userId, isActive: true, deletedAt: null }, select: { id: true, companyId: true } });
+		if (!user) throw new AppError("Invalid or expired reset token", 400, "INVALID_RESET_TOKEN");
+		await repository.updatePassword(tx, user.id, passwordHash);
+		await repository.revokeUserSessions(tx, user.id);
+		await repository.createAuditLog(tx, { companyId: user.companyId, actorUserId: user.id, action: "PASSWORD_RESET", entityType: "User", entityId: user.id });
+	});
+	await redisClient.del(key);
+	logger.info("Password reset succeeded", JSON.stringify({ userId }));
+	return { message: "Password reset successfully. Please log in with your new password." };
 };
 
 export const login = async (input: z.infer<typeof loginSchema>) => {

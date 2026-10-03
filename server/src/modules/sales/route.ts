@@ -1,5 +1,6 @@
 import { Access } from "@prisma/client";
 import { Router } from "express";
+import { z } from "zod";
 
 import { requireAccess } from "../../middleware/access";
 import { requireAuth } from "../../middleware/auth";
@@ -72,6 +73,13 @@ router.get("/:id", ...salesReadAccess, async (request, response) => {
 router.post("/:id/complete", ...saleAccess, async (request, response) => {
 	const auth = authContext(request);
 	return sendSuccess(response, await service.completeSale(auth.companyId, auth.userId, idFrom(request), service.parse(service.saleCompleteSchema, request.body)));
+});
+
+router.post("/:id/send", ...salesReadAccess, async (request, response) => {
+	const auth = authContext(request);
+	const body = request.body as { email?: unknown };
+	const email = typeof body.email === "string" && body.email.trim() ? service.parse(z.object({ email: z.string().email() }), { email: body.email }).email : undefined;
+	return sendSuccess(response, await service.sendInvoice(auth.companyId, auth.userId, idFrom(request), email), 202);
 });
 
 router.post("/:id/cancel", ...saleAccess, async (request, response) => {

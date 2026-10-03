@@ -24,6 +24,9 @@ export const createWalkInCustomer = (db: Db, companyId: string) =>
 export const findUserForLogin = (db: Db, companyId: string, email: string) =>
 	db.user.findFirst({ where: { companyId, email, deletedAt: null }, include: { company: true } });
 
+export const findActiveUserByEmail = (db: Db, email: string) =>
+	db.user.findFirst({ where: { email, isActive: true, deletedAt: null }, select: { id: true, email: true, fullName: true } });
+
 export const findUserById = (db: Db, userId: string, companyId: string) =>
 	db.user.findFirst({ where: { id: userId, companyId, deletedAt: null }, include: { company: true } });
 

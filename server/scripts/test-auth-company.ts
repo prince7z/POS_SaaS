@@ -128,6 +128,12 @@ const main = async (): Promise<void> => {
 		}));
 		assert.equal(changedPassword.response.status, 200);
 
+		const forgotPasswordResponse = await request("/api/auth/forgot-password", {
+			method: "POST",
+			...json({ email: adminEmail }),
+		});
+		assert.equal(forgotPasswordResponse.response.status, 200);
+
 		assert.equal((await request(`/api/company/users/${userId}`, withToken(adminToken, { method: "DELETE" }))).response.status, 200);
 		assert.equal((await request("/api/auth/logout", withToken(adminToken, { method: "POST", ...json({ refreshToken }) }))).response.status, 200);
 		assert.equal((await request("/api/auth/refresh", { method: "POST", ...json({ refreshToken }) })).response.status, 401);

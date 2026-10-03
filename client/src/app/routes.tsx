@@ -35,9 +35,18 @@ function PlaceholderRoute() {
   )
 }
 
+import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
+import { LoginPage } from '@/features/auth/LoginPage'
+import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
+
 export function AppRoutes() {
   return (
     <Routes>
+      <Route path="/auth/login" element={<LoginPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/auth/forgot-password/:token" element={<ResetPasswordPage />} />
+      <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
       <Route
         path="/invoice-verification/:invoiceid"
         element={

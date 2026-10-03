@@ -27,6 +27,8 @@ export interface SaleCompletionPayload {
   payments: SalePaymentPayload[]
   customerId: string | null
   notes?: string | null
+  notifyCustomer?: boolean
+  notificationEmail?: string
 }
 export interface CompletedSale {
   id: string
@@ -36,7 +38,7 @@ export interface CompletedSale {
 export interface SaleSummary {
   id: string
   invoiceNumber: string
-  customer: { id: string; name: string } | null
+  customer: { id: string; name: string; phone?: string | null; email?: string | null } | null
   status: string
   paymentStatus: string
   total: number

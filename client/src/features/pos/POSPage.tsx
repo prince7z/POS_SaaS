@@ -22,6 +22,7 @@ import {
   Check,
   ChevronDown,
   CreditCard,
+  Mail,
   Minus,
   Percent,
   Plus,
@@ -300,6 +301,10 @@ export function POSPage() {
   const [success, setSuccess] = useState('')
   const [addedProductId, setAddedProductId] = useState<string | null>(null)
 
+  const [notifyCustomer, setNotifyCustomer] = useState(false)
+  const [recipientType, setRecipientType] = useState<'CUSTOMER' | 'OTHER'>('CUSTOMER')
+  const [customEmail, setCustomEmail] = useState('')
+
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 300)
     return () => window.clearTimeout(timer)
@@ -370,13 +375,19 @@ export function POSPage() {
         discountValue: discountType ? discountValue : null,
         customerId,
         payments: [{ paymentMethod, amount: totals.total }],
+        notifyCustomer,
+        notificationEmail: notifyCustomer && recipientType === 'OTHER' ? customEmail : undefined,
       })
       setSuccess(
-        completed.invoiceNumber ? `Sale ${completed.invoiceNumber} completed.` : 'Sale completed successfully.',
+        completed.invoiceNumber
+          ? `Sale ${completed.invoiceNumber} completed.${notifyCustomer ? ' Receipt email queued.' : ''}`
+          : 'Sale completed successfully.',
       )
       setCart([])
       setDiscountType(null)
       setDiscountValue(0)
+      setNotifyCustomer(false)
+      setCustomEmail('')
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'The sale could not be completed.')
     } finally {
@@ -561,6 +572,63 @@ export function POSPage() {
                     Payment method
                   </Text>
                   <PaymentMethodSelector value={paymentMethod} onChange={setPaymentMethod} />
+
+                  <Box py="1" borderTopWidth="1px" borderBottomWidth="1px" borderColor="border" my="1">
+                    <HStack justify="space-between" cursor="pointer" onClick={() => setNotifyCustomer(!notifyCustomer)}>
+                      <HStack gap="2">
+                        <Mail size={15} color="var(--chakra-colors-blue-solid)" />
+                        <Text fontSize="sm" fontWeight="600">
+                          Email Receipt / Invoice
+                        </Text>
+                      </HStack>
+                      <Button size="xs" variant={notifyCustomer ? 'solid' : 'outline'} colorPalette={notifyCustomer ? 'blue' : undefined}>
+                        {notifyCustomer ? 'Enabled' : 'Off'}
+                      </Button>
+                    </HStack>
+
+                    <AnimatePresence>
+                      {notifyCustomer && (
+                        <MotionBox
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          overflow="hidden"
+                          mt="2"
+                        >
+                          <VStack align="stretch" gap="2">
+                            <HStack gap="1.5">
+                              <Button
+                                size="xs"
+                                flex="1"
+                                variant={recipientType === 'CUSTOMER' ? 'solid' : 'outline'}
+                                onClick={() => setRecipientType('CUSTOMER')}
+                              >
+                                Customer Mail
+                              </Button>
+                              <Button
+                                size="xs"
+                                flex="1"
+                                variant={recipientType === 'OTHER' ? 'solid' : 'outline'}
+                                onClick={() => setRecipientType('OTHER')}
+                              >
+                                Other Mail
+                              </Button>
+                            </HStack>
+                            {recipientType === 'OTHER' && (
+                              <Input
+                                size="sm"
+                                type="email"
+                                placeholder="Enter recipient email address..."
+                                value={customEmail}
+                                onChange={(e) => setCustomEmail(e.target.value)}
+                              />
+                            )}
+                          </VStack>
+                        </MotionBox>
+                      )}
+                    </AnimatePresence>
+                  </Box>
+
                   <SaleSummary totals={totals} />
                   <Button size="md" colorPalette="blue" loading={submitting} onClick={submitSale}>
                     <Check size={16} />

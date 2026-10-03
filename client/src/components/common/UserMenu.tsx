@@ -1,19 +1,32 @@
 import { Avatar, Button, Menu, Text, VStack } from '@chakra-ui/react'
 import { ChevronDown, LogOut, Settings, User } from 'lucide-react'
+import { clearAuthSession, getStoredUser } from '@/lib/auth'
+import { useNavigate } from 'react-router-dom'
 
 export function UserMenu({ collapsed = false, compact = false }: { collapsed?: boolean; compact?: boolean }) {
+  const user = getStoredUser()
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    clearAuthSession()
+    navigate('/auth/login')
+  }
+
+  const displayName = user?.fullName || 'John Doe'
+  const displayRole = user?.roleName || 'Store Manager'
+
   return (
     <Menu.Root positioning={{ placement: 'bottom-end' }}>
       <Menu.Trigger asChild>
         <Button variant="ghost" w={collapsed ? 'full' : 'auto'} justifyContent="flex-start" px="2">
           <Avatar.Root size="sm">
-            <Avatar.Fallback name="John Doe" />
+            <Avatar.Fallback name={displayName} />
           </Avatar.Root>
           {!collapsed && !compact && (
             <VStack align="start" gap="0" ml="2">
-              <Text fontSize="sm">John Doe</Text>
+              <Text fontSize="sm">{displayName}</Text>
               <Text fontSize="xs" color="secondary">
-                Store Manager
+                {displayRole}
               </Text>
             </VStack>
           )}
@@ -26,11 +39,11 @@ export function UserMenu({ collapsed = false, compact = false }: { collapsed?: b
             <User size={15} />
             Profile
           </Menu.Item>
-          <Menu.Item value="settings">
+          <Menu.Item value="settings" onClick={() => navigate('/settings')}>
             <Settings size={15} />
             Settings
           </Menu.Item>
-          <Menu.Item value="logout" color="danger">
+          <Menu.Item value="logout" color="danger" onClick={handleLogout}>
             <LogOut size={15} />
             Log out
           </Menu.Item>

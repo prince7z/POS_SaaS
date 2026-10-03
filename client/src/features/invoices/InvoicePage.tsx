@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Card,
+  Dialog,
   Drawer,
   Grid,
   HStack,
@@ -24,16 +25,19 @@ import {
   Check,
   Download,
   Eye,
+  Mail,
   MoreHorizontal,
   Package,
   Pencil,
   Plus,
   Printer,
   Search,
+  Send,
   Trash2,
   User,
   X,
 } from 'lucide-react'
+import { motion, AnimatePresence } from 'motion/react'
 import QRCode from 'qrcode'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -49,6 +53,7 @@ import {
   getInvoices,
   searchInvoiceCustomers,
   searchInvoiceProducts,
+  sendInvoice,
   updateInvoiceDraft,
   type InvoiceDetail,
   type InvoiceFilters,
@@ -647,14 +652,256 @@ function InvoiceEditor({
   )
 }
 
+function SendInvoiceModal({
+  open,
+  invoice,
+  onClose,
+}: {
+  open: boolean
+  invoice?: InvoiceDetail | SaleSummary
+  onClose: () => void
+}) {
+  const [detailedInvoice, setDetailedInvoice] = useState<InvoiceDetail | null>(null)
+  const [loadingInvoice, setLoadingInvoice] = useState(false)
+  const [recipientType, setRecipientType] = useState<'CUSTOMER' | 'OTHER'>('CUSTOMER')
+  const [otherEmail, setOtherEmail] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  useEffect(() => {
+    if (!open || !invoice?.id) {
+      setDetailedInvoice(null)
+      setError('')
+      setSuccess('')
+      setOtherEmail('')
+      return
+    }
+    const initialEmail = invoice.customer?.email
+    if (initialEmail) {
+      setRecipientType('CUSTOMER')
+    } else {
+      setRecipientType('OTHER')
+    }
+    setLoadingInvoice(true)
+    getInvoice(invoice.id)
+      .then((detail) => {
+        setDetailedInvoice(detail)
+        if (detail.customer?.email) {
+          setRecipientType('CUSTOMER')
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => setLoadingInvoice(false))
+  }, [open, invoice?.id])
+
+  const targetInvoice = detailedInvoice || invoice
+  const customerEmail = targetInvoice?.customer?.email || null
+
+  const handleSend = async () => {
+    if (!invoice?.id) return
+    const targetEmail = recipientType === 'OTHER' ? otherEmail.trim() : (customerEmail || undefined)
+    if (recipientType === 'OTHER' && !targetEmail) {
+      setError('Please enter a valid recipient email address.')
+      return
+    }
+    if (recipientType === 'CUSTOMER' && !customerEmail) {
+      setError('This customer has no email address on file. Please select "Other Email" and enter a recipient address.')
+      return
+    }
+
+    setSending(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const res = await sendInvoice(invoice.id, targetEmail)
+      setSuccess(`Invoice ${invoice.invoiceNumber || ''} queued for delivery to ${res.recipientEmail}.`)
+      setTimeout(() => {
+        setSuccess('')
+        onClose()
+      }, 1800)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to send invoice email.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={(e) => !e.open && onClose()}>
+      <Dialog.Backdrop />
+      <Dialog.Positioner>
+        <Dialog.Content maxW="md" p="0" borderRadius="lg" overflow="hidden">
+          <MotionBox
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.2 }}
+            p="6"
+          >
+            <Dialog.Header p="0" mb="4">
+              <HStack justify="space-between" align="start">
+                <HStack gap="3">
+                  <Box
+                    w="10"
+                    h="10"
+                    borderRadius="md"
+                    bg="blue.subtle"
+                    color="blue.solid"
+                    display="grid"
+                    placeItems="center"
+                    flexShrink="0"
+                  >
+                    <Mail size={20} />
+                  </Box>
+                  <Box>
+                    <Heading size="sm" fontWeight="700">
+                      Send Invoice via Email
+                    </Heading>
+                    <Text fontSize="xs" color="secondary" mt="0.5">
+                      {targetInvoice?.invoiceNumber ? `Invoice ${targetInvoice.invoiceNumber}` : 'Sales Invoice'}
+                    </Text>
+                  </Box>
+                </HStack>
+                <Dialog.CloseTrigger asChild>
+                  <IconButton size="xs" variant="ghost" aria-label="Close">
+                    <X size={15} />
+                  </IconButton>
+                </Dialog.CloseTrigger>
+              </HStack>
+            </Dialog.Header>
+
+            <Dialog.Body p="0">
+              <VStack align="stretch" gap="4">
+                {error && (
+                  <Alert.Root status="error" size="sm" borderRadius="md">
+                    <Alert.Indicator />
+                    <Alert.Content>
+                      <Alert.Description>{error}</Alert.Description>
+                    </Alert.Content>
+                  </Alert.Root>
+                )}
+
+                {success ? (
+                  <MotionBox
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    p="4"
+                    borderRadius="md"
+                    bg="green.subtle"
+                    color="green.solid"
+                  >
+                    <HStack gap="2.5">
+                      <Check size={18} />
+                      <Text fontWeight="500" fontSize="sm">
+                        {success}
+                      </Text>
+                    </HStack>
+                  </MotionBox>
+                ) : (
+                  <VStack align="stretch" gap="3">
+                    <Box>
+                      <Text fontSize="xs" fontWeight="600" color="secondary" mb="1.5">
+                        Select Recipient Type
+                      </Text>
+                      <HStack gap="2">
+                        <Button
+                          size="sm"
+                          flex="1"
+                          variant={recipientType === 'CUSTOMER' ? 'solid' : 'outline'}
+                          colorPalette={recipientType === 'CUSTOMER' ? 'blue' : undefined}
+                          onClick={() => setRecipientType('CUSTOMER')}
+                        >
+                          Customer Email
+                        </Button>
+                        <Button
+                          size="sm"
+                          flex="1"
+                          variant={recipientType === 'OTHER' ? 'solid' : 'outline'}
+                          colorPalette={recipientType === 'OTHER' ? 'blue' : undefined}
+                          onClick={() => setRecipientType('OTHER')}
+                        >
+                          Other Email
+                        </Button>
+                      </HStack>
+                    </Box>
+
+                    {recipientType === 'CUSTOMER' && (
+                      <Card.Root variant="subtle" size="sm">
+                        <Card.Body p="3">
+                          <Text fontSize="xs" color="secondary" mb="0.5">
+                            Customer: {targetInvoice?.customer?.name || 'Walk-in customer'}
+                          </Text>
+                          <Text fontWeight="600" fontSize="sm">
+                            {loadingInvoice
+                              ? 'Loading contact email...'
+                              : customerEmail || 'No email address associated with this customer.'}
+                          </Text>
+                        </Card.Body>
+                      </Card.Root>
+                    )}
+
+                    {recipientType === 'OTHER' && (
+                      <Box>
+                        <Text fontSize="xs" fontWeight="600" color="secondary" mb="1.5">
+                          Recipient Email Address
+                        </Text>
+                        <HStack
+                          gap="2"
+                          border="1px solid"
+                          borderColor="border"
+                          borderRadius="md"
+                          px="3"
+                          py="1"
+                          _focusWithin={{ borderColor: 'blue.solid' }}
+                        >
+                          <Mail size={15} color="var(--chakra-colors-secondary)" />
+                          <Input
+                            size="sm"
+                            type="email"
+                            placeholder="customer@domain.com"
+                            value={otherEmail}
+                            onChange={(e) => setOtherEmail(e.target.value)}
+                            border="none"
+                            outline="none"
+                            focusRing="none"
+                          />
+                        </HStack>
+                      </Box>
+                    )}
+                  </VStack>
+                )}
+              </VStack>
+            </Dialog.Body>
+
+            <Dialog.Footer p="0" mt="5">
+              <HStack justify="flex-end" w="full" gap="2">
+                <Button variant="outline" size="sm" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button colorPalette="blue" size="sm" loading={sending} disabled={Boolean(success)} onClick={handleSend}>
+                  <Send size={14} />
+                  Send Invoice
+                </Button>
+              </HStack>
+            </Dialog.Footer>
+          </MotionBox>
+        </Dialog.Content>
+      </Dialog.Positioner>
+    </Dialog.Root>
+  )
+}
+
 function InvoiceDetails({
   invoice,
   company,
   onClose,
+  onSendEmail,
 }: {
   invoice?: InvoiceDetail
   company?: Company
   onClose: () => void
+  onSendEmail: (invoice: InvoiceDetail) => void
 }) {
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState('')
@@ -739,10 +986,14 @@ function InvoiceDetails({
             )}
           </Drawer.Body>
           <Drawer.Footer>
-            <HStack justify="flex-end" w="full">
+            <HStack justify="flex-end" w="full" gap="2">
               <Button variant="outline" onClick={() => window.print()}>
                 <Printer size={15} />
                 Print
+              </Button>
+              <Button variant="outline" onClick={() => invoice && onSendEmail(invoice)}>
+                <Mail size={15} />
+                Send Invoice
               </Button>
               <Button loading={downloading} onClick={download}>
                 <Download size={15} />
@@ -763,6 +1014,7 @@ export function InvoicePage() {
   const [company, setCompany] = useState<Company>()
   const [selected, setSelected] = useState<InvoiceDetail>()
   const [editing, setEditing] = useState<InvoiceDetail>()
+  const [sendInvoiceTarget, setSendInvoiceTarget] = useState<InvoiceDetail | SaleSummary>()
   const [creating, setCreating] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -932,6 +1184,16 @@ export function InvoicePage() {
                           >
                             <Eye size={14} />
                           </IconButton>
+                          {invoice.status === 'COMPLETED' && (
+                            <IconButton
+                              size="xs"
+                              variant="ghost"
+                              aria-label="Send email"
+                              onClick={() => setSendInvoiceTarget(invoice)}
+                            >
+                              <Mail size={14} />
+                            </IconButton>
+                          )}
                           {invoice.status === 'DRAFT' && (
                             <IconButton
                               size="xs"
@@ -1007,7 +1269,17 @@ export function InvoicePage() {
           load()
         }}
       />
-      <InvoiceDetails invoice={selected} company={company} onClose={() => setSelected(undefined)} />
+      <InvoiceDetails
+        invoice={selected}
+        company={company}
+        onClose={() => setSelected(undefined)}
+        onSendEmail={(inv) => setSendInvoiceTarget(inv)}
+      />
+      <SendInvoiceModal
+        open={Boolean(sendInvoiceTarget)}
+        invoice={sendInvoiceTarget}
+        onClose={() => setSendInvoiceTarget(undefined)}
+      />
     </PageContainer>
   )
 }

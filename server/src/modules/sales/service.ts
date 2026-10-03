@@ -6,6 +6,7 @@ import { queueTakealotStockSync } from "../../integrations/takealot/client";
 import { toPublicMediaUrl } from "../../integrations/aws/media";
 import { logger } from "../../lib/logger";
 import { prisma } from "../../lib/prisma";
+import { queueInvoiceEmail, queueOrderSuccessEmail } from "../notification";
 import { AppError, validationError } from "../../utils/errors";
 import * as inventoryRepository from "../inventory/repository";
 import * as repository from "./repository";
@@ -55,6 +56,8 @@ export const saleCompleteSchema = z.object({
 	payments: z.array(saleCompletePaymentSchema).min(1),
 	customerId: uuid.nullable().optional(),
 	notes: optionalText(2000),
+	notifyCustomer: z.boolean().default(false),
+	notificationEmail: z.string().trim().email().optional(),
 });
 export const returnItemSchema = z.object({ saleItemId: uuid, quantity: positiveQty });
 export const returnCreateSchema = z.object({
@@ -135,7 +138,7 @@ const salePaymentView = (payment: any) => ({
 const saleSummaryView = (sale: any) => ({
 	id: sale.id,
 	invoiceNumber: sale.invoiceNumber,
-	customer: sale.customer ? { id: sale.customer.id, name: sale.customer.name } : null,
+	customer: sale.customer ? { id: sale.customer.id, name: sale.customer.name, phone: sale.customer.phone, email: sale.customer.email } : null,
 	cashier: sale.cashier ? { id: sale.cashier.id, name: sale.cashier.fullName } : null,
 	status: sale.status,
 	paymentStatus: sale.paymentStatus,
@@ -610,8 +613,39 @@ export const completeSale = async (companyId: string, userId: string, saleId: st
 			status: "QUEUED",
 		})] : []),
 	]);
+	if (input.notifyCustomer) {
+		const recipientEmail = input.notificationEmail ?? (result.sale.customer && !result.sale.customer.isWalkIn ? result.sale.customer.email : null);
+		if (recipientEmail) {
+			await queueOrderSuccessEmail({
+				companyId,
+				orderId: result.sale.id,
+				invoiceNumber: result.sale.invoiceNumber,
+				email: recipientEmail,
+				name: result.sale.customer?.name,
+				customerId: result.sale.customer?.id,
+				triggeredBy: "pos-checkout",
+			}).catch(() => undefined);
+		}
+	}
 
 	return saleDetailView(result.sale);
+};
+
+export const sendInvoice = async (companyId: string, userId: string, invoiceId: string, notificationEmail?: string) => {
+	const sale = await repository.findSaleById(prisma, companyId, invoiceId);
+	if (!sale || sale.status !== SaleStatus.COMPLETED) throw error("INVOICE_NOT_FOUND", "Invoice not found", 404);
+	const recipientEmail = notificationEmail ?? (sale.customer && !sale.customer.isWalkIn ? sale.customer.email : null);
+	if (!recipientEmail) throw error("INVOICE_RECIPIENT_REQUIRED", "A customer email or recipient email is required", 400);
+	await queueInvoiceEmail({
+		companyId,
+		invoiceId: sale.id,
+		invoiceNumber: sale.invoiceNumber,
+		email: recipientEmail,
+		name: sale.customer?.name,
+		customerId: sale.customer?.id,
+		triggeredBy: userId,
+	});
+	return { queued: true, invoiceId: sale.id, recipientEmail };
 };
 
 export const cancelSale = async (companyId: string, userId: string, saleId: string) => {

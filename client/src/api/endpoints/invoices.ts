@@ -114,6 +114,13 @@ export function cancelInvoice(id: string) {
   return apiRequest<InvoiceDetail>(`/sales/${id}/cancel`, { method: 'POST' })
 }
 
+export function sendInvoice(id: string, email?: string) {
+  return apiRequest<{ queued: boolean; invoiceId: string; recipientEmail: string }>(`/sales/${id}/send`, {
+    method: 'POST',
+    body: JSON.stringify(email ? { email } : {}),
+  })
+}
+
 export function searchInvoiceCustomers(search: string) {
   return apiRequest<{ items: Customer[] }>(`/customers?${query({ page: 1, limit: 10, search, isActive: true })}`)
 }

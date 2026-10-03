@@ -22,6 +22,16 @@ router.post("/refresh", async (request, response) => {
 	return sendSuccess(response, await service.refresh(refreshToken));
 });
 
+router.post("/forgot-password", async (request, response) => {
+	const input = service.parse(service.forgotPasswordSchema, request.body);
+	return sendSuccess(response, await service.forgotPassword(input));
+});
+
+router.post("/reset-password", async (request, response) => {
+	const input = service.parse(service.resetPasswordSchema, request.body);
+	return sendSuccess(response, await service.resetPassword(input));
+});
+
 router.post("/logout", requireAuth, async (request, response) => {
 	const { refreshToken } = service.parse(service.refreshSchema, request.body);
 	await service.logout(refreshToken);
