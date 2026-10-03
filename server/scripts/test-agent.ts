@@ -32,47 +32,54 @@ const messages = [
 	"What were our recent expenses and profit performance?",
 ];
 
+const log = (message: string, details?: unknown) => {
+	const timestamp = new Date().toISOString();
+	const suffix = details === undefined ? "" : ` ${JSON.stringify(details)}`;
+	console.log(`[${timestamp}] ${message}${suffix}`);
+};
+
 const measure = (value: string): TextMetrics => ({
 	characters: value.length,
 	words: value.trim() ? value.trim().split(/\s+/u).length : 0,
 	estimatedTokens: Math.ceil(value.length / 4),
 });
 
-const parseSse = (body: string): SseEvent[] =>
-	body
-		.split(/\n\n+/u)
-		.map((block) => block.match(/^event: ([^\n]+)\ndata: ([\s\S]+)$/m))
-		.filter((match): match is RegExpMatchArray => match !== null)
-		.map((match) => {
-			try {
-				return JSON.parse(match[2]) as SseEvent;
-			} catch {
-				return { type: match[1], raw: match[2] };
-			}
-		});
+const parseSseBlock = (block: string): SseEvent | undefined => {
+	const match = block.match(/^event: ([^\n]+)\ndata: ([\s\S]+)$/m);
+	if (!match) return undefined;
+	try {
+		return JSON.parse(match[2]) as SseEvent;
+	} catch {
+		return { type: match[1], raw: match[2] };
+	}
+};
 
-const readData = async (response: Response) => {
+const readData = async (response: Response, label: string) => {
 	const body = await response.text();
 	if (!response.ok) {
+		log(`${label} failed`, { status: response.status, body: body.slice(0, 500) });
 		throw new Error(`Agent API returned ${response.status}: ${body.slice(0, 300)}`);
 	}
 	return body;
 };
 
 const createConversation = async () => {
+	log("Creating test conversation", { url: `${baseUrl}/api/agent/conversations` });
 	const response = await fetch(`${baseUrl}/api/agent/conversations`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ title: "Automated agent context test" }),
 	});
-	const body = await readData(response);
+	const body = await readData(response, "Conversation creation");
 	const parsed = JSON.parse(body) as { data?: { id?: string } };
 	if (!parsed.data?.id) throw new Error("Conversation response did not include an id");
+	log("Conversation created", { conversationId: parsed.data.id });
 	return parsed.data.id;
 };
 
 const sendMessage = async (conversationId: string, message: string): Promise<MessageResult> => {
 	const startedAt = performance.now();
+	log("Sending message", { conversationId, message, request: measure(message) });
 	try {
 		const response = await fetch(`${baseUrl}/api/agent/conversations/${conversationId}/messages`, {
 			method: "POST",
@@ -82,13 +89,38 @@ const sendMessage = async (conversationId: string, message: string): Promise<Mes
 			},
 			body: JSON.stringify({ content: message }),
 		});
-		const events = parseSse(await readData(response));
+		if (!response.ok) {
+			await readData(response, `Message "${message}"`);
+		}
+		if (!response.body) throw new Error("Agent API returned no SSE response body");
+		const reader = response.body.getReader();
+		const decoder = new TextDecoder();
+		const events: SseEvent[] = [];
+		let pending = "";
+		for (;;) {
+			const chunk = await reader.read();
+			pending += decoder.decode(chunk.value ?? new Uint8Array(), { stream: !chunk.done });
+			const blocks = pending.split(/\r?\n\r?\n/u);
+			pending = blocks.pop() ?? "";
+			for (const block of blocks) {
+				const event = parseSseBlock(block);
+				if (!event) continue;
+				events.push(event);
+				log(`SSE event for "${message}"`, event);
+			}
+			if (chunk.done) break;
+		}
+		const finalBlock = parseSseBlock(pending);
+		if (finalBlock) {
+			events.push(finalBlock);
+			log(`SSE event for "${message}"`, finalBlock);
+		}
 		const assistantResponse = events
 			.filter((event) => event.type === "assistant.delta")
 			.map((event) => typeof event.content === "string" ? event.content : "")
 			.join("");
 		const errorEvent = events.find((event) => event.type === "run.error");
-		return {
+		const result = {
 			message,
 			request: measure(message),
 			response: measure(assistantResponse),
@@ -97,8 +129,15 @@ const sendMessage = async (conversationId: string, message: string): Promise<Mes
 			assistantResponse,
 			error: typeof errorEvent?.message === "string" ? errorEvent.message : undefined,
 		};
+		log(`Message completed: "${message}"`, {
+			latencyMs: result.latencyMs,
+			events: result.events,
+			response: result.response,
+			result: result.error ?? "PASS",
+		});
+		return result;
 	} catch (error) {
-		return {
+		const result = {
 			message,
 			request: measure(message),
 			response: measure(""),
@@ -107,6 +146,8 @@ const sendMessage = async (conversationId: string, message: string): Promise<Mes
 			assistantResponse: "",
 			error: error instanceof Error ? error.message : "Unknown test error",
 		};
+		log(`Message failed: "${message}"`, result);
+		return result;
 	}
 };
 
@@ -154,9 +195,11 @@ ${result.assistantResponse || result.error || "No response"}
 };
 
 const main = async () => {
+	log("Starting agent test", { baseUrl, messageCount: messages.length, outputDirectory });
 	const conversationId = await createConversation();
 	const results: MessageResult[] = [];
-	for (const message of messages) {
+	for (const [index, message] of messages.entries()) {
+		log(`Running test ${index + 1}/${messages.length}`);
 		results.push(await sendMessage(conversationId, message));
 	}
 	const generatedAt = new Date().toISOString();
@@ -170,6 +213,11 @@ const main = async () => {
 		results,
 	}, null, 2));
 	await writeFile(join(outputDirectory, `agent-context-${stamp}.md`), markdownReport(conversationId, results, generatedAt));
+	log("Test run complete", {
+		conversationId,
+		successfulRuns: results.filter((result) => !result.error).length,
+		failedRuns: results.filter((result) => result.error).length,
+	});
 	console.table(results.map((result) => ({
 		message: result.message,
 		requestTokens: result.request.estimatedTokens,
@@ -177,7 +225,10 @@ const main = async () => {
 		latencyMs: result.latencyMs,
 		result: result.error ?? "PASS",
 	})));
-	console.log(`Reports written to ${outputDirectory}`);
+	log("Reports written", {
+		json: join(outputDirectory, `agent-context-${stamp}.json`),
+		markdown: join(outputDirectory, `agent-context-${stamp}.md`),
+	});
 	if (results.some((result) => result.error)) process.exitCode = 1;
 };
 
