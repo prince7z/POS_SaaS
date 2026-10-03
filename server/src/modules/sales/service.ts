@@ -2,6 +2,9 @@ import { DiscountType, InventoryMovementType, PaymentMethod, PaymentStatus, Pris
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
+import { env } from "../../config/env";
+import QRCode from "qrcode";
+import { generateInvoicePdfBuffer } from "../invoice/invoice-pdf.service";
 import { queueTakealotStockSync } from "../../integrations/takealot/client";
 import { toPublicMediaUrl } from "../../integrations/aws/media";
 import { logger } from "../../lib/logger";
@@ -646,6 +649,70 @@ export const sendInvoice = async (companyId: string, userId: string, invoiceId: 
 		triggeredBy: userId,
 	});
 	return { queued: true, invoiceId: sale.id, recipientEmail };
+};
+
+export const getInvoicePdf = async (companyId: string, invoiceId: string) => {
+	const sale = await repository.findSaleById(prisma, companyId, invoiceId);
+	if (!sale) throw error("INVOICE_NOT_FOUND", "Invoice not found", 404);
+	const company = await prisma.company.findUnique({ where: { id: companyId } });
+
+	const logoUrl = company?.logoKey ? toPublicMediaUrl(company.logoKey) : null;
+	const verificationUrl = `${env.frontendUrl}/invoice-verification/${sale.id}`;
+
+	let qrCodeBuffer: Buffer | null = null;
+	try {
+		qrCodeBuffer = await QRCode.toBuffer(verificationUrl, { margin: 1, width: 96 });
+	} catch (e) {
+		logger.error("Failed to generate QR code for PDF", e);
+	}
+
+	let logoBuffer: Buffer | null = null;
+	if (logoUrl) {
+		try {
+			const res = await fetch(logoUrl);
+			if (res.ok) logoBuffer = Buffer.from(await res.arrayBuffer());
+		} catch (e) {}
+	}
+
+	const invoiceData = {
+		id: sale.id,
+		invoiceNumber: sale.invoiceNumber,
+		soldAt: sale.soldAt,
+		company: {
+			name: company?.name,
+			phone: company?.phone,
+			email: company?.email,
+			addressLine1: company?.addressLine1,
+			city: company?.city,
+			currencyCode: company?.currencyCode,
+			logoUrl,
+			businessHours: company?.businessHours,
+			invoiceTerms: company?.invoiceTerms,
+		},
+		customer: {
+			name: sale.customer?.name || "Walk-in Customer",
+			email: sale.customer?.email || null,
+			phone: sale.customer?.phone || null,
+		},
+		items: sale.items.map((item: any) => ({
+			productName: item.productName,
+			sku: item.sku,
+			quantity: Number(item.quantity),
+			unitPrice: Number(item.unitPrice),
+			lineSubtotal: Number(item.lineSubtotal),
+		})),
+		subtotal: Number(sale.subtotal),
+		taxRate: Number(sale.taxRate),
+		taxAmount: Number(sale.taxAmount),
+		discountAmount: Number(sale.discountAmount),
+		total: Number(sale.total),
+		notes: sale.notes,
+		qrCodeBuffer,
+		logoBuffer,
+	};
+
+	const pdfBuffer = await generateInvoicePdfBuffer(invoiceData);
+	return { filename: `${sale.invoiceNumber || "Invoice"}.pdf`, pdfBuffer };
 };
 
 export const cancelSale = async (companyId: string, userId: string, saleId: string) => {

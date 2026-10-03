@@ -82,6 +82,14 @@ router.post("/:id/send", ...salesReadAccess, async (request, response) => {
 	return sendSuccess(response, await service.sendInvoice(auth.companyId, auth.userId, idFrom(request), email), 202);
 });
 
+router.get("/:id/invoice-pdf", ...salesReadAccess, async (request, response) => {
+	const auth = authContext(request);
+	const { filename, pdfBuffer } = await service.getInvoicePdf(auth.companyId, idFrom(request));
+	response.setHeader("Content-Type", "application/pdf");
+	response.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+	return response.send(pdfBuffer);
+});
+
 router.post("/:id/cancel", ...saleAccess, async (request, response) => {
 	const auth = authContext(request);
 	return sendSuccess(response, await service.cancelSale(auth.companyId, auth.userId, idFrom(request)));

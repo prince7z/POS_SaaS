@@ -53,14 +53,28 @@ export const generateInvoicePdfBuffer = (invoice: InvoicePdfData): Promise<Buffe
 
 		let leftY = 40;
 
-		// Logo
+		// Logo (Draw uploaded logo image or crisp Store Vector Icon Badge)
+		let drawnLogo = false;
 		if (invoice.logoBuffer) {
 			try {
 				doc.image(invoice.logoBuffer, 40, leftY, { fit: [140, 40] });
 				leftY += 46;
+				drawnLogo = true;
 			} catch (e) {
-				// fallback
+				drawnLogo = false;
 			}
+		}
+
+		if (!drawnLogo) {
+			doc.save();
+			doc.roundedRect(40, leftY, 36, 36, 8).fill("#1E3A8A");
+			doc.strokeColor("#FFFFFF").lineWidth(2).lineCap("round").lineJoin("round");
+			doc.moveTo(47, leftY + 12).lineTo(53, leftY + 12).lineTo(57, leftY + 23).lineTo(67, leftY + 23).lineTo(70, leftY + 16).lineTo(54, leftY + 16).stroke();
+			doc.fillColor("#FFFFFF");
+			doc.circle(58, leftY + 26, 2).fill();
+			doc.circle(66, leftY + 26, 2).fill();
+			doc.restore();
+			leftY += 44;
 		}
 
 		// Company Name
