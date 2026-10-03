@@ -17,6 +17,7 @@
     "test:catalog": "tsx scripts/test-catalog.ts",
     "test:customer-inventory": "tsx scripts/test-customer-inventory.ts",
     "test:sales-purchases": "tsx scripts/test-sales-purchases.ts",
+    "test:agent": "tsx scripts/test-agent.ts",
     "test": "npm run test:modules && npm run test:media && npm run test:catalog && npm run test:customer-inventory && npm run test:sales-purchases"
   },
   "keywords": [],
@@ -41,7 +42,6 @@
     "@langchain/core": "^1.2.14",
     "@langchain/langgraph": "^1.4.18",
     "@langchain/langgraph-checkpoint-postgres": "^1.0.5",
-    "@langchain/openai": "^1.6.2",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "bcryptjs": "^3.0.3",

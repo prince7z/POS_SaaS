@@ -10,6 +10,7 @@ import { finishRun, registerRun, cancelRun } from "./runtime/run-manager";
 import { startAgentStream, writeAgentEvent } from "./streaming/events";
 import { getAgentCheckpointer } from "./checkpoint";
 import { Command, isGraphInterrupt } from "@langchain/langgraph";
+import { logger } from "../../lib/logger";
 
 const routeParam = (value: string | string[] | undefined) => {
 	if (typeof value !== "string" || !value) throw validationError("Invalid conversation identifier");
@@ -97,6 +98,7 @@ export const message: RequestHandler = async (request, response, next) => {
 			return;
 		}
 		if (!response.headersSent) return next(error);
+		logger.error("Agent run failed", error);
 		writeAgentEvent(response, { type: "run.error", message: "The assistant could not complete this request." });
 		response.end();
 	} finally {
@@ -135,6 +137,7 @@ export const resume: RequestHandler = async (request, response, next) => {
 			return;
 		}
 		if (!response.headersSent) return next(error);
+		logger.error("Agent resume failed", error);
 		writeAgentEvent(response, { type: "run.error", message: "The assistant could not resume this request." });
 		response.end();
 	} finally {

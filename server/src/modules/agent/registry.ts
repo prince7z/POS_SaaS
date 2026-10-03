@@ -46,7 +46,7 @@ export const agentToolRegistry: readonly AgentToolDefinition[] = [
 	},
 	{
 		name: "finance_tool",
-		description: "Expenses, profit and loss, and financial reporting.",
+		description: "Financial data and reporting. Use list_expenses for requests to see, show, find, or review expenses; use expense_summary or expense_analytics for totals, trends, or category breakdowns; use pnl_dashboard for profit and loss.",
 		operations: ["list_expenses", "get_expense", "expense_summary", "expense_analytics", "create_expense", "update_expense", "remove_expense", "pnl_dashboard", "recent_expenses"],
 		requiredAccessByOperation: { list_expenses: Access.EXPENSES, get_expense: Access.EXPENSES, expense_summary: Access.EXPENSES, expense_analytics: Access.EXPENSES, create_expense: Access.EXPENSES, update_expense: Access.EXPENSES, remove_expense: Access.EXPENSES, pnl_dashboard: Access.REPORT_PROFIT_LOSS, recent_expenses: Access.EXPENSES },
 	},
