@@ -108,6 +108,9 @@ export const createEmailWorker = () => {
 		logger.info("Email sent successfully", JSON.stringify({ jobId: job.id, emailType: payload.type }));
 	}, { connection: createBullMqConnection() });
 
+	worker.on("error", (error) => {
+		logger.error("Email job error", JSON.stringify({ error: error.message }));
+	});
 	worker.on("failed", (job, error) => {
 		logger.error("Email job failed", JSON.stringify({ jobId: job?.id, emailType: job?.data?.type, error: error.message }));
 	});
