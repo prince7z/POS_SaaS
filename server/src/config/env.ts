@@ -56,4 +56,10 @@ export const env = {
 	brevo: {
 		apiKey: readOptional("BREVO_API_KEY"),
 	},
+	agent: {
+		openRouterApiKey: readOptional("OPENROUTER_API_KEY"),
+		model: readOptional("OPENROUTER_MODEL") ?? "openai/gpt-4o-mini",
+		siteUrl: readOptional("OPENROUTER_SITE_URL") ?? "http://localhost:5173",
+		siteName: readOptional("OPENROUTER_SITE_NAME") ?? "POS SaaS",
+	},
 } as const;

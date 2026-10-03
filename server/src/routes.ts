@@ -9,6 +9,7 @@ import expensesRouter from "./modules/expenses/route";
 import purchasesRouter from "./modules/purchases/route";
 import reportsRouter from "./modules/reports/route";
 import salesRouter from "./modules/sales/route";
+import agentRouter from "./modules/agent/route";
 
 const router = Router();
 
@@ -21,5 +22,6 @@ router.use("/expenses", expensesRouter);
 router.use("/sales", salesRouter);
 router.use("/purchases", purchasesRouter);
 router.use("/reports", reportsRouter);
+router.use("/agent", agentRouter);
 
 export default router;
