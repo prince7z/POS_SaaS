@@ -145,7 +145,7 @@ input {
   @media print {
     @page {
       size: A4;
-      margin: 12mm;
+      margin: 8mm;
     }
 
     html,
@@ -163,15 +163,40 @@ input {
     }
 
     .invoice-preview {
-      position: absolute;
+      position: absolute !important;
       top: 0;
       left: 0;
-      width: 100%;
+      width: 100% !important;
+      min-width: 0 !important;
+      height: auto !important;
       max-width: none !important;
       margin: 0 !important;
       padding: 0 !important;
       border: 0;
       box-shadow: none;
+      overflow: visible !important;
+      box-sizing: border-box;
+      zoom: 0.78;
+    }
+
+    .invoice-preview-header {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) auto !important;
+      align-items: start !important;
+      width: 100% !important;
+    }
+
+    .invoice-preview-meta {
+      align-items: flex-end !important;
+      text-align: right !important;
+    }
+
+    .invoice-preview > * {
+      box-sizing: border-box;
+    }
+
+    .invoice-preview [data-part='body'] {
+      padding: 0 !important;
     }
 
     .actions {

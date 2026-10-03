@@ -114,7 +114,12 @@ function InvoicePreview({
     <Card.Root variant="outline" className={`invoice-preview invoice-preview-${mode.toLowerCase()}`}>
       <Card.Body p={{ base: '4', md: mode === 'A4' ? '8' : '4' }}>
         <VStack align="stretch" gap="5">
-          <Grid templateColumns={{ base: '1fr', md: '1fr auto' }} gap="4" alignItems="start">
+          <Grid
+            className="invoice-preview-header"
+            templateColumns={{ base: '1fr', md: '1fr auto' }}
+            gap="4"
+            alignItems="start"
+          >
             <Box>
               {company?.logoUrl && (
                 <img
@@ -141,7 +146,7 @@ function InvoicePreview({
                 </Box>
               )}
             </Box>
-            <VStack align={{ base: 'start', md: 'end' }} gap="1">
+            <VStack className="invoice-preview-meta" align={{ base: 'start', md: 'end' }} gap="1">
               <Text fontWeight="700">INVOICE</Text>
 
               {qrCode && <img src={qrCode} alt="Invoice verification QR code" width={76} height={76} />}
@@ -229,6 +234,11 @@ function InvoicePreview({
               </VStack>
             </Box>
           ) : null}
+         <Box textAlign="center" pt="3">
+          <Separator mb="3" />
+              <Text fontWeight="400">Thank you for shopping with {company?.name? company.name : 'our store'}.</Text>
+
+            </Box>
         </VStack>
       </Card.Body>
     </Card.Root>

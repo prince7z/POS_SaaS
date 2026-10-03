@@ -1,17 +1,5 @@
 import { useEffect, useState } from 'react'
-import {
-  Box,
-  Button,
-  Card,
-  Grid,
-  Heading,
-  HStack,
-  Separator,
-  Skeleton,
-  Table,
-  Text,
-  VStack,
-} from '@chakra-ui/react'
+import { Box, Button, Card, Grid, Heading, HStack, Separator, Skeleton, Table, Text, VStack } from '@chakra-ui/react'
 import { Download, Printer } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { getPublicInvoice, type InvoiceDetail } from '@/api/endpoints/invoices'
@@ -102,7 +90,12 @@ export function InvoiceVerificationPage() {
       <Card.Root variant="outline" className="public-invoice invoice-preview">
         <Card.Body p={{ base: '5', md: '8' }}>
           <VStack align="stretch" gap="5">
-            <Grid templateColumns={{ base: '1fr', md: '1fr auto' }} gap="4" alignItems="start">
+            <Grid
+              className="invoice-preview-header"
+              templateColumns={{ base: '1fr', md: '1fr auto' }}
+              gap="4"
+              alignItems="start"
+            >
               <Box>
                 {invoice.company.logoUrl && (
                   <img
@@ -131,9 +124,10 @@ export function InvoiceVerificationPage() {
                   </Box>
                 )}
               </Box>
-              <VStack align={{ base: 'start', md: 'end' }} gap="1">
+              <VStack className="invoice-preview-meta" align={{ base: 'start', md: 'end' }} gap="1">
+              <Heading size="sm">Invoice</Heading>
+
                 {qrCode && <img src={qrCode} alt="Invoice verification QR code" width={88} height={88} />}
-                <Heading size="sm">Invoice</Heading>
                 <Text>{invoice.invoiceNumber}</Text>
                 <Text fontSize="xs" color="secondary">
                   Copy — not original
@@ -210,7 +204,10 @@ export function InvoiceVerificationPage() {
               </Box>
             )}
             <Box textAlign="center" pt="3">
-              <Text fontWeight="600">Thank you for shopping with {invoice.company.name}.</Text>
+                      <Separator mb="3" />
+
+              <Text fontWeight="400">Thank you for shopping with {invoice.company.name}.</Text>
+
             </Box>
           </VStack>
         </Card.Body>
