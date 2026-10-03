@@ -33,14 +33,16 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   }
 
   const renderItem = (item: NavItem, depth = 0) => {
-    const active = location.pathname === item.path
     const hasChildren = Boolean(item.children?.length)
+    const active = !hasChildren && location.pathname === item.path
     const expanded = expandedItems.has(item.id)
 
     return (
       <Box key={item.id}>
         <HStack
-          as="div"
+          as={hasChildren ? 'button' : 'div'}
+          onClick={hasChildren ? () => toggleItem(item.id) : undefined}
+          aria-expanded={hasChildren ? expanded : undefined}
           px={collapsed ? '0' : depth ? '6' : '3'}
           py="2"
           justify={collapsed ? 'center' : 'flex-start'}
@@ -52,8 +54,8 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           _hover={{ bg: 'background', color: 'foreground' }}
           transition="background 140ms ease, color 140ms ease"
         >
-          <NavLink to={item.path} title={collapsed ? item.label : undefined} style={{ flex: 1 }}>
-            <HStack gap="3">
+          {hasChildren ? (
+            <HStack gap="3" flex="1">
               <item.icon size={17} />
               {!collapsed && (
                 <Text fontSize="sm" fontWeight={active ? '600' : '500'}>
@@ -61,7 +63,18 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
                 </Text>
               )}
             </HStack>
-          </NavLink>
+          ) : (
+            <NavLink to={item.path} title={collapsed ? item.label : undefined} style={{ flex: 1 }}>
+              <HStack gap="3">
+                <item.icon size={17} />
+                {!collapsed && (
+                  <Text fontSize="sm" fontWeight={active ? '600' : '500'}>
+                    {item.label}
+                  </Text>
+                )}
+              </HStack>
+            </NavLink>
+          )}
           {!collapsed && hasChildren && (
             <Button
               aria-label={`${expanded ? 'Collapse' : 'Expand'} ${item.label}`}
@@ -69,7 +82,10 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
               size="xs"
               minW="auto"
               p="1"
-              onClick={() => toggleItem(item.id)}
+              onClick={(event) => {
+                event.stopPropagation()
+                toggleItem(item.id)
+              }}
             >
               <motion.span animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.18 }}>
                 <ChevronDown size={14} />

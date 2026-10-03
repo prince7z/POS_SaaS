@@ -1,15 +1,21 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 import {
   Activity,
   BarChart3,
   CalendarDays,
   CreditCard,
   Download,
+  FileText,
   Image as ImageIcon,
+  Mail,
+  MessageCircle,
   Package,
   ReceiptText,
   RefreshCw,
+  Share2,
   ShoppingCart,
   Tag,
   Trophy,
@@ -25,6 +31,7 @@ import {
   Heading,
   Image,
   Input,
+  Menu,
   NativeSelect,
   SimpleGrid,
   Skeleton,
@@ -138,6 +145,9 @@ function ReportFilters({
   onGranularityChange,
   onExport,
   exportName = 'sales-report.csv',
+  onExportPdf,
+  onExportHtml,
+  onShare,
 }: {
   range: DateRange
   onChange: (range: DateRange) => void
@@ -147,6 +157,9 @@ function ReportFilters({
   onGranularityChange: (value: ReportFilters['granularity']) => void
   onExport?: () => Promise<Blob>
   exportName?: string
+  onExportPdf: () => Promise<void>
+  onExportHtml: () => Promise<void>
+  onShare: (format: 'csv' | 'pdf', channel: 'whatsapp' | 'email') => Promise<void>
 }) {
   const download = async () => {
     if (!onExport) return
@@ -159,7 +172,7 @@ function ReportFilters({
     URL.revokeObjectURL(url)
   }
   return (
-    <Flex gap="3" wrap="wrap" align="end" mb="6">
+    <Flex gap="3" wrap="wrap" align="end" mb="6" data-export-ignore="true">
       <Box>
         <Flex align="center" gap="1" mb="1">
           <CalendarDays size={14} />
@@ -207,10 +220,67 @@ function ReportFilters({
         Refresh
       </Button>
       {onExport && (
-        <Button size="sm" variant="outline" onClick={download}>
-          <Download size={15} />
-          Download CSV
-        </Button>
+        <Menu.Root positioning={{ placement: 'bottom-end' }}>
+          <Menu.Trigger asChild>
+            <Button size="sm" variant="outline">
+              <Download size={15} />
+              Download
+            </Button>
+          </Menu.Trigger>
+          <Menu.Positioner>
+            <Menu.Content>
+              <Menu.Item value="csv" onClick={download}>
+                <Download size={15} />
+                CSV
+              </Menu.Item>
+              <Menu.Item value="pdf" onClick={onExportPdf}>
+                <FileText size={15} />
+                PDF
+              </Menu.Item>
+              <Menu.Item value="html" onClick={onExportHtml}>
+                <FileText size={15} />
+                HTML
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Positioner>
+        </Menu.Root>
+      )}
+      {onExport && (
+        <Menu.Root positioning={{ placement: 'bottom-end' }}>
+          <Menu.Trigger asChild>
+            <Button size="sm" variant="outline">
+              <Share2 size={15} />
+              Share
+            </Button>
+          </Menu.Trigger>
+          <Menu.Positioner>
+            <Menu.Content>
+              <Menu.ItemGroup>
+                <Menu.ItemGroupLabel>PDF</Menu.ItemGroupLabel>
+                <Menu.Item value="pdf-whatsapp" onClick={() => onShare('pdf', 'whatsapp')}>
+                  <MessageCircle size={15} />
+                  WhatsApp
+                </Menu.Item>
+                <Menu.Item value="pdf-email" onClick={() => onShare('pdf', 'email')}>
+                  <Mail size={15} />
+                  Email
+                </Menu.Item>
+              </Menu.ItemGroup>
+              <Menu.Separator />
+              <Menu.ItemGroup>
+                <Menu.ItemGroupLabel>CSV</Menu.ItemGroupLabel>
+                <Menu.Item value="csv-whatsapp" onClick={() => onShare('csv', 'whatsapp')}>
+                  <MessageCircle size={15} />
+                  WhatsApp
+                </Menu.Item>
+                <Menu.Item value="csv-email" onClick={() => onShare('csv', 'email')}>
+                  <Mail size={15} />
+                  Email
+                </Menu.Item>
+              </Menu.ItemGroup>
+            </Menu.Content>
+          </Menu.Positioner>
+        </Menu.Root>
       )}
     </Flex>
   )
@@ -1283,6 +1353,7 @@ function InventoryCustomerReport({ filters }: { filters: ReportFilters }) {
 export function ReportsPage({ kind }: { kind: ReportKind }) {
   const [range, setRange] = useState<DateRange>(initialRange)
   const [granularity, setGranularity] = useState<ReportFilters['granularity']>('DAY')
+  const reportRef = useRef<HTMLDivElement>(null)
   const filters = useMemo(() => ({ ...range, granularity }), [range, granularity])
   const title =
     kind === 'sales'
@@ -1292,7 +1363,6 @@ export function ReportsPage({ kind }: { kind: ReportKind }) {
         : 'Inventory & Customer Report'
   return (
     <PageContainer>
-      <PageHeader title={title} description="Understand performance across your POS business." />
       <ReportFilters
         range={range}
         onChange={setRange}
@@ -1314,14 +1384,91 @@ export function ReportsPage({ kind }: { kind: ReportKind }) {
               ? () => exportProfitLossReport({ ...range, granularity, page: 1, limit: 100 })
               : () => exportInventoryReport({ ...range, granularity, page: 1, limit: 100 })
         }
+        onExportPdf={async () => {
+          if (!reportRef.current) return
+          const canvas = await html2canvas(reportRef.current, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            ignoreElements: (element) => (element as HTMLElement).dataset.exportIgnore === 'true',
+          })
+          const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+          const pageWidth = pdf.internal.pageSize.getWidth()
+          const pageHeight = pdf.internal.pageSize.getHeight()
+          const imageWidth = pageWidth
+          const imageHeight = (canvas.height * imageWidth) / canvas.width
+          const image = canvas.toDataURL('image/jpeg', 0.92)
+          for (let offset = 0; offset < imageHeight; offset += pageHeight) {
+            if (offset > 0) pdf.addPage()
+            pdf.addImage(image, 'JPEG', 0, -offset, imageWidth, imageHeight)
+          }
+          pdf.save(`${kind}-report.pdf`)
+        }}
+        onExportHtml={async () => {
+          if (!reportRef.current) return
+          const clone = reportRef.current.cloneNode(true) as HTMLElement
+          clone.querySelectorAll('[data-export-ignore="true"]').forEach((element) => element.remove())
+          const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:Arial,sans-serif;color:#111;padding:24px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px;text-align:left}</style></head><body>${clone.innerHTML}</body></html>`
+          const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
+          const link = document.createElement('a')
+          link.href = url
+          link.download = `${kind}-report.html`
+          link.click()
+          URL.revokeObjectURL(url)
+        }}
+        onShare={async (format, channel) => {
+          let file: File
+          if (format === 'csv') {
+            const blob = await (kind === 'sales'
+              ? exportSalesReport({ ...range, granularity })
+              : kind === 'profit-loss'
+                ? exportProfitLossReport({ ...range, granularity, page: 1, limit: 100 })
+                : exportInventoryReport({ ...range, granularity, page: 1, limit: 100 }))
+            file = new File([blob], `${kind}-report.csv`, { type: 'text/csv' })
+          } else {
+            if (!reportRef.current) return
+            const canvas = await html2canvas(reportRef.current, {
+              scale: 2,
+              useCORS: true,
+              backgroundColor: '#ffffff',
+              ignoreElements: (element) => (element as HTMLElement).dataset.exportIgnore === 'true',
+            })
+            const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+            const pageWidth = pdf.internal.pageSize.getWidth()
+            const pageHeight = pdf.internal.pageSize.getHeight()
+            const imageWidth = pageWidth
+            const imageHeight = (canvas.height * imageWidth) / canvas.width
+            const image = canvas.toDataURL('image/jpeg', 0.92)
+            for (let offset = 0; offset < imageHeight; offset += pageHeight) {
+              if (offset > 0) pdf.addPage()
+              pdf.addImage(image, 'JPEG', 0, -offset, imageWidth, imageHeight)
+            }
+            file = new File([pdf.output('blob')], `${kind}-report.pdf`, { type: 'application/pdf' })
+          }
+          if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+            await navigator.share({ title, text: `${title} report`, files: [file] })
+            return
+          }
+          const text = `${title} report is ready. Please attach ${file.name}.`
+          window.open(
+            channel === 'whatsapp'
+              ? `https://wa.me/?text=${encodeURIComponent(text)}`
+              : `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text)}`,
+            '_blank',
+            'noopener,noreferrer',
+          )
+        }}
       />
-      {kind === 'sales' ? (
-        <SalesReport filters={filters} />
-      ) : kind === 'profit-loss' ? (
-        <ProfitLossReport filters={filters} />
-      ) : (
-        <InventoryCustomerReport filters={filters} />
-      )}
+      <Box ref={reportRef}>
+        <PageHeader title={title} description="Understand performance across your POS business." />
+        {kind === 'sales' ? (
+          <SalesReport filters={filters} />
+        ) : kind === 'profit-loss' ? (
+          <ProfitLossReport filters={filters} />
+        ) : (
+          <InventoryCustomerReport filters={filters} />
+        )}
+      </Box>
     </PageContainer>
   )
 }
