@@ -23,9 +23,10 @@ export const createAgentGraph = (checkpointer?: BaseCheckpointSaver) =>
 		.addNode("final", async (state, config) => {
 			const onChunk = config?.configurable?.onChunk as ((chunk: string) => void) | undefined;
 			const tracker = config?.configurable?.tracker as AgentPerfTracker | undefined;
+			const signal = config?.signal as AbortSignal | undefined;
 			return {
 				finalResponse: state.plan
-					? await createFinalResponse(state.request, state.plan, state.stepResults, onChunk, tracker)
+					? await createFinalResponse(state.request, state.plan, state.stepResults, onChunk, tracker, signal)
 					: "I could not create a plan for that request.",
 			};
 		})

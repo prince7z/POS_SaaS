@@ -37,9 +37,8 @@ export function AgentBlockRenderer({
     case 'table':
       return <TableBlock block={block} />
     case 'tool_call':
-      return <ToolCallBlock block={block} />
     case 'tool_result':
-      return <ToolResultBlock block={block} />
+      return null
     case 'question':
       return <QuestionBlock block={block} conversationId={conversationId} onRespond={onRespond} />
     case 'confirmation':

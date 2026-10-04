@@ -5,21 +5,74 @@ import { EChart } from '@/components/charts/EChart'
 import { chartColors } from '@/theme/tokens'
 import type { ChartBlock as ChartBlockType, ChartSpec } from '../types/agent'
 
-export function buildEChartOption(spec: ChartSpec): EChartsOption {
-  const { chartType, xKey = 'x', series = [], data = [] } = spec
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function normalizeChartSpec(rawSpec: any): ChartSpec {
+  if (Array.isArray(rawSpec)) {
+    return {
+      chartType: 'bar',
+      data: rawSpec,
+    }
+  }
 
-  const xCategories = data.map((item) => String(item[xKey] ?? ''))
+  if (rawSpec && typeof rawSpec === 'object') {
+    const data = Array.isArray(rawSpec.data)
+      ? rawSpec.data
+      : Array.isArray(rawSpec.rows)
+      ? rawSpec.rows
+      : Array.isArray(rawSpec.items)
+      ? rawSpec.items
+      : []
 
-  if (chartType === 'donut') {
-    const seriesKey = series[0]?.dataKey || 'value'
-    const pieData = data.map((item) => ({
-      name: String(item[xKey] || item.name || ''),
-      value: Number(item[seriesKey] || 0),
-    }))
+    return {
+      chartType: rawSpec.chartType || rawSpec.type || 'bar',
+      title: rawSpec.title,
+      xKey: rawSpec.xKey || rawSpec.xAxisKey,
+      series: rawSpec.series,
+      data,
+    }
+  }
+
+  return { chartType: 'bar', data: [] }
+}
+
+export function buildEChartOption(rawSpec: ChartSpec): EChartsOption {
+  const spec = normalizeChartSpec(rawSpec)
+  const { chartType, xKey, series = [], data = [] } = spec
+
+  if (data.length === 0) {
+    return { title: { text: 'No chart data available', left: 'center', textStyle: { fontSize: 12, color: '#9CA3AF' } } }
+  }
+
+  const sample = data[0] || {}
+  const keys = Object.keys(sample)
+
+  const resolvedXKey =
+    (xKey && sample[xKey] !== undefined ? xKey : null) ||
+    keys.find((k) => ['category', 'name', 'label', 'date', 'month', 'time', 'day'].includes(k.toLowerCase())) ||
+    keys.find((k) => typeof sample[k] === 'string') ||
+    keys[0] ||
+    'x'
+
+  if (chartType === 'donut' || (chartType as string) === 'pie') {
+    const seriesKey =
+      series[0]?.dataKey ||
+      keys.find((k) => ['amount', 'total', 'sales', 'expenses', 'value', 'count'].includes(k.toLowerCase())) ||
+      keys.find((k) => typeof sample[k] === 'number') ||
+      keys[1] ||
+      'value'
+
+    const pieData = data.map((item) => {
+      const labelVal = String(item[resolvedXKey] ?? item.name ?? item.category ?? '')
+      const numVal = Number(item[seriesKey] ?? item.amount ?? item.value ?? 0)
+      return {
+        name: labelVal || 'Other',
+        value: isNaN(numVal) ? 0 : numVal,
+      }
+    })
 
     return {
       color: [...chartColors],
-      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+      tooltip: { trigger: 'item', formatter: '{b}: ₹{c} ({d}%)' },
       legend: { bottom: '0', icon: 'circle', textStyle: { fontSize: 11 } },
       series: [
         {
@@ -36,11 +89,25 @@ export function buildEChartOption(spec: ChartSpec): EChartsOption {
   }
 
   // Line or Bar chart
-  const echartsSeries = series.map((s, index) => ({
+  const xCategories = data.map((item) => String(item[resolvedXKey] ?? ''))
+
+  let effectiveSeries = series
+  if (effectiveSeries.length === 0) {
+    const numericKeys = keys.filter((k) => k !== resolvedXKey && typeof sample[k] === 'number')
+    effectiveSeries = (numericKeys.length > 0 ? numericKeys : [keys[1] || 'value']).map((k) => ({
+      dataKey: k,
+      label: k.replace(/_/g, ' ').toUpperCase(),
+    }))
+  }
+
+  const echartsSeries = effectiveSeries.map((s, index) => ({
     name: s.label,
     type: chartType === 'line' ? ('line' as const) : ('bar' as const),
     smooth: chartType === 'line',
-    data: data.map((item) => Number(item[s.dataKey] || 0)),
+    data: data.map((item) => {
+      const val = Number(item[s.dataKey] ?? 0)
+      return isNaN(val) ? 0 : val
+    }),
     itemStyle: {
       color: chartColors[index % chartColors.length],
       borderRadius: chartType === 'bar' ? [4, 4, 0, 0] : 0,
@@ -51,7 +118,7 @@ export function buildEChartOption(spec: ChartSpec): EChartsOption {
     color: [...chartColors],
     tooltip: { trigger: 'axis' },
     legend: { top: '0', icon: 'circle', textStyle: { fontSize: 11 } },
-    grid: { left: '3%', right: '4%', bottom: '3%', top: series.length > 1 ? '35px' : '15px', containLabel: true },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: effectiveSeries.length > 1 ? '35px' : '15px', containLabel: true },
     xAxis: {
       type: 'category',
       data: xCategories,

@@ -19,6 +19,50 @@ import type {
   UploadRequiredData,
 } from '../types/agent'
 
+export function extractQuestionFromText(text: string) {
+  if (!text) return null
+  const optionsMatch = text.match(/(?:^|\n)\s*(?:\*\*)?Options:?(?:\*\*)?\s*\n([\s\S]+)/i)
+  if (!optionsMatch) return null
+
+  const optionsText = optionsMatch[1]
+  const beforeOptionsIndex = text.indexOf(optionsMatch[0])
+  const cleanText = beforeOptionsIndex !== -1 ? text.slice(0, beforeOptionsIndex).trim() : text.trim()
+
+  const lines = optionsText.split('\n')
+  const options: Array<{ id: string; label: string; value: string }> = []
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    const match = trimmed.match(/^(?:[•\-\*]|\d+\.)\s*(.+)$/)
+    if (match && match[1]) {
+      const full = match[1].trim()
+      const parts = full.split(/\s*[\u2013\u2014\–\—\-:]\s*(.+)/)
+      const label = parts[0].replace(/\*\*/g, '').trim()
+      if (label) {
+        options.push({
+          id: `opt_${options.length}_${Math.random().toString(36).slice(2, 6)}`,
+          label,
+          value: label,
+        })
+      }
+    }
+  }
+
+  if (options.length < 2) return null
+
+  const questionMessage = cleanText.split('\n').filter((l) => l.trim()).pop() || 'What would you like to do?'
+
+  return {
+    cleanText,
+    questionData: {
+      questionId: `q_extracted_${Date.now()}`,
+      message: questionMessage,
+      options,
+      allowTextInput: true,
+    },
+  }
+}
+
 export function reduceAgentEvent(currentMessage: AgentMessage, event: AgentEvent): AgentMessage {
   const blocks = [...currentMessage.blocks]
 
@@ -211,12 +255,35 @@ export function reduceAgentEvent(currentMessage: AgentMessage, event: AgentEvent
 
     case 'done': {
       // Finalize thinking and todo blocks if any were left in running state
-      const finalizedBlocks = blocks.map((b) => {
+      let finalizedBlocks = blocks.map((b) => {
         if ((b.type === 'thinking' || b.type === 'todo') && b.status === 'running') {
           return { ...b, status: 'completed' as const }
         }
         return b
       })
+
+      // Check if text block contains an option list asking a question
+      const hasQuestionBlock = finalizedBlocks.some((b) => b.type === 'question')
+      if (!hasQuestionBlock) {
+        const textBlockIndex = finalizedBlocks.findIndex((b) => b.type === 'text')
+        if (textBlockIndex !== -1) {
+          const textBlock = finalizedBlocks[textBlockIndex] as Extract<AgentBlock, { type: 'text' }>
+          const extracted = extractQuestionFromText(textBlock.content)
+          if (extracted) {
+            finalizedBlocks = [...finalizedBlocks]
+            finalizedBlocks[textBlockIndex] = {
+              ...textBlock,
+              content: extracted.cleanText,
+            }
+            finalizedBlocks.push({
+              type: 'question',
+              data: extracted.questionData,
+              answered: false,
+            })
+          }
+        }
+      }
+
       return {
         ...currentMessage,
         blocks: finalizedBlocks,

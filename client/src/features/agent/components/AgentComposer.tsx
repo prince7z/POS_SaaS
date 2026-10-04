@@ -27,6 +27,21 @@ export function AgentComposer({
     }
   }
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const text = e.clipboardData.getData('text/plain')
+    if (text) {
+      e.preventDefault()
+      const target = e.currentTarget
+      const start = target.selectionStart || 0
+      const end = target.selectionEnd || 0
+      const newValue = input.slice(0, start) + text + input.slice(end)
+      setInput(newValue)
+      setTimeout(() => {
+        target.selectionStart = target.selectionEnd = start + text.length
+      }, 0)
+    }
+  }
+
   return (
     <Box p="3" bg="surface" borderTopWidth="1px" borderColor="border">
       <form onSubmit={handleSubmit}>
@@ -35,12 +50,13 @@ export function AgentComposer({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder="Ask AI Assistant..."
             rows={1}
             resize="none"
             size="sm"
             borderRadius="md"
-            className="text-xs py-2 px-3 focus:ring-1 focus:ring-blue-500 min-h-[38px] max-h-[100px]"
+            className="text-xs py-2 px-3 focus:ring-1 focus:ring-blue-500 min-h-[38px] max-h-[140px] overflow-y-auto"
           />
           {isStreaming ? (
             <Button

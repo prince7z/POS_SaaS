@@ -167,14 +167,28 @@ export async function getConversation(id: string): Promise<DetailedConversation 
   }
 }
 
-export async function submitAgentInteraction(payload: InteractionPayload): Promise<{ success: boolean; message: string }> {
+export async function submitAgentInteraction(
+  payload: InteractionPayload,
+  onEvent?: (event: AgentEvent) => void,
+  onComplete?: () => void,
+): Promise<{ success: boolean; message: string }> {
   try {
+    if (onEvent) {
+      await streamAgent({
+        url: `${baseUrl}/agent/respond`,
+        body: payload as unknown as Record<string, unknown>,
+        onEvent,
+        onComplete,
+      })
+      return { success: true, message: 'Interaction processed' }
+    }
+
     const token = localStorage.getItem('pos-auth-token')
     const response = await fetch(`${baseUrl}/agent/respond`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Accept: 'application/json',
+        Accept: 'text/event-stream, application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(payload),
@@ -182,7 +196,7 @@ export async function submitAgentInteraction(payload: InteractionPayload): Promi
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`)
     }
-    return (await response.json()) as { success: boolean; message: string }
+    return { success: true, message: 'Interaction submitted' }
   } catch {
     return mockSubmitAgentInteraction(payload)
   }

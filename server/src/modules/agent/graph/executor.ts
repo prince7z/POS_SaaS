@@ -25,6 +25,45 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 	const stepResults: Record<string, unknown> = {};
 
 	for (const step of plan.steps) {
+		if (step.type === "human_input") {
+			tracker?.log({
+				layer: "langgraph",
+				module: "executor.ts",
+				operation: "human_input interrupt",
+				todoId: step.id,
+			});
+			const req = (step.request && typeof step.request === "object" ? step.request : {}) as {
+				question?: string;
+				options?: Array<{ id?: string; label?: string; value?: string } | string>;
+				allowOther?: boolean;
+			};
+			const questionId = `q_${Date.now()}_${step.id}`;
+			const stepDesc = "description" in step ? (step as { description?: string }).description : undefined;
+			const questionText = req.question || stepDesc || "Please select an option to proceed:";
+			const options = Array.isArray(req.options)
+				? req.options.map((opt, idx) => {
+						if (typeof opt === "string") {
+							return { id: `opt_${idx}`, label: opt, value: opt };
+						}
+						return {
+							id: String(opt.id || `opt_${idx}`),
+							label: String(opt.label || opt.value || `Option ${idx + 1}`),
+							value: String(opt.value || opt.label || `Option ${idx + 1}`),
+						};
+				  })
+				: undefined;
+
+			const userResponse = interrupt({
+				questionId,
+				message: questionText,
+				options,
+				allowTextInput: req.allowOther ?? true,
+			});
+
+			stepResults[step.id] = { success: true, userResponse };
+			continue;
+		}
+
 		if (step.type !== "tool") continue;
 		if (step.requiresConfirmation) {
 			const response = interrupt({

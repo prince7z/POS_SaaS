@@ -3,9 +3,10 @@ import type { FrontendPerfTracker } from './perfTracker'
 
 export interface StreamAgentOptions {
   url?: string
-  message: string
+  message?: string
   conversationId?: string
   requestId?: string
+  body?: Record<string, unknown>
   tracker?: FrontendPerfTracker
   signal?: AbortSignal
   onEvent: (event: AgentEvent) => void
@@ -19,6 +20,7 @@ export async function streamAgent(options: StreamAgentOptions): Promise<void> {
     message,
     conversationId,
     requestId,
+    body,
     tracker,
     signal,
     onEvent,
@@ -39,11 +41,7 @@ export async function streamAgent(options: StreamAgentOptions): Promise<void> {
         ...(requestId ? { 'x-request-id': requestId } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({
-        message,
-        conversationId,
-        requestId,
-      }),
+      body: body ? JSON.stringify(body) : JSON.stringify({ message, conversationId, requestId }),
       signal,
     })
 

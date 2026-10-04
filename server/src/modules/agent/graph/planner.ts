@@ -90,7 +90,13 @@ Date filters must use YYYY-MM-DD. Always include a final step.`,
 
 					if (!step.id) step.id = `step_${idx + 1}`;
 					if (!Array.isArray(step.dependsOn)) step.dependsOn = [];
-					if (!step.description) step.description = step.id;
+					if (!step.description || step.description === step.id || step.description.startsWith("step_")) {
+						step.description = step.operation
+							? `Execute ${step.operation.replace(/_/g, " ")}`
+							: step.tool
+							? `Execute ${step.tool.replace(/_/g, " ")}`
+							: `Process step ${idx + 1}`;
+					}
 
 					return step;
 				});

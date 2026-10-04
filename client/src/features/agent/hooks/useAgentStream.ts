@@ -194,10 +194,7 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
 
   const handleInteraction = useCallback(
     async (payload: InteractionPayload) => {
-      // Submit interaction to API
-      await submitAgentInteraction(payload)
-
-      // Mark the corresponding block as answered/uploaded in state
+      // 1. Mark the corresponding block as answered/uploaded in state
       setMessages((prev) =>
         prev.map((msg) => {
           if (msg.role !== 'assistant') return msg
@@ -241,8 +238,60 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
           return { ...msg, blocks: updatedBlocks }
         }),
       )
+
+      // 2. Prepare new assistant message to receive graph stream after resume
+      const responseVal = String(payload.response.value || '')
+      const assistantMessageId = `asst_${Date.now()}`
+      let receivedStreamEvent = false
+      setIsStreaming(true)
+
+      const assistantMsg: AgentMessage = {
+        id: assistantMessageId,
+        role: 'assistant',
+        blocks: [],
+        status: 'streaming',
+        timestamp: Date.now(),
+      }
+
+      setMessages((prev) => [...prev, assistantMsg])
+
+      await submitAgentInteraction(
+        payload,
+        (event) => {
+          receivedStreamEvent = true
+          setMessages((prev) => {
+            const lastIndex = prev.length - 1
+            if (lastIndex < 0 || prev[lastIndex].id !== assistantMessageId) return prev
+            const updatedAsst = reduceAgentEvent(prev[lastIndex], event)
+            const list = [...prev]
+            list[lastIndex] = updatedAsst
+            return list
+          })
+        },
+        () => {
+          setIsStreaming(false)
+          setMessages((prev) => {
+            const lastIndex = prev.length - 1
+            if (lastIndex < 0 || prev[lastIndex].id !== assistantMessageId) return prev
+            const currentAsst = prev[lastIndex]
+            if (currentAsst.status === 'streaming') {
+              const list = [...prev]
+              list[lastIndex] = { ...currentAsst, status: 'completed' }
+              return list
+            }
+            return prev
+          })
+        },
+      )
+
+      // 3. Fallback: if no active graph interrupt received events, process as standard message
+      if (!receivedStreamEvent && responseVal) {
+        setMessages((prev) => prev.filter((m) => m.id !== assistantMessageId))
+        setIsStreaming(false)
+        await sendMessage(responseVal)
+      }
     },
-    [],
+    [sendMessage],
   )
 
   const clearMessages = useCallback(() => {

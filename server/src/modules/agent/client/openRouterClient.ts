@@ -21,7 +21,7 @@ type OpenRouterResponse = {
 
 import type { AgentPerfTracker } from "../utils/perfLogger";
 
-const request = async (messages: ChatMessage[], responseFormat?: "json_object", tracker?: AgentPerfTracker) => {
+const request = async (messages: ChatMessage[], responseFormat?: "json_object", tracker?: AgentPerfTracker, signal?: AbortSignal) => {
 	if (!env.agent.openRouterApiKey) {
 		throw new Error("Agent model is not configured");
 	}
@@ -46,6 +46,7 @@ const request = async (messages: ChatMessage[], responseFormat?: "json_object", 
 				reasoning: { exclude: true },
 				...(responseFormat ? { response_format: { type: responseFormat } } : {}),
 			}),
+			signal,
 		});
 
 		const payload = (await response.json()) as OpenRouterResponse;
@@ -72,7 +73,8 @@ const streamRequest = async (
 	messages: ChatMessage[],
 	onChunk: (chunk: string) => void,
 	responseFormat?: "json_object",
-	tracker?: AgentPerfTracker
+	tracker?: AgentPerfTracker,
+	signal?: AbortSignal
 ): Promise<string> => {
 	if (!env.agent.openRouterApiKey) {
 		throw new Error("Agent model is not configured");
@@ -97,6 +99,7 @@ const streamRequest = async (
 			stream: true,
 			...(responseFormat ? { response_format: { type: responseFormat } } : {}),
 		}),
+		signal,
 	});
 
 	if (!response.ok) {
@@ -179,9 +182,9 @@ const streamRequest = async (
 };
 
 export const createOpenRouterClient = () => ({
-	invoke: (messages: ChatMessage[], tracker?: AgentPerfTracker) => request(messages, undefined, tracker),
-	invokeJson: (messages: ChatMessage[], tracker?: AgentPerfTracker) => request(messages, "json_object", tracker),
-	stream: (messages: ChatMessage[], onChunk: (chunk: string) => void, tracker?: AgentPerfTracker) =>
-		streamRequest(messages, onChunk, undefined, tracker),
+	invoke: (messages: ChatMessage[], tracker?: AgentPerfTracker, signal?: AbortSignal) => request(messages, undefined, tracker, signal),
+	invokeJson: (messages: ChatMessage[], tracker?: AgentPerfTracker, signal?: AbortSignal) => request(messages, "json_object", tracker, signal),
+	stream: (messages: ChatMessage[], onChunk: (chunk: string) => void, tracker?: AgentPerfTracker, signal?: AbortSignal) =>
+		streamRequest(messages, onChunk, undefined, tracker, signal),
 });
 

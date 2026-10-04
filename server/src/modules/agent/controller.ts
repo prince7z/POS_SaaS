@@ -177,7 +177,7 @@ function emitFinalResponse(
 					response,
 					{
 						type: "chart",
-						data: parsed.chart.data || parsed.chart,
+						data: parsed.chart,
 					},
 					tracker
 				);
@@ -220,6 +220,24 @@ function emitFinalResponse(
 		}
 	} catch {
 		// Fallback to text & markdown table extraction
+	}
+
+	// Extract chart block from text if model output embedded ```json { "type": "chart", ... } ```
+	const chartMatch = raw.match(/```(?:json|chart)?\s*(\{[\s\S]*?"(?:type|chartType)"[\s\S]*?\})\s*```/i);
+	if (chartMatch && chartMatch[1]) {
+		try {
+			const parsedChart = JSON.parse(chartMatch[1]);
+			writeAgentEvent(
+				response,
+				{
+					type: "chart",
+					data: parsedChart.data || parsedChart,
+				},
+				tracker
+			);
+		} catch {
+			// ignore parse error
+		}
 	}
 
 	const { cleanText, tables } = parseMarkdownTables(raw);
@@ -284,6 +302,14 @@ export const stream: RequestHandler = async (request, response, next) => {
 		const controller = registerRun(runId);
 		startAgentStream(response);
 
+		request.on("close", () => {
+			if (!response.writableEnded) {
+				tracker.log({ layer: "backend", module: "controller.ts", operation: "Client disconnected - aborting run" });
+				controller.abort();
+				cancelRun(runId);
+			}
+		});
+
 		writeAgentEvent(
 			response,
 			{
@@ -294,16 +320,21 @@ export const stream: RequestHandler = async (request, response, next) => {
 		);
 
 		const messageId = `msg_${Date.now()}`;
-		let isJsonStream = false;
 		let accumulatedText = "";
+		let isChartBlock = false;
 
 		const onChunk = (chunk: string) => {
 			accumulatedText += chunk;
+
+			if (/```(?:json|chart)?\s*\{\s*"(?:type|chartType)"/i.test(accumulatedText)) {
+				isChartBlock = true;
+			}
+
 			const trimmed = accumulatedText.trimStart();
-			if (trimmed.startsWith("{") || trimmed.startsWith("```json")) {
-				isJsonStream = true;
+			if (isChartBlock || (trimmed.startsWith("{") && !trimmed.includes("\n\n"))) {
 				return;
 			}
+
 			writeAgentEvent(
 				response,
 				{
@@ -396,9 +427,23 @@ export const stream: RequestHandler = async (request, response, next) => {
 
 		tracker.log({ layer: "backend", module: "controller.ts", operation: "stream completed" });
 
+		const stateSnapshot = await graph.getState({ configurable: { thread_id: conversationId } });
+		const pendingInterrupts = stateSnapshot.tasks?.flatMap((t) => t.interrupts || []) || [];
+
+		if (pendingInterrupts.length > 0) {
+			const activeInterrupt = pendingInterrupts[0];
+			tracker.log({ layer: "backend", module: "controller.ts", operation: "Graph interrupt detected after stream" });
+			handleInterruptPayload(response, activeInterrupt.value, tracker);
+			writeAgentEvent(response, { type: "done", data: null }, tracker);
+			response.end();
+			tracker.log({ layer: "backend", module: "controller.ts", operation: "HTTP request completed (interrupted)" });
+			tracker.printTimeline();
+			return;
+		}
+
 		if (finalResponsePayload) {
 			await addMessage(conversationId, "assistant", typeof finalResponsePayload === "string" ? finalResponsePayload : JSON.stringify(finalResponsePayload));
-			emitFinalResponse(response, finalResponsePayload, !isJsonStream && accumulatedText.length > 0, messageId, tracker);
+			emitFinalResponse(response, finalResponsePayload, !isChartBlock && accumulatedText.length > 0, messageId, tracker);
 		} else {
 			writeAgentEvent(
 				response,
@@ -496,6 +541,17 @@ export const respond: RequestHandler = async (request, response, next) => {
 			}
 		}
 
+		const stateSnapshot = await graph.getState({ configurable: { thread_id: conversationId } });
+		const pendingInterrupts = stateSnapshot.tasks?.flatMap((t) => t.interrupts || []) || [];
+
+		if (pendingInterrupts.length > 0) {
+			const activeInterrupt = pendingInterrupts[0];
+			handleInterruptPayload(response, activeInterrupt.value);
+			writeAgentEvent(response, { type: "done", data: null });
+			response.end();
+			return;
+		}
+
 		writeAgentEvent(response, {
 			type: "thinking",
 			data: { status: "completed", message: "Task update complete" },
@@ -528,55 +584,74 @@ export const respond: RequestHandler = async (request, response, next) => {
 
 function handleInterrupt(response: Parameters<RequestHandler>[1], error: unknown) {
 	const interruptValue = (error as { interrupts?: Array<{ value?: unknown }> }).interrupts?.[0]?.value;
+	handleInterruptPayload(response, interruptValue);
+	response.end();
+}
 
+function handleInterruptPayload(response: Parameters<RequestHandler>[1], interruptValue: unknown, tracker?: AgentPerfTracker) {
 	if (interruptValue && typeof interruptValue === "object" && "uploadId" in interruptValue) {
 		const val = interruptValue as { uploadId: unknown; uploadUrl?: unknown; purpose?: unknown; contentTypes?: unknown[] };
-		writeAgentEvent(response, {
-			type: "upload_required",
-			data: {
-				uploadId: String(val.uploadId),
-				uploadUrl: String(val.uploadUrl ?? ""),
-				purpose: String(val.purpose ?? "product_image"),
-				contentTypes: Array.isArray(val.contentTypes) ? val.contentTypes.map(String) : ["image/jpeg", "image/png", "image/webp"],
+		writeAgentEvent(
+			response,
+			{
+				type: "upload_required",
+				data: {
+					uploadId: String(val.uploadId),
+					uploadUrl: String(val.uploadUrl ?? ""),
+					purpose: String(val.purpose ?? "product_image"),
+					contentTypes: Array.isArray(val.contentTypes) ? val.contentTypes.map(String) : ["image/jpeg", "image/png", "image/webp"],
+				},
 			},
-		});
+			tracker
+		);
 	} else if (interruptValue && typeof interruptValue === "object" && "confirmationId" in interruptValue) {
 		const val = interruptValue as { confirmationId: unknown; message?: unknown; action?: unknown; options?: unknown[] };
-		writeAgentEvent(response, {
-			type: "confirmation",
-			data: {
-				confirmationId: String(val.confirmationId),
-				message: String(val.message ?? "Please confirm this operation."),
-				action: val.action && typeof val.action === "object" ? (val.action as { label: string }) : undefined,
-				options: (val.options as Array<{ id: string; label: string; value: boolean }>) || [
-					{ id: "approve", label: "Approve", value: true },
-					{ id: "reject", label: "Cancel", value: false },
-				],
+		writeAgentEvent(
+			response,
+			{
+				type: "confirmation",
+				data: {
+					confirmationId: String(val.confirmationId),
+					message: String(val.message ?? "Please confirm this operation."),
+					action: val.action && typeof val.action === "object" ? (val.action as { label: string }) : undefined,
+					options: (val.options as Array<{ id: string; label: string; value: boolean }>) || [
+						{ id: "approve", label: "Approve", value: true },
+						{ id: "reject", label: "Cancel", value: false },
+					],
+				},
 			},
-		});
+			tracker
+		);
 	} else if (interruptValue && typeof interruptValue === "object" && "questionId" in interruptValue) {
 		const val = interruptValue as { questionId: unknown; message?: unknown; options?: unknown[]; allowTextInput?: boolean };
-		writeAgentEvent(response, {
-			type: "question",
-			data: {
-				questionId: String(val.questionId),
-				message: String(val.message ?? "Please clarify your request."),
-				options: val.options as Array<{ id: string; label: string; value: string }> | undefined,
-				allowTextInput: Boolean(val.allowTextInput ?? true),
+		writeAgentEvent(
+			response,
+			{
+				type: "question",
+				data: {
+					questionId: String(val.questionId),
+					message: String(val.message ?? "Please clarify your request."),
+					options: val.options as Array<{ id: string; label: string; value: string }> | undefined,
+					allowTextInput: Boolean(val.allowTextInput ?? true),
+				},
 			},
-		});
+			tracker
+		);
 	} else {
 		// Generic interrupt fallback
-		writeAgentEvent(response, {
-			type: "question",
-			data: {
-				questionId: `q_${Date.now()}`,
-				message: typeof interruptValue === "string" ? interruptValue : "Human input required to proceed.",
-				allowTextInput: true,
+		writeAgentEvent(
+			response,
+			{
+				type: "question",
+				data: {
+					questionId: `q_${Date.now()}`,
+					message: typeof interruptValue === "string" ? interruptValue : "Human input required to proceed.",
+					allowTextInput: true,
+				},
 			},
-		});
+			tracker
+		);
 	}
-	response.end();
 }
 
 // Aliases for backward compatibility

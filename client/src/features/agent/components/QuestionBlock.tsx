@@ -40,6 +40,21 @@ export function QuestionBlock({
     })
   }
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text/plain')
+    if (text) {
+      e.preventDefault()
+      const target = e.currentTarget
+      const start = target.selectionStart || 0
+      const end = target.selectionEnd || 0
+      const newValue = textInput.slice(0, start) + text + textInput.slice(end)
+      setTextInput(newValue)
+      setTimeout(() => {
+        target.selectionStart = target.selectionEnd = start + text.length
+      }, 0)
+    }
+  }
+
   return (
     <Box p="3.5" bg="surface" borderWidth="1.5px" borderColor="primary" borderRadius="lg" my="2.5" shadow="sm">
       <HStack gap="2" mb="2">
@@ -85,6 +100,7 @@ export function QuestionBlock({
                   placeholder="Or type custom answer..."
                   value={textInput}
                   onChange={(e) => setTextInput(e.target.value)}
+                  onPaste={handlePaste}
                   disabled={answered}
                 />
                 <Button size="xs" type="submit" disabled={!textInput.trim() || answered} colorScheme="blue">

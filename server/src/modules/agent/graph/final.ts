@@ -9,7 +9,8 @@ export const createFinalResponse = async (
 	plan: Plan,
 	stepResults: Record<string, unknown>,
 	onChunk?: (chunk: string) => void,
-	tracker?: AgentPerfTracker
+	tracker?: AgentPerfTracker,
+	signal?: AbortSignal
 ) => {
 	const messages = [
 		{ role: "system" as const, content: finalSystemPrompt },
@@ -17,8 +18,8 @@ export const createFinalResponse = async (
 	];
 
 	if (onChunk) {
-		return createOpenRouterClient().stream(messages, onChunk, tracker);
+		return createOpenRouterClient().stream(messages, onChunk, tracker, signal);
 	}
-	return createOpenRouterClient().invoke(messages, tracker);
+	return createOpenRouterClient().invoke(messages, tracker, signal);
 };
 
