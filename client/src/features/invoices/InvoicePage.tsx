@@ -38,7 +38,7 @@ import {
   User,
   X,
 } from 'lucide-react'
-import { motion, AnimatePresence } from 'motion/react'
+import { motion } from 'motion/react'
 import QRCode from 'qrcode'
 
 const MotionBox = motion.create(Box)

@@ -4,7 +4,6 @@ import { prisma } from "../../lib/prisma";
 import { unauthorized, validationError } from "../../utils/errors";
 import { sendSuccess } from "../../utils/apiResponse";
 import { createAgentGraph } from "./graph/graph";
-import { messageSchema, resumeSchema } from "./schemas";
 import { addMessage, createConversation, getConversation, listConversations } from "./persistence";
 import { finishRun, registerRun, cancelRun } from "./runtime/run-manager";
 import { startAgentStream, writeAgentEvent } from "./streaming/events";
@@ -44,106 +43,451 @@ export const get = async (request: Parameters<RequestHandler>[0], response: Para
 	sendSuccess(response, await getConversation(routeParam(request.params.conversationId), user.id, user.companyId));
 };
 
-export const message: RequestHandler = async (request, response, next) => {
+function parseMarkdownTables(text: string): {
+	cleanText: string;
+	tables: Array<{
+		title?: string;
+		columns: Array<{ key: string; label: string }>;
+		rows: Array<Record<string, string>>;
+	}>;
+} {
+	const lines = text.split("\n");
+	const tables: Array<{
+		title?: string;
+		columns: Array<{ key: string; label: string }>;
+		rows: Array<Record<string, string>>;
+	}> = [];
+
+	const remainingLines: string[] = [];
+	let i = 0;
+
+	while (i < lines.length) {
+		const line = lines[i];
+		if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
+			const tableLines: string[] = [];
+			let title = "";
+			if (remainingLines.length > 0) {
+				const lastLine = remainingLines[remainingLines.length - 1].trim();
+				if (lastLine.startsWith("#") || (lastLine.startsWith("**") && lastLine.endsWith("**"))) {
+					title = lastLine.replace(/^#+\s*/, "").replace(/\*\*/g, "");
+					remainingLines.pop();
+				}
+			}
+
+			while (i < lines.length && lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) {
+				tableLines.push(lines[i].trim());
+				i += 1;
+			}
+
+			if (tableLines.length >= 2) {
+				const headerLine = tableLines[0];
+				const headers = headerLine
+					.slice(1, -1)
+					.split("|")
+					.map((h) => h.trim().replace(/\*\*/g, ""));
+
+				const dataLines = tableLines.filter((l) => !l.includes("---"));
+				const columns = headers.map((h, idx) => ({ key: `col_${idx}`, label: h }));
+				const rows: Record<string, string>[] = [];
+
+				for (let dIdx = 1; dIdx < dataLines.length; dIdx += 1) {
+					const cells = dataLines[dIdx]
+						.slice(1, -1)
+						.split("|")
+						.map((c) => c.trim().replace(/\*\*/g, ""));
+					const row: Record<string, string> = {};
+					columns.forEach((col, cIdx) => {
+						row[col.key] = cells[cIdx] || "";
+					});
+					rows.push(row);
+				}
+
+				if (columns.length > 0 && rows.length > 0) {
+					tables.push({ title: title || undefined, columns, rows });
+				}
+			}
+			continue;
+		}
+
+		remainingLines.push(line);
+		i += 1;
+	}
+
+	return {
+		cleanText: remainingLines.join("\n").trim(),
+		tables,
+	};
+}
+
+function emitFinalResponse(
+	response: Parameters<RequestHandler>[1],
+	finalResponse: unknown,
+	textAlreadyStreamed = false,
+	messageId = `msg_${Date.now()}`
+) {
+	if (!finalResponse) {
+		if (!textAlreadyStreamed) {
+			writeAgentEvent(response, {
+				type: "text",
+				data: { messageId, delta: "I could not complete that request." },
+			});
+		}
+		return;
+	}
+
+	const raw = typeof finalResponse === "string" ? finalResponse : JSON.stringify(finalResponse);
+
+	const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || [null, raw];
+	const candidate = jsonMatch[1] ? jsonMatch[1].trim() : raw.trim();
+
+	try {
+		const parsed = JSON.parse(candidate);
+		if (parsed && typeof parsed === "object") {
+			if (parsed.text && !textAlreadyStreamed) {
+				writeAgentEvent(response, {
+					type: "text",
+					data: { messageId, delta: String(parsed.text) },
+				});
+			}
+			if (parsed.table) {
+				writeAgentEvent(response, {
+					type: "table",
+					data: parsed.table.data || parsed.table,
+				});
+			}
+			if (parsed.chart) {
+				writeAgentEvent(response, {
+					type: "chart",
+					data: parsed.chart.data || parsed.chart,
+				});
+			}
+			if (parsed.chart_batch || (Array.isArray(parsed.charts) && parsed.charts.length > 0)) {
+				writeAgentEvent(response, {
+					type: "chart_batch",
+					data: parsed.chart_batch?.data || parsed.chart_batch || parsed,
+				});
+			}
+			if (parsed.type === "chart" || parsed.chartType) {
+				writeAgentEvent(response, {
+					type: "chart",
+					data: parsed.data || parsed,
+				});
+				return;
+			}
+			if (parsed.type === "table" || (Array.isArray(parsed.columns) && Array.isArray(parsed.rows))) {
+				writeAgentEvent(response, {
+					type: "table",
+					data: parsed.data || parsed,
+				});
+				return;
+			}
+			if (parsed.text || parsed.table || parsed.chart || parsed.chart_batch) {
+				return;
+			}
+		}
+	} catch {
+		// Fallback to text & markdown table extraction
+	}
+
+	const { cleanText, tables } = parseMarkdownTables(raw);
+
+	if (cleanText && !textAlreadyStreamed) {
+		writeAgentEvent(response, {
+			type: "text",
+			data: { messageId, delta: cleanText },
+		});
+	}
+
+	for (const tableData of tables) {
+		writeAgentEvent(response, {
+			type: "table",
+			data: tableData,
+		});
+	}
+
+	if (!textAlreadyStreamed && tables.length === 0 && !cleanText) {
+		writeAgentEvent(response, {
+			type: "text",
+			data: { messageId, delta: raw },
+		});
+	}
+}
+
+// Stream agent handler for POST /api/agent/stream
+export const stream: RequestHandler = async (request, response, next) => {
 	const runId = randomUUID();
 	try {
 		const user = await trustedUser(request);
-		const conversation = await getConversation(routeParam(request.params.conversationId), user.id, user.companyId);
-		const { content } = messageSchema.parse(request.body);
-		await addMessage(conversation.id, "user", content);
+		const body = request.body as { message?: string; conversationId?: string; content?: string };
+		const content = (body.message || body.content || "").trim();
+		if (!content) throw validationError("Message content is required");
+
+		let conversationId = body.conversationId || (request.params.conversationId ? routeParam(request.params.conversationId) : undefined);
+		if (conversationId) {
+			await getConversation(conversationId, user.id, user.companyId);
+		} else {
+			const newConv = await createConversation(user.id, user.companyId, content.slice(0, 40));
+			conversationId = newConv.id;
+		}
+
+		await addMessage(conversationId, "user", content);
 		const controller = registerRun(runId);
 		startAgentStream(response);
-		writeAgentEvent(response, { type: "run.started", runId });
-		const graph = createAgentGraph(await getAgentCheckpointer());
-		const result = await graph.invoke(
-			{ request: content, user },
-			{ configurable: { thread_id: conversation.id }, signal: controller.signal },
-		);
-		if (controller.signal.aborted) {
-			response.end();
-			return;
-		}
-		if (result.plan) {
+
+		writeAgentEvent(response, {
+			type: "thinking",
+			data: { status: "running", message: "Analyzing query & planning response..." },
+		});
+
+		const messageId = `msg_${Date.now()}`;
+		let isJsonStream = false;
+		let accumulatedText = "";
+
+		const onChunk = (chunk: string) => {
+			accumulatedText += chunk;
+			const trimmed = accumulatedText.trimStart();
+			if (trimmed.startsWith("{") || trimmed.startsWith("```json")) {
+				isJsonStream = true;
+				return;
+			}
 			writeAgentEvent(response, {
-				type: "plan.created",
-				steps: result.plan.steps.map((step) => ({
-					id: step.id,
-					description: "description" in step ? step.description : "Awaiting input",
-					status: "pending",
-				})),
+				type: "text",
+				data: { messageId, delta: chunk },
+			});
+		};
+
+		const graph = createAgentGraph(await getAgentCheckpointer());
+		const eventStream = await graph.stream(
+			{ request: content, user },
+			{
+				configurable: { thread_id: conversationId, onChunk },
+				signal: controller.signal,
+				streamMode: "updates",
+			},
+		);
+
+		let finalResponsePayload: unknown = null;
+
+		for await (const update of eventStream) {
+			if (controller.signal.aborted) break;
+
+			// Planner node completed
+			if (update.planner?.plan) {
+				writeAgentEvent(response, {
+					type: "thinking",
+					data: { status: "completed", message: "Plan created" },
+				});
+
+				if (Array.isArray(update.planner.plan.steps)) {
+					for (const step of update.planner.plan.steps) {
+						const desc = "description" in step ? step.description : "Step processing";
+						writeAgentEvent(response, {
+							type: "todo",
+							data: { id: step.id, title: desc, status: "running" },
+						});
+					}
+				}
+			}
+
+			// Executor node completed
+			if (update.executor?.stepResults) {
+				const stepResults = update.executor.stepResults as Record<string, unknown>;
+				for (const [stepId, res] of Object.entries(stepResults)) {
+					const resMsg = typeof res === "object" && res !== null && "summary" in res ? String((res as { summary: unknown }).summary) : "Step finished";
+					writeAgentEvent(response, {
+						type: "tool_call",
+						data: { toolCallId: stepId, name: stepId, label: stepId, status: "completed" },
+					});
+					writeAgentEvent(response, {
+						type: "tool_result",
+						data: { toolCallId: stepId, status: "completed", message: resMsg },
+					});
+					writeAgentEvent(response, {
+						type: "todo",
+						data: { id: stepId, title: stepId, status: "completed" },
+					});
+				}
+			}
+
+			// Final node completed
+			if (update.final?.finalResponse) {
+				finalResponsePayload = update.final.finalResponse;
+			}
+		}
+
+		if (finalResponsePayload) {
+			await addMessage(conversationId, "assistant", typeof finalResponsePayload === "string" ? finalResponsePayload : JSON.stringify(finalResponsePayload));
+			emitFinalResponse(response, finalResponsePayload, !isJsonStream && accumulatedText.length > 0, messageId);
+		} else {
+			writeAgentEvent(response, {
+				type: "text",
+				data: { messageId, delta: "I could not complete that request." },
 			});
 		}
-		const finalResponse = result.finalResponse ?? "I could not complete that request.";
-		await addMessage(conversation.id, "assistant", finalResponse);
-		writeAgentEvent(response, { type: "assistant.delta", content: finalResponse });
-		writeAgentEvent(response, { type: "run.completed", runId });
+
+		writeAgentEvent(response, { type: "done", data: null });
 		response.end();
 	} catch (error) {
 		if (isGraphInterrupt(error) && response.headersSent) {
-			const interruptValue = (error as { interrupts?: Array<{ value?: unknown }> }).interrupts?.[0]?.value;
-			if (interruptValue && typeof interruptValue === "object" && "uploadId" in interruptValue) {
-				writeAgentEvent(response, {
-					type: "upload.required",
-					uploadId: String((interruptValue as { uploadId: unknown }).uploadId),
-					uploadUrl: String((interruptValue as unknown as { uploadUrl?: unknown }).uploadUrl ?? ""),
-					purpose: String((interruptValue as unknown as { purpose?: unknown }).purpose ?? "image"),
-					contentTypes: Array.isArray((interruptValue as unknown as { contentTypes?: unknown }).contentTypes)
-						? (interruptValue as unknown as { contentTypes: unknown[] }).contentTypes.map(String)
-						: [],
-				});
-			} else if (interruptValue && typeof interruptValue === "object") {
-				writeAgentEvent(response, { type: "human.input_required", request: interruptValue as never });
-			}
-			response.end();
+			handleInterrupt(response, error);
 			return;
 		}
 		if (!response.headersSent) return next(error);
 		logger.error("Agent run failed", error);
-		writeAgentEvent(response, { type: "run.error", message: "The assistant could not complete this request." });
+		writeAgentEvent(response, {
+			type: "error",
+			data: { code: "AGENT_ERROR", message: "The assistant could not complete this request." },
+		});
+		writeAgentEvent(response, { type: "done", data: null });
 		response.end();
 	} finally {
 		finishRun(runId);
 	}
 };
 
-export const resume: RequestHandler = async (request, response, next) => {
-	const user = await trustedUser(request);
-	const conversation = await getConversation(routeParam(request.params.conversationId), user.id, user.companyId);
-	const { response: resumeResponse } = resumeSchema.parse(request.body);
+// Interaction response handler for POST /api/agent/respond
+export const respond: RequestHandler = async (request, response, next) => {
 	const runId = randomUUID();
 	try {
+		const user = await trustedUser(request);
+		const body = request.body as {
+			conversationId?: string;
+			questionId?: string;
+			confirmationId?: string;
+			uploadId?: string;
+			response?: unknown;
+		};
+
+		const conversationId = body.conversationId || (request.params.conversationId ? routeParam(request.params.conversationId) : undefined);
+		if (!conversationId) throw validationError("Conversation identifier required");
+		await getConversation(conversationId, user.id, user.companyId);
+
+		const resumeValue =
+			body.response && typeof body.response === "object" && "value" in body.response
+				? (body.response as { value: unknown }).value
+				: body.response;
+
 		const controller = registerRun(runId);
 		startAgentStream(response);
-		writeAgentEvent(response, { type: "run.started", runId });
-		const graph = createAgentGraph(await getAgentCheckpointer());
-		const result = await graph.invoke(new Command({ resume: resumeResponse }), {
-			configurable: { thread_id: conversation.id },
-			signal: controller.signal,
+
+		writeAgentEvent(response, {
+			type: "thinking",
+			data: { status: "running", message: "Processing response and continuing..." },
 		});
-		const finalResponse = result.finalResponse;
-		if (finalResponse) {
-			await addMessage(conversation.id, "assistant", finalResponse);
-			writeAgentEvent(response, { type: "assistant.delta", content: finalResponse });
+
+		const graph = createAgentGraph(await getAgentCheckpointer());
+		const eventStream = await graph.stream(new Command({ resume: resumeValue }), {
+			configurable: { thread_id: conversationId },
+			signal: controller.signal,
+			streamMode: "updates",
+		});
+
+		let finalResponsePayload: unknown = null;
+
+		for await (const update of eventStream) {
+			if (controller.signal.aborted) break;
+
+			if (update.executor?.stepResults) {
+				const stepResults = update.executor.stepResults as Record<string, unknown>;
+				for (const [stepId] of Object.entries(stepResults)) {
+					writeAgentEvent(response, {
+						type: "todo",
+						data: { id: stepId, title: stepId, status: "completed" },
+					});
+				}
+			}
+
+			if (update.final?.finalResponse) {
+				finalResponsePayload = update.final.finalResponse;
+			}
 		}
-		writeAgentEvent(response, { type: "run.completed", runId });
+
+		writeAgentEvent(response, {
+			type: "thinking",
+			data: { status: "completed", message: "Task update complete" },
+		});
+
+		if (finalResponsePayload) {
+			await addMessage(conversationId, "assistant", typeof finalResponsePayload === "string" ? finalResponsePayload : JSON.stringify(finalResponsePayload));
+			emitFinalResponse(response, finalResponsePayload);
+		}
+
+		writeAgentEvent(response, { type: "done", data: null });
 		response.end();
 	} catch (error) {
 		if (isGraphInterrupt(error)) {
-			const interruptValue = (error as { interrupts?: Array<{ value?: unknown }> }).interrupts?.[0]?.value;
-			if (interruptValue && typeof interruptValue === "object") {
-				writeAgentEvent(response, { type: "human.input_required", request: interruptValue as never });
-			}
-			response.end();
+			handleInterrupt(response, error);
 			return;
 		}
 		if (!response.headersSent) return next(error);
 		logger.error("Agent resume failed", error);
-		writeAgentEvent(response, { type: "run.error", message: "The assistant could not resume this request." });
+		writeAgentEvent(response, {
+			type: "error",
+			data: { code: "AGENT_RESUME_ERROR", message: "The assistant could not resume this request." },
+		});
+		writeAgentEvent(response, { type: "done", data: null });
 		response.end();
 	} finally {
 		finishRun(runId);
 	}
 };
+
+function handleInterrupt(response: Parameters<RequestHandler>[1], error: unknown) {
+	const interruptValue = (error as { interrupts?: Array<{ value?: unknown }> }).interrupts?.[0]?.value;
+
+	if (interruptValue && typeof interruptValue === "object" && "uploadId" in interruptValue) {
+		const val = interruptValue as { uploadId: unknown; uploadUrl?: unknown; purpose?: unknown; contentTypes?: unknown[] };
+		writeAgentEvent(response, {
+			type: "upload_required",
+			data: {
+				uploadId: String(val.uploadId),
+				uploadUrl: String(val.uploadUrl ?? ""),
+				purpose: String(val.purpose ?? "product_image"),
+				contentTypes: Array.isArray(val.contentTypes) ? val.contentTypes.map(String) : ["image/jpeg", "image/png", "image/webp"],
+			},
+		});
+	} else if (interruptValue && typeof interruptValue === "object" && "confirmationId" in interruptValue) {
+		const val = interruptValue as { confirmationId: unknown; message?: unknown; action?: unknown; options?: unknown[] };
+		writeAgentEvent(response, {
+			type: "confirmation",
+			data: {
+				confirmationId: String(val.confirmationId),
+				message: String(val.message ?? "Please confirm this operation."),
+				action: val.action && typeof val.action === "object" ? (val.action as { label: string }) : undefined,
+				options: (val.options as Array<{ id: string; label: string; value: boolean }>) || [
+					{ id: "approve", label: "Approve", value: true },
+					{ id: "reject", label: "Cancel", value: false },
+				],
+			},
+		});
+	} else if (interruptValue && typeof interruptValue === "object" && "questionId" in interruptValue) {
+		const val = interruptValue as { questionId: unknown; message?: unknown; options?: unknown[]; allowTextInput?: boolean };
+		writeAgentEvent(response, {
+			type: "question",
+			data: {
+				questionId: String(val.questionId),
+				message: String(val.message ?? "Please clarify your request."),
+				options: val.options as Array<{ id: string; label: string; value: string }> | undefined,
+				allowTextInput: Boolean(val.allowTextInput ?? true),
+			},
+		});
+	} else {
+		// Generic interrupt fallback
+		writeAgentEvent(response, {
+			type: "question",
+			data: {
+				questionId: `q_${Date.now()}`,
+				message: typeof interruptValue === "string" ? interruptValue : "Human input required to proceed.",
+				allowTextInput: true,
+			},
+		});
+	}
+	response.end();
+}
+
+// Aliases for backward compatibility
+export const message = stream;
+export const resume = respond;
 
 export const cancel: RequestHandler = async (request, response) => {
 	await trustedUser(request);

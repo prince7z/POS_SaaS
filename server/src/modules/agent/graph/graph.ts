@@ -9,11 +9,14 @@ export const createAgentGraph = (checkpointer?: BaseCheckpointSaver) =>
 	new StateGraph(AgentState)
 		.addNode("planner", async (state) => ({ plan: await createPlan(state.request, state.user) }))
 		.addNode("executor", executePlan)
-		.addNode("final", async (state) => ({
-			finalResponse: state.plan
-				? await createFinalResponse(state.request, state.plan, state.stepResults)
-				: "I could not create a plan for that request.",
-		}))
+		.addNode("final", async (state, config) => {
+			const onChunk = config?.configurable?.onChunk as ((chunk: string) => void) | undefined;
+			return {
+				finalResponse: state.plan
+					? await createFinalResponse(state.request, state.plan, state.stepResults, onChunk)
+					: "I could not create a plan for that request.",
+			};
+		})
 		.addEdge(START, "planner")
 		.addEdge("planner", "executor")
 		.addEdge("executor", "final")

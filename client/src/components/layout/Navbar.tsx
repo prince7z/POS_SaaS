@@ -1,11 +1,19 @@
 import { Box, Button, Flex, HStack } from '@chakra-ui/react'
 import { motion } from 'motion/react'
-import { Bell, Menu } from 'lucide-react'
+import { Bell, Bot, Menu } from 'lucide-react'
 import { UserMenu } from '@/components/common/UserMenu'
 
 const MotionFlex = motion.create(Flex)
 
-export function Navbar({ onMobileMenuToggle }: { onMobileMenuToggle: () => void }) {
+export function Navbar({
+  onMobileMenuToggle,
+  isAiOpen,
+  onAiToggle,
+}: {
+  onMobileMenuToggle: () => void
+  isAiOpen?: boolean
+  onAiToggle?: () => void
+}) {
   return (
     <MotionFlex
       as="header"
@@ -36,6 +44,15 @@ export function Navbar({ onMobileMenuToggle }: { onMobileMenuToggle: () => void 
         </Button>
       </HStack>
       <HStack gap="2">
+        <Button
+          variant={isAiOpen ? 'subtle' : 'ghost'}
+          size="sm"
+          aria-label="AI Assistant"
+          onClick={onAiToggle}
+          title="Toggle AI Assistant"
+        >
+          <Bot size={18} className={isAiOpen ? 'text-blue-600' : ''} />
+        </Button>
         <Button variant="ghost" size="sm" aria-label="Notifications" position="relative">
           <Bell size={17} />
           <Box position="absolute" top="2" right="2" w="5px" h="5px" bg="danger" borderRadius="full" />

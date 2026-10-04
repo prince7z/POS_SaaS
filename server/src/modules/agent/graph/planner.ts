@@ -2,6 +2,7 @@ import { createOpenRouterClient } from "../client/openRouterClient";
 import { planSchema, type AgentUser, type Plan } from "../schemas";
 import { plannerSystemPrompt } from "../prompts/planner";
 import { agentToolRegistry } from "../registry";
+import { logger } from "../../../lib/logger";
 
 const plannerToolCatalog = (permissions: string[]) =>
 	agentToolRegistry
@@ -21,46 +22,85 @@ const plannerToolCatalog = (permissions: string[]) =>
 export const createPlan = async (request: string, user: AgentUser): Promise<Plan> => {
 	const availableTools = plannerToolCatalog(user.permissions);
 	const content = await createOpenRouterClient().invokeJson([
-		{ role: "system", content: `${plannerSystemPrompt}
+		{
+			role: "system",
+			content: `${plannerSystemPrompt}
 Return JSON with exactly this shape:
-{"steps":[{"id":"step_1","type":"tool","tool":"finance_tool","operation":"list_expenses","args":{},"description":"List expenses","dependsOn":[]},{"id":"step_2","type":"final","description":"Summarize the tool result","dependsOn":["step_1"]}]}
-Tool steps require tool, operation, args, and description. Human-input steps require request with type and question.` },
+{"steps":[{"id":"step_1","type":"human_input","request":{"type":"question","question":"Which period would you like to analyze?","options":[{"id":"30d","label":"Last 30 days","value":"30d"},{"id":"90d","label":"Last 90 days","value":"90d"}],"allowOther":true},"description":"Clarify period","dependsOn":[]},{"id":"step_2","type":"final","description":"Finalize response","dependsOn":["step_1"]}]}`,
+		},
 		{
 			role: "user",
 			content: JSON.stringify({
 				request,
 				availableTools,
-				instruction: `Create an ordered plan using only the available tools. The server will enforce permissions.
+				instruction: `Create an ordered plan using only available tools or human_input/final steps. The server will enforce permissions.
 For expense requests, use finance_tool. Use list_expenses for "what/recent/show/list expenses"; use expense_summary for totals or counts;
 use expense_analytics for trends or category breakdowns; use pnl_dashboard when the request asks about profit or loss.
-Expense list args are optional and may include page, limit, search, category, from, to, sortBy, and sortOrder.
-Date filters must use YYYY-MM-DD. Always execute a matching tool step before the final step; do not answer that a capability is unavailable when it is listed.`,
+Date filters must use YYYY-MM-DD. Always include a final step.`,
 			}),
 		},
 	]);
+
 	const normalized = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+
 	try {
-		const parsed: unknown = JSON.parse(normalized);
-		if (typeof parsed === "object" && parsed !== null && "steps" in parsed && Array.isArray(parsed.steps)) {
-			for (const step of parsed.steps) {
-				if (typeof step === "object" && step !== null && "type" in step && step.type === "human-input") {
-					step.type = "human_input";
-				}
-				if (typeof step === "object" && step !== null && "request" in step && typeof step.request === "object" && step.request !== null && "type" in step.request && step.request.type === "text") {
-					step.request.type = "question";
-				}
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		let parsed: any = JSON.parse(normalized);
+		if (parsed && typeof parsed === "object") {
+			if ("plan" in parsed && parsed.plan && typeof parsed.plan === "object") {
+				parsed = parsed.plan;
+			}
+			if ("data" in parsed && parsed.data && typeof parsed.data === "object") {
+				parsed = parsed.data;
+			}
+			if ("steps" in parsed && Array.isArray(parsed.steps)) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				parsed.steps = parsed.steps.map((step: any, idx: number) => {
+					if (typeof step !== "object" || step === null) return step;
+
+					const rawType = String(step.type || "").toLowerCase();
+
+					if (
+						rawType.includes("human") ||
+						rawType.includes("input") ||
+						rawType.includes("question") ||
+						rawType.includes("clarification") ||
+						"request" in step
+					) {
+						step.type = "human_input";
+						const req = step.request && typeof step.request === "object" ? step.request : {};
+						const q = req.question || step.question || step.description || "Please provide clarification.";
+						const reqType = req.type ? String(req.type).toLowerCase() : "question";
+						step.request = {
+							type: reqType,
+							question: q,
+							options: req.options || step.options,
+							allowOther: req.allowOther ?? step.allowOther ?? true,
+						};
+					} else if (rawType === "tool" || rawType === "action" || "tool" in step) {
+						step.type = "tool";
+					} else {
+						step.type = "final";
+					}
+
+					if (!step.id) step.id = `step_${idx + 1}`;
+					if (!Array.isArray(step.dependsOn)) step.dependsOn = [];
+					if (!step.description) step.description = step.id;
+
+					return step;
+				});
 			}
 		}
+
 		const candidate =
-			typeof parsed === "object" &&
-			parsed !== null &&
-			"id" in parsed &&
-			"type" in parsed &&
-			"description" in parsed
+			typeof parsed === "object" && parsed !== null && "id" in parsed && "type" in parsed && "description" in parsed
 				? { steps: [parsed] }
 				: parsed;
+
 		return planSchema.parse(candidate);
-	} catch {
+	} catch (err: unknown) {
+		const errMsg = err instanceof Error ? err.stack || err.message : JSON.stringify(err);
+		logger.error("Planner validation failed", { error: errMsg, rawOutput: normalized });
 		throw new Error(`Planner returned an invalid plan: ${normalized.slice(0, 500)}`);
 	}
 };

@@ -13,7 +13,7 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { motion } from 'motion/react'
-import { Building2, Eye, EyeOff, KeyRound, Lock, LogIn, Mail, Sparkles } from 'lucide-react'
+import { Building2, Eye, EyeOff, Lock, LogIn, Mail } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { login } from '@/api/endpoints/auth'
 import { setAuthSession } from '@/lib/auth'

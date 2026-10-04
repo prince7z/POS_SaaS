@@ -64,7 +64,99 @@ const request = async (messages: ChatMessage[], responseFormat?: "json_object") 
 	throw new Error(lastFailure);
 };
 
+const streamRequest = async (
+	messages: ChatMessage[],
+	onChunk: (chunk: string) => void,
+	responseFormat?: "json_object"
+): Promise<string> => {
+	if (!env.agent.openRouterApiKey) {
+		throw new Error("Agent model is not configured");
+	}
+
+	const response = await fetch(OPEN_ROUTER_BASE_URL, {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${env.agent.openRouterApiKey}`,
+			"Content-Type": "application/json",
+			"HTTP-Referer": env.agent.siteUrl,
+			"X-Title": env.agent.siteName,
+		},
+		body: JSON.stringify({
+			model: env.agent.model,
+			messages,
+			temperature: 0,
+			max_tokens: 4000,
+			reasoning: { exclude: true },
+			stream: true,
+			...(responseFormat ? { response_format: { type: responseFormat } } : {}),
+		}),
+	});
+
+	if (!response.ok) {
+		const payload = (await response.json().catch(() => ({}))) as OpenRouterResponse;
+		throw new Error(payload.error?.message ?? "OpenRouter stream request failed");
+	}
+
+	if (!response.body) {
+		throw new Error("Response body is null");
+	}
+
+	const reader = response.body.getReader();
+	const decoder = new TextDecoder("utf-8");
+	let accumulated = "";
+	let buffer = "";
+
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+
+		buffer += decoder.decode(value, { stream: true });
+		const lines = buffer.split("\n");
+		buffer = lines.pop() || "";
+
+		for (const line of lines) {
+			const trimmed = line.trim();
+			if (!trimmed || trimmed.startsWith(":")) continue;
+			if (trimmed === "data: [DONE]") continue;
+
+			if (trimmed.startsWith("data: ")) {
+				try {
+					const jsonStr = trimmed.slice(6);
+					const parsed = JSON.parse(jsonStr);
+					const delta = parsed.choices?.[0]?.delta?.content;
+					if (delta) {
+						accumulated += delta;
+						onChunk(delta);
+					}
+				} catch {
+					// Ignore partial JSON chunks
+				}
+			}
+		}
+	}
+
+	if (buffer.trim().startsWith("data: ")) {
+		try {
+			const jsonStr = buffer.trim().slice(6);
+			if (jsonStr !== "[DONE]") {
+				const parsed = JSON.parse(jsonStr);
+				const delta = parsed.choices?.[0]?.delta?.content;
+				if (delta) {
+					accumulated += delta;
+					onChunk(delta);
+				}
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	return accumulated;
+};
+
 export const createOpenRouterClient = () => ({
 	invoke: (messages: ChatMessage[]) => request(messages),
 	invokeJson: (messages: ChatMessage[]) => request(messages, "json_object"),
+	stream: (messages: ChatMessage[], onChunk: (chunk: string) => void) => streamRequest(messages, onChunk),
 });
+

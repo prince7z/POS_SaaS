@@ -10,33 +10,58 @@ export const agentUserSchema = z.object({
 export type AgentUser = z.infer<typeof agentUserSchema>;
 
 const toolStepSchema = z.object({
-	id: z.string().min(1),
+	id: z.string().optional().transform((val) => val || "step_tool"),
 	type: z.literal("tool"),
-	tool: z.string().min(1),
-	operation: z.string().min(1),
-	args: z.record(z.string(), z.unknown()),
-	dependsOn: z.array(z.string()),
-	description: z.string().min(1),
+	tool: z.string().optional().transform((val) => val || "unknown_tool"),
+	operation: z.string().optional().transform((val) => val || "execute"),
+	args: z.record(z.string(), z.unknown()).optional().transform((val) => val ?? {}),
+	dependsOn: z.array(z.string()).optional().transform((val) => val ?? []),
+	description: z.string().optional().transform((val) => val || "Execute tool step"),
 	requiresConfirmation: z.boolean().optional(),
 });
 
+const optionItemSchema = z.union([
+	z.string().transform((val) => ({ id: val, label: val, value: val })),
+	z.number().transform((val) => ({ id: String(val), label: String(val), value: val })),
+	z.boolean().transform((val) => ({ id: String(val), label: String(val), value: val })),
+	z.object({
+		id: z.unknown().optional(),
+		label: z.unknown().optional(),
+		value: z.unknown().optional(),
+	}).transform((opt) => {
+		const label = String(opt.label || opt.id || opt.value || "Option");
+		const id = String(opt.id || opt.value || label);
+		return {
+			id,
+			label,
+			value: opt.value ?? id,
+		};
+	}),
+]);
+
 const humanStepSchema = z.object({
-	id: z.string().min(1),
+	id: z.string().optional().transform((val) => val || "step_human"),
 	type: z.literal("human_input"),
 	request: z.object({
-		type: z.enum(["question", "choice", "confirmation", "form", "upload"]),
-		question: z.string().min(1),
-		options: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
+		type: z.string().optional().transform((val) => {
+			if (!val) return "question";
+			const lower = val.toLowerCase();
+			if (lower.includes("confirm") || lower.includes("approve")) return "confirmation";
+			if (lower.includes("upload") || lower.includes("image")) return "upload";
+			return "question";
+		}),
+		question: z.string().optional().transform((val) => val || "Please provide clarification."),
+		options: z.array(optionItemSchema).optional(),
 		allowOther: z.boolean().optional(),
 	}),
-	dependsOn: z.array(z.string()),
+	dependsOn: z.array(z.string()).optional().transform((val) => val ?? []),
 });
 
 const finalStepSchema = z.object({
-	id: z.string().min(1),
+	id: z.string().optional().transform((val) => val || "step_final"),
 	type: z.literal("final"),
-	description: z.string().min(1),
-	dependsOn: z.array(z.string()),
+	description: z.string().optional().transform((val) => val || "Finalize response"),
+	dependsOn: z.array(z.string()).optional().transform((val) => val ?? []),
 });
 
 export const planSchema = z.object({

@@ -1,0 +1,52 @@
+import type { AgentBlock, InteractionPayload } from '../types/agent'
+import { ChartBatchBlock } from './ChartBatchBlock'
+import { ChartBlock } from './ChartBlock'
+import { ConfirmationBlock } from './ConfirmationBlock'
+import { ErrorBlock } from './ErrorBlock'
+import { QuestionBlock } from './QuestionBlock'
+import { TableBlock } from './TableBlock'
+import { TextBlock } from './TextBlock'
+import { ThinkingBlock } from './ThinkingBlock'
+import { TodoBlock } from './TodoBlock'
+import { ToolCallBlock } from './ToolCallBlock'
+import { ToolResultBlock } from './ToolResultBlock'
+import { UploadRequiredBlock } from './UploadRequiredBlock'
+
+export function AgentBlockRenderer({
+  block,
+  conversationId,
+  onRespond,
+}: {
+  block: AgentBlock
+  conversationId: string
+  onRespond: (payload: InteractionPayload) => void
+}) {
+  switch (block.type) {
+    case 'thinking':
+      return <ThinkingBlock block={block} />
+    case 'todo':
+      return <TodoBlock block={block} />
+    case 'text':
+      return <TextBlock block={block} />
+    case 'chart':
+      return <ChartBlock block={block} />
+    case 'chart_batch':
+      return <ChartBatchBlock block={block} />
+    case 'table':
+      return <TableBlock block={block} />
+    case 'tool_call':
+      return <ToolCallBlock block={block} />
+    case 'tool_result':
+      return <ToolResultBlock block={block} />
+    case 'question':
+      return <QuestionBlock block={block} conversationId={conversationId} onRespond={onRespond} />
+    case 'confirmation':
+      return <ConfirmationBlock block={block} conversationId={conversationId} onRespond={onRespond} />
+    case 'upload_required':
+      return <UploadRequiredBlock block={block} conversationId={conversationId} onRespond={onRespond} />
+    case 'error':
+      return <ErrorBlock block={block} />
+    default:
+      return null
+  }
+}

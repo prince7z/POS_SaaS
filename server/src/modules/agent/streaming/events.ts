@@ -1,16 +1,36 @@
 import type { Response } from "express";
+import { randomUUID } from "node:crypto";
 
-export type AgentEvent =
-	| { type: "run.started"; runId: string }
-	| { type: "plan.created"; steps: Array<{ id: string; description: string; status: "pending" }> }
-	| { type: "assistant.delta"; content: string }
-	| { type: "human.input_required"; request: unknown }
-	| { type: "upload.required"; uploadId: string; uploadUrl: string; purpose: string; contentTypes: string[] }
-	| { type: "run.completed"; runId: string }
-	| { type: "run.error"; message: string };
+export type AgentEventType =
+	| "thinking"
+	| "todo"
+	| "text"
+	| "chart"
+	| "chart_batch"
+	| "table"
+	| "tool_call"
+	| "tool_result"
+	| "question"
+	| "confirmation"
+	| "upload_required"
+	| "error"
+	| "done";
+
+export type AgentEvent<T = unknown> = {
+	id?: string;
+	type: AgentEventType;
+	timestamp?: number;
+	data: T;
+};
 
 export const writeAgentEvent = (response: Response, event: AgentEvent) => {
-	response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+	const envelope = {
+		id: event.id || `evt_${Date.now()}_${randomUUID().slice(0, 8)}`,
+		type: event.type,
+		timestamp: event.timestamp || Date.now(),
+		data: event.data,
+	};
+	response.write(`data: ${JSON.stringify(envelope)}\n\n`);
 };
 
 export const startAgentStream = (response: Response) => {
