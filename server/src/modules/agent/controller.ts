@@ -4,7 +4,7 @@ import { prisma } from "../../lib/prisma";
 import { unauthorized, validationError } from "../../utils/errors";
 import { sendSuccess } from "../../utils/apiResponse";
 import { createAgentGraph } from "./graph/graph";
-import { addMessage, createConversation, getConversation, listConversations } from "./persistence";
+import { addMessage, createConversation, getConversation, getConversationHistory, listConversations } from "./persistence";
 import { finishRun, registerRun, cancelRun } from "./runtime/run-manager";
 import { startAgentStream, writeAgentEvent } from "./streaming/events";
 import { getAgentCheckpointer } from "./checkpoint";
@@ -346,9 +346,10 @@ export const stream: RequestHandler = async (request, response, next) => {
 		};
 
 		tracker.log({ layer: "backend", module: "controller.ts", operation: "LangGraph started" });
+		const history = await getConversationHistory(conversationId, 10);
 		const graph = createAgentGraph(await getAgentCheckpointer());
 		const eventStream = await graph.stream(
-			{ request: content, user },
+			{ request: content, user, history },
 			{
 				configurable: { thread_id: conversationId, onChunk, tracker },
 				signal: controller.signal,

@@ -21,3 +21,15 @@ export const listConversations = (userId: string, companyId: string) =>
 
 export const addMessage = (conversationId: string, role: "user" | "assistant", content: string) =>
 	prisma.agentMessage.create({ data: { conversationId, role, content } });
+
+export const getConversationHistory = async (conversationId: string, limit = 10) => {
+	const messages = await prisma.agentMessage.findMany({
+		where: { conversationId },
+		orderBy: { createdAt: "desc" },
+		take: limit,
+	});
+	return messages.reverse().map((m) => ({
+		role: m.role,
+		content: m.content,
+	}));
+};

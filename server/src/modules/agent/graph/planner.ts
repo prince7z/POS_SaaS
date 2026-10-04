@@ -21,8 +21,17 @@ const plannerToolCatalog = (permissions: string[]) =>
 
 import type { AgentPerfTracker } from "../utils/perfLogger";
 
-export const createPlan = async (request: string, user: AgentUser, tracker?: AgentPerfTracker): Promise<Plan> => {
+export const createPlan = async (
+	request: string,
+	user: AgentUser,
+	history: Array<{ role: string; content: string }> = [],
+	tracker?: AgentPerfTracker
+): Promise<Plan> => {
 	const availableTools = plannerToolCatalog(user.permissions);
+	const historyContext = history.length > 0
+		? history.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n")
+		: "No previous messages.";
+
 	const content = await createOpenRouterClient().invokeJson(
 		[
 			{
@@ -34,9 +43,10 @@ Return JSON with exactly this shape:
 			{
 				role: "user",
 				content: JSON.stringify({
-					request,
+					currentRequest: request,
+					conversationHistory: historyContext,
 					availableTools,
-					instruction: `Create an ordered plan using only available tools or human_input/final steps. The server will enforce permissions.
+					instruction: `Create an ordered plan using only available tools or human_input/final steps. Take previous conversation history into full account to understand context.
 For expense requests, use finance_tool. Use list_expenses for "what/recent/show/list expenses"; use expense_summary for totals or counts;
 use expense_analytics for trends or category breakdowns; use pnl_dashboard when the request asks about profit or loss.
 Date filters must use YYYY-MM-DD. Always include a final step.`,

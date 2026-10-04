@@ -12,7 +12,7 @@ export const createAgentGraph = (checkpointer?: BaseCheckpointSaver) =>
 		.addNode("planner", async (state, config) => {
 			const tracker = config?.configurable?.tracker as AgentPerfTracker | undefined;
 			tracker?.log({ layer: "langgraph", module: "planner.ts", operation: "planner start" });
-			const plan = await createPlan(state.request, state.user, tracker);
+			const plan = await createPlan(state.request, state.user, state.history, tracker);
 			tracker?.log({ layer: "langgraph", module: "planner.ts", operation: "planner end" });
 			return { plan };
 		})
@@ -26,7 +26,7 @@ export const createAgentGraph = (checkpointer?: BaseCheckpointSaver) =>
 			const signal = config?.signal as AbortSignal | undefined;
 			return {
 				finalResponse: state.plan
-					? await createFinalResponse(state.request, state.plan, state.stepResults, onChunk, tracker, signal)
+					? await createFinalResponse(state.request, state.plan, state.stepResults, state.history, onChunk, tracker, signal)
 					: "I could not create a plan for that request.",
 			};
 		})
