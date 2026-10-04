@@ -53,16 +53,23 @@ export interface TextEventData {
 
 // 4. Chart & Batch Chart
 export interface ChartSeries {
-  dataKey: string
+  key: string
   label: string
+  dataKey?: string
+}
+
+export interface ChartXAxis {
+  key: string
+  label?: string
 }
 
 export interface ChartSpec {
   id?: string
-  chartType: 'bar' | 'line' | 'donut'
+  chartType: 'line' | 'bar' | 'donut' | 'pie' | 'area'
   title?: string
+  xAxis?: ChartXAxis
   xKey?: string
-  series: ChartSeries[]
+  series?: ChartSeries[]
   data: Record<string, unknown>[]
 }
 

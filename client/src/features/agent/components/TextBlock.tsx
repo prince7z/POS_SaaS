@@ -39,7 +39,9 @@ function formatInlineMarkdown(text: string): React.ReactNode[] {
 }
 
 function sanitizeTextContent(rawContent: string): string {
-  return rawContent.replace(/```(?:json|chart)?\s*\{\s*"(?:type|chartType)"[\s\S]*?```/gi, '').trim()
+  return rawContent
+    .replace(/```(?:json|chart)?\s*\{[\s\S]*?(?:```|$)/gi, '')
+    .trim()
 }
 
 function parseContentChunks(content: string): Chunk[] {

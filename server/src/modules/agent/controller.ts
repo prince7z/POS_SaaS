@@ -123,6 +123,59 @@ function parseMarkdownTables(text: string): {
 	};
 }
 
+// Helper to format self-describing chart data according to event contract
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function formatSelfDescribingChartData(rawChart: any) {
+	if (!rawChart || typeof rawChart !== "object") return rawChart;
+
+	const data = Array.isArray(rawChart.data)
+		? rawChart.data
+		: Array.isArray(rawChart.rows)
+		? rawChart.rows
+		: Array.isArray(rawChart.items)
+		? rawChart.items
+		: Array.isArray(rawChart)
+		? rawChart
+		: [];
+
+	const rawType = String(rawChart.chartType || rawChart.chart_type || rawChart.type || "").toLowerCase();
+	const titleLower = String(rawChart.title || "").toLowerCase();
+
+	let chartType: "line" | "bar" | "donut" | "pie" | "area" = "bar";
+	if (rawType.includes("line") || titleLower.includes("line") || titleLower.includes("trend")) {
+		chartType = "line";
+	} else if (rawType.includes("donut") || rawType.includes("pie") || titleLower.includes("donut") || titleLower.includes("pie") || titleLower.includes("share")) {
+		chartType = "donut";
+	} else if (rawType.includes("area")) {
+		chartType = "area";
+	} else if (rawType.includes("bar") || titleLower.includes("bar")) {
+		chartType = "bar";
+	}
+
+	const sample = data[0] || {};
+	const keys = Object.keys(sample);
+	const xKey = rawChart.xAxis?.key || rawChart.xKey || rawChart.xAxisKey || keys.find((k) => ["category", "name", "label", "date", "month", "week", "day"].includes(k.toLowerCase())) || keys[0] || "x";
+
+	const series = Array.isArray(rawChart.series) && rawChart.series.length > 0
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		? rawChart.series.map((s: any) => ({
+				key: String(s.key || s.dataKey || ""),
+				label: String(s.label || s.key || s.dataKey || ""),
+		  }))
+		: keys.filter((k) => k !== xKey && typeof sample[k] === "number").map((k) => ({
+				key: k,
+				label: k.replace(/_/g, " ").toUpperCase(),
+		  }));
+
+	return {
+		chartType,
+		title: rawChart.title,
+		xAxis: { key: xKey, label: rawChart.xAxis?.label },
+		series,
+		data,
+	};
+}
+
 function emitFinalResponse(
 	response: Parameters<RequestHandler>[1],
 	finalResponse: unknown,
@@ -146,97 +199,39 @@ function emitFinalResponse(
 
 	const raw = typeof finalResponse === "string" ? finalResponse : JSON.stringify(finalResponse);
 
-	const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || [null, raw];
-	const candidate = jsonMatch[1] ? jsonMatch[1].trim() : raw.trim();
+	// Extract chart blocks from text if model output embedded ```json { ... } ```
+	const chartRegex = /```(?:json|chart)?\s*(\{[\s\S]*?"(?:type|chartType|charts)"[\s\S]*?\})\s*```/gi;
+	const matches = [...raw.matchAll(chartRegex)];
 
-	try {
-		const parsed = JSON.parse(candidate);
-		if (parsed && typeof parsed === "object") {
-			if (parsed.text && !textAlreadyStreamed) {
-				writeAgentEvent(
-					response,
-					{
-						type: "text",
-						data: { messageId, delta: String(parsed.text) },
-					},
-					tracker
-				);
+	if (matches.length > 0) {
+		for (const m of matches) {
+			try {
+				const parsedChart = JSON.parse(m[1]);
+				if (parsedChart.type === "chart_batch" || Array.isArray(parsedChart.charts)) {
+					const charts = Array.isArray(parsedChart.charts) ? parsedChart.charts : [];
+					for (const c of charts) {
+						writeAgentEvent(
+							response,
+							{
+								type: "chart",
+								data: formatSelfDescribingChartData(c),
+							},
+							tracker
+						);
+					}
+				} else {
+					writeAgentEvent(
+						response,
+						{
+							type: "chart",
+							data: formatSelfDescribingChartData(parsedChart),
+						},
+						tracker
+					);
+				}
+			} catch {
+				// ignore parse error
 			}
-			if (parsed.table) {
-				writeAgentEvent(
-					response,
-					{
-						type: "table",
-						data: parsed.table.data || parsed.table,
-					},
-					tracker
-				);
-			}
-			if (parsed.chart) {
-				writeAgentEvent(
-					response,
-					{
-						type: "chart",
-						data: parsed.chart,
-					},
-					tracker
-				);
-			}
-			if (parsed.chart_batch || (Array.isArray(parsed.charts) && parsed.charts.length > 0)) {
-				writeAgentEvent(
-					response,
-					{
-						type: "chart_batch",
-						data: parsed.chart_batch?.data || parsed.chart_batch || parsed,
-					},
-					tracker
-				);
-			}
-			if (parsed.type === "chart" || parsed.chartType) {
-				writeAgentEvent(
-					response,
-					{
-						type: "chart",
-						data: parsed.data || parsed,
-					},
-					tracker
-				);
-				return;
-			}
-			if (parsed.type === "table" || (Array.isArray(parsed.columns) && Array.isArray(parsed.rows))) {
-				writeAgentEvent(
-					response,
-					{
-						type: "table",
-						data: parsed.data || parsed,
-					},
-					tracker
-				);
-				return;
-			}
-			if (parsed.text || parsed.table || parsed.chart || parsed.chart_batch) {
-				return;
-			}
-		}
-	} catch {
-		// Fallback to text & markdown table extraction
-	}
-
-	// Extract chart block from text if model output embedded ```json { "type": "chart", ... } ```
-	const chartMatch = raw.match(/```(?:json|chart)?\s*(\{[\s\S]*?"(?:type|chartType)"[\s\S]*?\})\s*```/i);
-	if (chartMatch && chartMatch[1]) {
-		try {
-			const parsedChart = JSON.parse(chartMatch[1]);
-			writeAgentEvent(
-				response,
-				{
-					type: "chart",
-					data: parsedChart.data || parsedChart,
-				},
-				tracker
-			);
-		} catch {
-			// ignore parse error
 		}
 	}
 
@@ -326,7 +321,7 @@ export const stream: RequestHandler = async (request, response, next) => {
 		const onChunk = (chunk: string) => {
 			accumulatedText += chunk;
 
-			if (/```(?:json|chart)?\s*\{\s*"(?:type|chartType)"/i.test(accumulatedText)) {
+			if (/(?:```(?:json|chart)?\s*\{|\{\s*"(?:type|chartType|charts)")/i.test(accumulatedText)) {
 				isChartBlock = true;
 			}
 
