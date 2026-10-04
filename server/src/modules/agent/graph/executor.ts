@@ -17,7 +17,9 @@ const safeFailure = (safeMessage: string) => ({
 	retryable: false,
 });
 
-export const executePlan = async (state: AgentGraphState) => {
+import type { AgentPerfTracker } from "../utils/perfLogger";
+
+export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTracker) => {
 	const plan = state.plan;
 	if (!plan) return { stepResults: {} };
 	const stepResults: Record<string, unknown> = {};
@@ -49,6 +51,13 @@ export const executePlan = async (state: AgentGraphState) => {
 			continue;
 		}
 		try {
+			tracker?.log({
+				layer: "langgraph",
+				module: "executor.ts",
+				operation: "tool start",
+				toolCallId: step.id,
+				extra: { tool: step.tool, op: step.operation },
+			});
 			const args = step.args;
 			switch (`${step.tool}:${step.operation}`) {
 				case "customer_tool:list_customers":
@@ -176,8 +185,11 @@ export const executePlan = async (state: AgentGraphState) => {
 				default:
 					stepResults[step.id] = safeFailure("That operation is not available yet.");
 			}
+			tracker?.log({ layer: "langgraph", module: "executor.ts", operation: "tool end", toolCallId: step.id });
+			tracker?.log({ layer: "langgraph", module: "executor.ts", operation: "tool result", toolCallId: step.id });
 		} catch {
 			stepResults[step.id] = safeFailure("The requested business operation could not be completed.");
+			tracker?.log({ layer: "langgraph", module: "executor.ts", operation: "tool end (failed)", toolCallId: step.id });
 		}
 	}
 	return { stepResults };

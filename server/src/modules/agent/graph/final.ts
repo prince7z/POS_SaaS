@@ -2,11 +2,14 @@ import { createOpenRouterClient } from "../client/openRouterClient";
 import type { Plan } from "../schemas";
 import { finalSystemPrompt } from "../prompts/final";
 
+import type { AgentPerfTracker } from "../utils/perfLogger";
+
 export const createFinalResponse = async (
 	request: string,
 	plan: Plan,
 	stepResults: Record<string, unknown>,
-	onChunk?: (chunk: string) => void
+	onChunk?: (chunk: string) => void,
+	tracker?: AgentPerfTracker
 ) => {
 	const messages = [
 		{ role: "system" as const, content: finalSystemPrompt },
@@ -14,8 +17,8 @@ export const createFinalResponse = async (
 	];
 
 	if (onChunk) {
-		return createOpenRouterClient().stream(messages, onChunk);
+		return createOpenRouterClient().stream(messages, onChunk, tracker);
 	}
-	return createOpenRouterClient().invoke(messages);
+	return createOpenRouterClient().invoke(messages, tracker);
 };
 

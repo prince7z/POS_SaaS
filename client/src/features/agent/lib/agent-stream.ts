@@ -1,9 +1,12 @@
 import type { AgentEvent } from '../types/agent'
+import type { FrontendPerfTracker } from './perfTracker'
 
 export interface StreamAgentOptions {
   url?: string
   message: string
   conversationId?: string
+  requestId?: string
+  tracker?: FrontendPerfTracker
   signal?: AbortSignal
   onEvent: (event: AgentEvent) => void
   onError?: (error: Error) => void
@@ -15,6 +18,8 @@ export async function streamAgent(options: StreamAgentOptions): Promise<void> {
     url = '/api/agent/stream',
     message,
     conversationId,
+    requestId,
+    tracker,
     signal,
     onEvent,
     onError,
@@ -24,19 +29,25 @@ export async function streamAgent(options: StreamAgentOptions): Promise<void> {
   const token = localStorage.getItem('pos-auth-token')
 
   try {
+    tracker?.log({ module: 'agent-stream.ts', operation: 'fetch start' })
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
+        ...(requestId ? { 'x-request-id': requestId } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
         message,
         conversationId,
+        requestId,
       }),
       signal,
     })
+
+    tracker?.log({ module: 'agent-stream.ts', operation: 'response headers received' })
 
     if (!response.ok) {
       throw new Error(`Server returned HTTP ${response.status}: ${response.statusText}`)
@@ -54,48 +65,78 @@ export async function streamAgent(options: StreamAgentOptions): Promise<void> {
       const { done, value } = await reader.read()
       if (done) break
 
+      tracker?.log({
+        module: 'agent-stream.ts',
+        operation: 'raw stream chunk received',
+        chunkLength: value?.length,
+      })
+
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split(/\r?\n/)
-      // Keep the last incomplete line in the buffer
       buffer = lines.pop() ?? ''
 
       for (const line of lines) {
         const trimmed = line.trim()
         if (!trimmed || trimmed.startsWith(':')) {
-          // Ignore empty lines or SSE comments
           continue
         }
 
         if (trimmed.startsWith('data:')) {
           const rawData = trimmed.slice(5).trim()
           if (rawData === '[DONE]') {
-            onEvent({
+            const doneEvt: AgentEvent = {
               id: `done_${Date.now()}`,
               type: 'done',
               data: null,
-            })
+            }
+            tracker?.log({ module: 'agent-stream.ts', operation: 'SSE event parsed', eventId: doneEvt.id, eventType: 'done' })
+            tracker?.log({ module: 'agent-stream.ts', operation: 'event-received', eventId: doneEvt.id, eventType: 'done' })
+            onEvent(doneEvt)
             continue
           }
 
           try {
             const parsedEvent = JSON.parse(rawData) as AgentEvent
             if (parsedEvent && parsedEvent.type) {
+              tracker?.log({
+                module: 'agent-stream.ts',
+                operation: 'SSE event parsed',
+                eventId: parsedEvent.id,
+                eventType: parsedEvent.type,
+              })
+              tracker?.log({
+                module: 'agent-stream.ts',
+                operation: 'event-received',
+                eventId: parsedEvent.id,
+                eventType: parsedEvent.type,
+              })
               onEvent(parsedEvent)
             }
           } catch {
-            // Malformed JSON event ignored to prevent UI crashes
+            // Malformed JSON event ignored
           }
         }
       }
     }
 
-    // Process any remaining buffered data
     if (buffer.trim().startsWith('data:')) {
       const rawData = buffer.trim().slice(5).trim()
       if (rawData !== '[DONE]') {
         try {
           const parsedEvent = JSON.parse(rawData) as AgentEvent
           if (parsedEvent && parsedEvent.type) {
+            tracker?.log({
+              module: 'agent-stream.ts',
+              operation: 'SSE event parsed',
+              eventId: parsedEvent.id,
+              eventType: parsedEvent.type,
+            })
+            tracker?.log({
+              module: 'agent-stream.ts',
+              operation: 'event-received',
+              eventId: parsedEvent.id,
+              eventType: parsedEvent.type,
+            })
             onEvent(parsedEvent)
           }
         } catch {
@@ -107,7 +148,6 @@ export async function streamAgent(options: StreamAgentOptions): Promise<void> {
     onComplete?.()
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'AbortError') {
-      // Handle user cancellation gracefully
       onComplete?.()
       return
     }

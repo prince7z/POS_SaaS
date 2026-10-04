@@ -16,6 +16,8 @@ export interface UseAgentStreamReturn {
   clearMessages: () => void
 }
 
+import { FrontendPerfTracker } from '../lib/perfTracker'
+
 export function useAgentStream(initialConversation?: ConversationSummary | null): UseAgentStreamReturn {
   const [messages, setMessages] = useState<AgentMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
@@ -40,7 +42,6 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
   }, [])
 
   const createNewConversation = useCallback(async () => {
-    // If the chat is already blank (no messages in current conversation), do not trigger another API request
     if (messages.length === 0 && activeConversationId) {
       return
     }
@@ -67,6 +68,7 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
     async (text: string) => {
       if (!text.trim() || isStreaming) return
 
+      const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
       const userMessageId = `user_${Date.now()}`
       const assistantMessageId = `asst_${Date.now()}`
       let convId = activeConversationId
@@ -81,6 +83,9 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
           setActiveConversationId(convId)
         }
       }
+
+      const tracker = new FrontendPerfTracker(requestId, convId)
+      tracker.log({ module: 'useAgentStream.ts', operation: 'user submit' })
 
       const userMsg: AgentMessage = {
         id: userMessageId,
@@ -107,9 +112,23 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
       await executeAgentStream({
         message: text,
         conversationId: convId,
+        requestId,
+        tracker,
         signal: controller.signal,
         onEvent: (event: AgentEvent) => {
+          tracker.log({
+            module: 'useAgentStream.ts',
+            operation: 'reducer',
+            eventId: event.id,
+            eventType: event.type,
+          })
           setMessages((prev) => {
+            tracker.log({
+              module: 'useAgentStream.ts',
+              operation: 'state update',
+              eventId: event.id,
+              eventType: event.type,
+            })
             const lastIndex = prev.length - 1
             if (lastIndex < 0 || prev[lastIndex].id !== assistantMessageId) {
               return prev
@@ -121,6 +140,7 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
           })
         },
         onError: (err: Error) => {
+          tracker.log({ module: 'useAgentStream.ts', operation: 'onError', extra: { message: err.message } })
           setMessages((prev) => {
             const lastIndex = prev.length - 1
             if (lastIndex < 0 || prev[lastIndex].id !== assistantMessageId) {
@@ -143,8 +163,10 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
             return list
           })
           setIsStreaming(false)
+          tracker.printTimeline()
         },
         onComplete: () => {
+          tracker.log({ module: 'useAgentStream.ts', operation: 'onComplete' })
           setMessages((prev) => {
             const lastIndex = prev.length - 1
             if (lastIndex < 0 || prev[lastIndex].id !== assistantMessageId) {
@@ -163,6 +185,7 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
             return prev
           })
           setIsStreaming(false)
+          tracker.printTimeline()
         },
       })
     },

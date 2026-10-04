@@ -23,14 +23,33 @@ export type AgentEvent<T = unknown> = {
 	data: T;
 };
 
-export const writeAgentEvent = (response: Response, event: AgentEvent) => {
+import type { AgentPerfTracker } from "../utils/perfLogger";
+
+export const writeAgentEvent = (response: Response, event: AgentEvent, tracker?: AgentPerfTracker) => {
 	const envelope = {
 		id: event.id || `evt_${Date.now()}_${randomUUID().slice(0, 8)}`,
 		type: event.type,
 		timestamp: event.timestamp || Date.now(),
 		data: event.data,
 	};
+
+	tracker?.log({
+		layer: "sse",
+		module: "events.ts",
+		operation: "event-created",
+		eventId: envelope.id,
+		eventType: envelope.type,
+	});
+
 	response.write(`data: ${JSON.stringify(envelope)}\n\n`);
+
+	tracker?.log({
+		layer: "sse",
+		module: "events.ts",
+		operation: "event-written",
+		eventId: envelope.id,
+		eventType: envelope.type,
+	});
 };
 
 export const startAgentStream = (response: Response) => {

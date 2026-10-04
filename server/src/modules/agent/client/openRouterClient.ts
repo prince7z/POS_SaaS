@@ -19,10 +19,14 @@ type OpenRouterResponse = {
 	};
 };
 
-const request = async (messages: ChatMessage[], responseFormat?: "json_object") => {
+import type { AgentPerfTracker } from "../utils/perfLogger";
+
+const request = async (messages: ChatMessage[], responseFormat?: "json_object", tracker?: AgentPerfTracker) => {
 	if (!env.agent.openRouterApiKey) {
 		throw new Error("Agent model is not configured");
 	}
+
+	tracker?.log({ layer: "llm", module: "openRouterClient.ts", operation: "LLM start" });
 
 	let lastFailure = "OpenRouter returned an empty response";
 	for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -67,11 +71,14 @@ const request = async (messages: ChatMessage[], responseFormat?: "json_object") 
 const streamRequest = async (
 	messages: ChatMessage[],
 	onChunk: (chunk: string) => void,
-	responseFormat?: "json_object"
+	responseFormat?: "json_object",
+	tracker?: AgentPerfTracker
 ): Promise<string> => {
 	if (!env.agent.openRouterApiKey) {
 		throw new Error("Agent model is not configured");
 	}
+
+	tracker?.log({ layer: "llm", module: "openRouterClient.ts", operation: "LLM start" });
 
 	const response = await fetch(OPEN_ROUTER_BASE_URL, {
 		method: "POST",
@@ -105,6 +112,7 @@ const streamRequest = async (
 	const decoder = new TextDecoder("utf-8");
 	let accumulated = "";
 	let buffer = "";
+	let chunkIndex = 0;
 
 	while (true) {
 		const { done, value } = await reader.read();
@@ -126,6 +134,14 @@ const streamRequest = async (
 					const delta = parsed.choices?.[0]?.delta?.content;
 					if (delta) {
 						accumulated += delta;
+						chunkIndex += 1;
+						tracker?.log({
+							layer: "llm",
+							module: "openRouterClient.ts",
+							operation: `LLM chunk #${chunkIndex}`,
+							chunkIndex,
+							chunkLength: delta.length,
+						});
 						onChunk(delta);
 					}
 				} catch {
@@ -143,6 +159,14 @@ const streamRequest = async (
 				const delta = parsed.choices?.[0]?.delta?.content;
 				if (delta) {
 					accumulated += delta;
+					chunkIndex += 1;
+					tracker?.log({
+						layer: "llm",
+						module: "openRouterClient.ts",
+						operation: `LLM chunk #${chunkIndex}`,
+						chunkIndex,
+						chunkLength: delta.length,
+					});
 					onChunk(delta);
 				}
 			}
@@ -155,8 +179,9 @@ const streamRequest = async (
 };
 
 export const createOpenRouterClient = () => ({
-	invoke: (messages: ChatMessage[]) => request(messages),
-	invokeJson: (messages: ChatMessage[]) => request(messages, "json_object"),
-	stream: (messages: ChatMessage[], onChunk: (chunk: string) => void) => streamRequest(messages, onChunk),
+	invoke: (messages: ChatMessage[], tracker?: AgentPerfTracker) => request(messages, undefined, tracker),
+	invokeJson: (messages: ChatMessage[], tracker?: AgentPerfTracker) => request(messages, "json_object", tracker),
+	stream: (messages: ChatMessage[], onChunk: (chunk: string) => void, tracker?: AgentPerfTracker) =>
+		streamRequest(messages, onChunk, undefined, tracker),
 });
 

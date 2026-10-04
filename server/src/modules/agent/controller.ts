@@ -16,13 +16,17 @@ const routeParam = (value: string | string[] | undefined) => {
 	return value;
 };
 
-const trustedUser = async (request: Parameters<RequestHandler>[0]) => {
+import { AgentPerfTracker } from "./utils/perfLogger";
+
+const trustedUser = async (request: Parameters<RequestHandler>[0], tracker?: AgentPerfTracker) => {
 	if (!request.auth) throw unauthorized();
 	const user = await prisma.user.findFirst({
 		where: { id: request.auth.userId, companyId: request.auth.companyId, isActive: true, deletedAt: null },
 		select: { id: true, companyId: true, accesses: true },
 	});
 	if (!user) throw unauthorized();
+	tracker?.log({ layer: "backend", module: "controller.ts", operation: "auth completed" });
+	tracker?.log({ layer: "backend", module: "controller.ts", operation: "authorization completed" });
 	return { id: user.id, companyId: user.companyId, permissions: user.accesses.map(String) };
 };
 
@@ -123,14 +127,19 @@ function emitFinalResponse(
 	response: Parameters<RequestHandler>[1],
 	finalResponse: unknown,
 	textAlreadyStreamed = false,
-	messageId = `msg_${Date.now()}`
+	messageId = `msg_${Date.now()}`,
+	tracker?: AgentPerfTracker
 ) {
 	if (!finalResponse) {
 		if (!textAlreadyStreamed) {
-			writeAgentEvent(response, {
-				type: "text",
-				data: { messageId, delta: "I could not complete that request." },
-			});
+			writeAgentEvent(
+				response,
+				{
+					type: "text",
+					data: { messageId, delta: "I could not complete that request." },
+				},
+				tracker
+			);
 		}
 		return;
 	}
@@ -144,41 +153,65 @@ function emitFinalResponse(
 		const parsed = JSON.parse(candidate);
 		if (parsed && typeof parsed === "object") {
 			if (parsed.text && !textAlreadyStreamed) {
-				writeAgentEvent(response, {
-					type: "text",
-					data: { messageId, delta: String(parsed.text) },
-				});
+				writeAgentEvent(
+					response,
+					{
+						type: "text",
+						data: { messageId, delta: String(parsed.text) },
+					},
+					tracker
+				);
 			}
 			if (parsed.table) {
-				writeAgentEvent(response, {
-					type: "table",
-					data: parsed.table.data || parsed.table,
-				});
+				writeAgentEvent(
+					response,
+					{
+						type: "table",
+						data: parsed.table.data || parsed.table,
+					},
+					tracker
+				);
 			}
 			if (parsed.chart) {
-				writeAgentEvent(response, {
-					type: "chart",
-					data: parsed.chart.data || parsed.chart,
-				});
+				writeAgentEvent(
+					response,
+					{
+						type: "chart",
+						data: parsed.chart.data || parsed.chart,
+					},
+					tracker
+				);
 			}
 			if (parsed.chart_batch || (Array.isArray(parsed.charts) && parsed.charts.length > 0)) {
-				writeAgentEvent(response, {
-					type: "chart_batch",
-					data: parsed.chart_batch?.data || parsed.chart_batch || parsed,
-				});
+				writeAgentEvent(
+					response,
+					{
+						type: "chart_batch",
+						data: parsed.chart_batch?.data || parsed.chart_batch || parsed,
+					},
+					tracker
+				);
 			}
 			if (parsed.type === "chart" || parsed.chartType) {
-				writeAgentEvent(response, {
-					type: "chart",
-					data: parsed.data || parsed,
-				});
+				writeAgentEvent(
+					response,
+					{
+						type: "chart",
+						data: parsed.data || parsed,
+					},
+					tracker
+				);
 				return;
 			}
 			if (parsed.type === "table" || (Array.isArray(parsed.columns) && Array.isArray(parsed.rows))) {
-				writeAgentEvent(response, {
-					type: "table",
-					data: parsed.data || parsed,
-				});
+				writeAgentEvent(
+					response,
+					{
+						type: "table",
+						data: parsed.data || parsed,
+					},
+					tracker
+				);
 				return;
 			}
 			if (parsed.text || parsed.table || parsed.chart || parsed.chart_batch) {
@@ -192,37 +225,53 @@ function emitFinalResponse(
 	const { cleanText, tables } = parseMarkdownTables(raw);
 
 	if (cleanText && !textAlreadyStreamed) {
-		writeAgentEvent(response, {
-			type: "text",
-			data: { messageId, delta: cleanText },
-		});
+		writeAgentEvent(
+			response,
+			{
+				type: "text",
+				data: { messageId, delta: cleanText },
+			},
+			tracker
+		);
 	}
 
 	for (const tableData of tables) {
-		writeAgentEvent(response, {
-			type: "table",
-			data: tableData,
-		});
+		writeAgentEvent(
+			response,
+			{
+				type: "table",
+				data: tableData,
+			},
+			tracker
+		);
 	}
 
 	if (!textAlreadyStreamed && tables.length === 0 && !cleanText) {
-		writeAgentEvent(response, {
-			type: "text",
-			data: { messageId, delta: raw },
-		});
+		writeAgentEvent(
+			response,
+			{
+				type: "text",
+				data: { messageId, delta: raw },
+			},
+			tracker
+		);
 	}
 }
 
-// Stream agent handler for POST /api/agent/stream
 export const stream: RequestHandler = async (request, response, next) => {
 	const runId = randomUUID();
+	const reqHeader = request.headers["x-request-id"];
+	const bodyObj = request.body as { requestId?: string; message?: string; conversationId?: string; content?: string };
+	const requestId = (typeof reqHeader === "string" ? reqHeader : bodyObj?.requestId) || `req_${Date.now()}_${randomUUID().slice(0, 6)}`;
+	const tracker = new AgentPerfTracker(requestId);
+
 	try {
-		const user = await trustedUser(request);
-		const body = request.body as { message?: string; conversationId?: string; content?: string };
-		const content = (body.message || body.content || "").trim();
+		tracker.log({ layer: "backend", module: "controller.ts", operation: "HTTP request received" });
+		const user = await trustedUser(request, tracker);
+		const content = (bodyObj.message || bodyObj.content || "").trim();
 		if (!content) throw validationError("Message content is required");
 
-		let conversationId = body.conversationId || (request.params.conversationId ? routeParam(request.params.conversationId) : undefined);
+		let conversationId = bodyObj.conversationId || (request.params.conversationId ? routeParam(request.params.conversationId) : undefined);
 		if (conversationId) {
 			await getConversation(conversationId, user.id, user.companyId);
 		} else {
@@ -230,14 +279,19 @@ export const stream: RequestHandler = async (request, response, next) => {
 			conversationId = newConv.id;
 		}
 
+		tracker.conversationId = conversationId;
 		await addMessage(conversationId, "user", content);
 		const controller = registerRun(runId);
 		startAgentStream(response);
 
-		writeAgentEvent(response, {
-			type: "thinking",
-			data: { status: "running", message: "Analyzing query & planning response..." },
-		});
+		writeAgentEvent(
+			response,
+			{
+				type: "thinking",
+				data: { status: "running", message: "Analyzing query & planning response..." },
+			},
+			tracker
+		);
 
 		const messageId = `msg_${Date.now()}`;
 		let isJsonStream = false;
@@ -250,17 +304,22 @@ export const stream: RequestHandler = async (request, response, next) => {
 				isJsonStream = true;
 				return;
 			}
-			writeAgentEvent(response, {
-				type: "text",
-				data: { messageId, delta: chunk },
-			});
+			writeAgentEvent(
+				response,
+				{
+					type: "text",
+					data: { messageId, delta: chunk },
+				},
+				tracker
+			);
 		};
 
+		tracker.log({ layer: "backend", module: "controller.ts", operation: "LangGraph started" });
 		const graph = createAgentGraph(await getAgentCheckpointer());
 		const eventStream = await graph.stream(
 			{ request: content, user },
 			{
-				configurable: { thread_id: conversationId, onChunk },
+				configurable: { thread_id: conversationId, onChunk, tracker },
 				signal: controller.signal,
 				streamMode: "updates",
 			},
@@ -273,18 +332,26 @@ export const stream: RequestHandler = async (request, response, next) => {
 
 			// Planner node completed
 			if (update.planner?.plan) {
-				writeAgentEvent(response, {
-					type: "thinking",
-					data: { status: "completed", message: "Plan created" },
-				});
+				writeAgentEvent(
+					response,
+					{
+						type: "thinking",
+						data: { status: "completed", message: "Plan created" },
+					},
+					tracker
+				);
 
 				if (Array.isArray(update.planner.plan.steps)) {
 					for (const step of update.planner.plan.steps) {
 						const desc = "description" in step ? step.description : "Step processing";
-						writeAgentEvent(response, {
-							type: "todo",
-							data: { id: step.id, title: desc, status: "running" },
-						});
+						writeAgentEvent(
+							response,
+							{
+								type: "todo",
+								data: { id: step.id, title: desc, status: "running" },
+							},
+							tracker
+						);
 					}
 				}
 			}
@@ -294,18 +361,30 @@ export const stream: RequestHandler = async (request, response, next) => {
 				const stepResults = update.executor.stepResults as Record<string, unknown>;
 				for (const [stepId, res] of Object.entries(stepResults)) {
 					const resMsg = typeof res === "object" && res !== null && "summary" in res ? String((res as { summary: unknown }).summary) : "Step finished";
-					writeAgentEvent(response, {
-						type: "tool_call",
-						data: { toolCallId: stepId, name: stepId, label: stepId, status: "completed" },
-					});
-					writeAgentEvent(response, {
-						type: "tool_result",
-						data: { toolCallId: stepId, status: "completed", message: resMsg },
-					});
-					writeAgentEvent(response, {
-						type: "todo",
-						data: { id: stepId, title: stepId, status: "completed" },
-					});
+					writeAgentEvent(
+						response,
+						{
+							type: "tool_call",
+							data: { toolCallId: stepId, name: stepId, label: stepId, status: "completed" },
+						},
+						tracker
+					);
+					writeAgentEvent(
+						response,
+						{
+							type: "tool_result",
+							data: { toolCallId: stepId, status: "completed", message: resMsg },
+						},
+						tracker
+					);
+					writeAgentEvent(
+						response,
+						{
+							type: "todo",
+							data: { id: stepId, title: stepId, status: "completed" },
+						},
+						tracker
+					);
 				}
 			}
 
@@ -315,31 +394,46 @@ export const stream: RequestHandler = async (request, response, next) => {
 			}
 		}
 
+		tracker.log({ layer: "backend", module: "controller.ts", operation: "stream completed" });
+
 		if (finalResponsePayload) {
 			await addMessage(conversationId, "assistant", typeof finalResponsePayload === "string" ? finalResponsePayload : JSON.stringify(finalResponsePayload));
-			emitFinalResponse(response, finalResponsePayload, !isJsonStream && accumulatedText.length > 0, messageId);
+			emitFinalResponse(response, finalResponsePayload, !isJsonStream && accumulatedText.length > 0, messageId, tracker);
 		} else {
-			writeAgentEvent(response, {
-				type: "text",
-				data: { messageId, delta: "I could not complete that request." },
-			});
+			writeAgentEvent(
+				response,
+				{
+					type: "text",
+					data: { messageId, delta: "I could not complete that request." },
+				},
+				tracker
+			);
 		}
 
-		writeAgentEvent(response, { type: "done", data: null });
+		writeAgentEvent(response, { type: "done", data: null }, tracker);
 		response.end();
+		tracker.log({ layer: "backend", module: "controller.ts", operation: "HTTP request completed" });
+		tracker.printTimeline();
 	} catch (error) {
 		if (isGraphInterrupt(error) && response.headersSent) {
 			handleInterrupt(response, error);
+			tracker.printTimeline();
 			return;
 		}
 		if (!response.headersSent) return next(error);
 		logger.error("Agent run failed", error);
-		writeAgentEvent(response, {
-			type: "error",
-			data: { code: "AGENT_ERROR", message: "The assistant could not complete this request." },
-		});
-		writeAgentEvent(response, { type: "done", data: null });
+		writeAgentEvent(
+			response,
+			{
+				type: "error",
+				data: { code: "AGENT_ERROR", message: "The assistant could not complete this request." },
+			},
+			tracker
+		);
+		writeAgentEvent(response, { type: "done", data: null }, tracker);
 		response.end();
+		tracker.log({ layer: "backend", module: "controller.ts", operation: "HTTP request completed (failed)" });
+		tracker.printTimeline();
 	} finally {
 		finishRun(runId);
 	}

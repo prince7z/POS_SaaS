@@ -21,6 +21,8 @@ export function AgentBlockRenderer({
   conversationId: string
   onRespond: (payload: InteractionPayload) => void
 }) {
+  console.log(`[PERF][FRONTEND] +${performance.now().toFixed(1)}ms | AgentBlockRenderer::UI/block render | type:${block.type}`)
+
   switch (block.type) {
     case 'thinking':
       return <ThinkingBlock block={block} />

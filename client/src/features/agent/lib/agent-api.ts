@@ -188,7 +188,7 @@ export async function submitAgentInteraction(payload: InteractionPayload): Promi
   }
 }
 
-export async function executeAgentStream(options: StreamAgentOptions): Promise<void> {
+export async function executeAgentStream(options: StreamAgentOptions & { tracker?: import('./perfTracker').FrontendPerfTracker; requestId?: string }): Promise<void> {
   // Invalidate conversation list cache so fresh conversation appears in history
   clearConversationCache()
 
@@ -205,11 +205,9 @@ export async function executeAgentStream(options: StreamAgentOptions): Promise<v
       url: `${baseUrl}/agent/stream`,
       onEvent: handleEvent,
       onError: async (error) => {
-        // If stream failed before any event was received from real backend, fall back to mock
         if (!receivedAnyEvent && !options.signal?.aborted) {
           await mockStreamAgent(options)
         } else {
-          // Real stream already delivered partial events: do not duplicate with mock stream!
           options.onError?.(error)
         }
       },

@@ -210,9 +210,9 @@ export function reduceAgentEvent(currentMessage: AgentMessage, event: AgentEvent
     }
 
     case 'done': {
-      // Finalize thinking blocks if any were left in running state
+      // Finalize thinking and todo blocks if any were left in running state
       const finalizedBlocks = blocks.map((b) => {
-        if (b.type === 'thinking' && b.status === 'running') {
+        if ((b.type === 'thinking' || b.type === 'todo') && b.status === 'running') {
           return { ...b, status: 'completed' as const }
         }
         return b
