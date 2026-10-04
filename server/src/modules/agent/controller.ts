@@ -483,8 +483,13 @@ export const stream: RequestHandler = async (request, response, next) => {
 // Interaction response handler for POST /api/agent/respond
 export const respond: RequestHandler = async (request, response, next) => {
 	const runId = randomUUID();
+	const reqHeader = request.headers["x-request-id"];
+	const requestId = (typeof reqHeader === "string" ? reqHeader : undefined) || `req_${Date.now()}_${randomUUID().slice(0, 6)}`;
+	const tracker = new AgentPerfTracker(requestId);
+
 	try {
-		const user = await trustedUser(request);
+		tracker.log({ layer: "backend", module: "controller.ts", operation: "HTTP respond request received" });
+		const user = await trustedUser(request, tracker);
 		const body = request.body as {
 			conversationId?: string;
 			questionId?: string;
@@ -496,6 +501,7 @@ export const respond: RequestHandler = async (request, response, next) => {
 		const conversationId = body.conversationId || (request.params.conversationId ? routeParam(request.params.conversationId) : undefined);
 		if (!conversationId) throw validationError("Conversation identifier required");
 		await getConversation(conversationId, user.id, user.companyId);
+		tracker.conversationId = conversationId;
 
 		const resumeValue =
 			body.response && typeof body.response === "object" && "value" in body.response
@@ -505,14 +511,42 @@ export const respond: RequestHandler = async (request, response, next) => {
 		const controller = registerRun(runId);
 		startAgentStream(response);
 
-		writeAgentEvent(response, {
-			type: "thinking",
-			data: { status: "running", message: "Processing response and continuing..." },
-		});
+		writeAgentEvent(
+			response,
+			{
+				type: "thinking",
+				data: { status: "running", message: "Processing response and continuing..." },
+			},
+			tracker
+		);
 
+		let messageId = `msg_${Date.now()}`;
+		let accumulatedText = "";
+		let isChartBlock = false;
+
+		const onChunk = (chunk: string) => {
+			accumulatedText += chunk;
+			if (/(?:```(?:json|chart)?\s*\{|\{\s*"(?:type|chartType|charts)")/i.test(accumulatedText)) {
+				isChartBlock = true;
+			}
+			const trimmed = accumulatedText.trimStart();
+			if (isChartBlock || (trimmed.startsWith("{") && !trimmed.includes("\n\n"))) {
+				return;
+			}
+			writeAgentEvent(
+				response,
+				{
+					type: "text",
+					data: { messageId, delta: chunk },
+				},
+				tracker
+			);
+		};
+
+		tracker.log({ layer: "backend", module: "controller.ts", operation: "LangGraph resume started" });
 		const graph = createAgentGraph(await getAgentCheckpointer());
 		const eventStream = await graph.stream(new Command({ resume: resumeValue }), {
-			configurable: { thread_id: conversationId },
+			configurable: { thread_id: conversationId, onChunk, tracker },
 			signal: controller.signal,
 			streamMode: "updates",
 		});
@@ -525,10 +559,14 @@ export const respond: RequestHandler = async (request, response, next) => {
 			if (update.executor?.stepResults) {
 				const stepResults = update.executor.stepResults as Record<string, unknown>;
 				for (const [stepId] of Object.entries(stepResults)) {
-					writeAgentEvent(response, {
-						type: "todo",
-						data: { id: stepId, title: stepId, status: "completed" },
-					});
+					writeAgentEvent(
+						response,
+						{
+							type: "todo",
+							data: { id: stepId, title: stepId, status: "completed" },
+						},
+						tracker
+					);
 				}
 			}
 
@@ -537,42 +575,60 @@ export const respond: RequestHandler = async (request, response, next) => {
 			}
 		}
 
+		tracker.log({ layer: "backend", module: "controller.ts", operation: "resume stream completed" });
+
 		const stateSnapshot = await graph.getState({ configurable: { thread_id: conversationId } });
 		const pendingInterrupts = stateSnapshot.tasks?.flatMap((t) => t.interrupts || []) || [];
 
 		if (pendingInterrupts.length > 0) {
 			const activeInterrupt = pendingInterrupts[0];
-			handleInterruptPayload(response, activeInterrupt.value);
-			writeAgentEvent(response, { type: "done", data: null });
+			tracker.log({ layer: "backend", module: "controller.ts", operation: "Graph interrupt detected after resume stream" });
+			handleInterruptPayload(response, activeInterrupt.value, tracker);
+			writeAgentEvent(response, { type: "done", data: null }, tracker);
 			response.end();
+			tracker.log({ layer: "backend", module: "controller.ts", operation: "HTTP respond request completed (interrupted)" });
+			tracker.printTimeline();
 			return;
 		}
 
-		writeAgentEvent(response, {
-			type: "thinking",
-			data: { status: "completed", message: "Task update complete" },
-		});
+		writeAgentEvent(
+			response,
+			{
+				type: "thinking",
+				data: { status: "completed", message: "Task update complete" },
+			},
+			tracker
+		);
 
 		if (finalResponsePayload) {
 			await addMessage(conversationId, "assistant", typeof finalResponsePayload === "string" ? finalResponsePayload : JSON.stringify(finalResponsePayload));
-			emitFinalResponse(response, finalResponsePayload);
+			emitFinalResponse(response, finalResponsePayload, !isChartBlock && accumulatedText.length > 0, messageId, tracker);
 		}
 
-		writeAgentEvent(response, { type: "done", data: null });
+		writeAgentEvent(response, { type: "done", data: null }, tracker);
 		response.end();
+		tracker.log({ layer: "backend", module: "controller.ts", operation: "HTTP respond request completed" });
+		tracker.printTimeline();
 	} catch (error) {
 		if (isGraphInterrupt(error)) {
 			handleInterrupt(response, error);
+			tracker.printTimeline();
 			return;
 		}
 		if (!response.headersSent) return next(error);
 		logger.error("Agent resume failed", error);
-		writeAgentEvent(response, {
-			type: "error",
-			data: { code: "AGENT_RESUME_ERROR", message: "The assistant could not resume this request." },
-		});
-		writeAgentEvent(response, { type: "done", data: null });
+		writeAgentEvent(
+			response,
+			{
+				type: "error",
+				data: { code: "AGENT_RESUME_ERROR", message: "The assistant could not resume this request." },
+			},
+			tracker
+		);
+		writeAgentEvent(response, { type: "done", data: null }, tracker);
 		response.end();
+		tracker.log({ layer: "backend", module: "controller.ts", operation: "HTTP respond request completed (failed)" });
+		tracker.printTimeline();
 	} finally {
 		finishRun(runId);
 	}

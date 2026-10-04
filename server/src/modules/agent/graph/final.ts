@@ -22,9 +22,20 @@ export const createFinalResponse = async (
 		{ role: "user" as const, content: JSON.stringify({ currentRequest: request, conversationHistory: historyContext, plan, stepResults }) },
 	];
 
+	const options = {
+		nodeName: "final",
+		state: {
+			request,
+			planStepsCount: plan.steps?.length || 0,
+			stepResultsKeys: Object.keys(stepResults || {}),
+			stepResults,
+			historyCount: history.length,
+		},
+	};
+
 	if (onChunk) {
-		return createOpenRouterClient().stream(messages, onChunk, tracker, signal);
+		return createOpenRouterClient().stream(messages, onChunk, tracker, signal, options);
 	}
-	return createOpenRouterClient().invoke(messages, tracker, signal);
+	return createOpenRouterClient().invoke(messages, tracker, signal, options);
 };
 

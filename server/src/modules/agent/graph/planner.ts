@@ -32,28 +32,40 @@ export const createPlan = async (
 		? history.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n")
 		: "No previous messages.";
 
-	const content = await createOpenRouterClient().invokeJson(
-		[
-			{
-				role: "system",
-				content: `${plannerSystemPrompt}
+	const messages = [
+		{
+			role: "system" as const,
+			content: `${plannerSystemPrompt}
 Return JSON with exactly this shape:
 {"steps":[{"id":"step_1","type":"human_input","request":{"type":"question","question":"Which period would you like to analyze?","options":[{"id":"30d","label":"Last 30 days","value":"30d"},{"id":"90d","label":"Last 90 days","value":"90d"}],"allowOther":true},"description":"Clarify period","dependsOn":[]},{"id":"step_2","type":"final","description":"Finalize response","dependsOn":["step_1"]}]}`,
-			},
-			{
-				role: "user",
-				content: JSON.stringify({
-					currentRequest: request,
-					conversationHistory: historyContext,
-					availableTools,
-					instruction: `Create an ordered plan using only available tools or human_input/final steps. Take previous conversation history into full account to understand context.
+		},
+		{
+			role: "user" as const,
+			content: JSON.stringify({
+				currentRequest: request,
+				conversationHistory: historyContext,
+				availableTools,
+				instruction: `Create an ordered plan using only available tools or human_input/final steps. Take previous conversation history into full account to understand context.
 For expense requests, use finance_tool. Use list_expenses for "what/recent/show/list expenses"; use expense_summary for totals or counts;
 use expense_analytics for trends or category breakdowns; use pnl_dashboard when the request asks about profit or loss.
 Date filters must use YYYY-MM-DD. Always include a final step.`,
-				}),
+			}),
+		},
+	];
+
+	const content = await createOpenRouterClient().invokeJson(
+		messages,
+		tracker,
+		undefined,
+		{
+			nodeName: "planner",
+			state: {
+				request,
+				user: { id: user.id, companyId: user.companyId, permissionsCount: user.permissions.length },
+				historyCount: history.length,
+				availableToolsCount: availableTools.length,
 			},
-		],
-		tracker
+		}
 	);
 
 	const normalized = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();

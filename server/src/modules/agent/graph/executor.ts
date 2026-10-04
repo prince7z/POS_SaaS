@@ -17,7 +17,7 @@ const safeFailure = (safeMessage: string) => ({
 	retryable: false,
 });
 
-import type { AgentPerfTracker } from "../utils/perfLogger";
+import { estimateTokens, type AgentPerfTracker } from "../utils/perfLogger";
 
 export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTracker) => {
 	const plan = state.plan;
@@ -90,6 +90,11 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 			continue;
 		}
 		try {
+			const toolStartTime = performance.now();
+			tracker?.logToolStart({
+				toolCallId: step.id,
+				toolName: `${step.tool}:${step.operation}`,
+			});
 			tracker?.log({
 				layer: "langgraph",
 				module: "executor.ts",
@@ -224,6 +229,15 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 				default:
 					stepResults[step.id] = safeFailure("That operation is not available yet.");
 			}
+			const toolDurationMs = Math.round((performance.now() - toolStartTime) * 100) / 100;
+			const resStr = JSON.stringify(stepResults[step.id] ?? "");
+			tracker?.logToolEnd({
+				toolCallId: step.id,
+				toolName: `${step.tool}:${step.operation}`,
+				durationMs: toolDurationMs,
+				resultCharCount: resStr.length,
+				resultEstTokens: estimateTokens(resStr),
+			});
 			tracker?.log({ layer: "langgraph", module: "executor.ts", operation: "tool end", toolCallId: step.id });
 			tracker?.log({ layer: "langgraph", module: "executor.ts", operation: "tool result", toolCallId: step.id });
 		} catch {
