@@ -45,7 +45,9 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
 
   const body = (await response.json()) as ApiSuccess<T> | ApiFailure
   if (!response.ok || !body.success) {
-    const error = body.success ? { code: 'HTTP_ERROR', message: response.statusText } : body.error
+    const error = 'error' in body && body.error
+      ? body.error
+      : { code: 'HTTP_ERROR', message: response.statusText || 'An unknown error occurred.' }
     throw new ApiError(error.message, error.code, response.status)
   }
   return body.data
