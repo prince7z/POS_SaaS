@@ -147,9 +147,7 @@ export function TextBlock({ block }: { block: TextBlockType }) {
             <TableBlock
               key={idx}
               block={{
-                id: `table_chunk_${idx}`,
                 type: 'table',
-                timestamp: Date.now(),
                 data: { columns: chunk.columns, rows: chunk.rows },
               }}
             />
