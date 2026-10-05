@@ -251,9 +251,8 @@ export function QrImageUploader({
     }
 
     if (targetImage?.key) {
-      const isPendingKey = targetImage.key.includes('/pending/')
-      const isUnsavedNewKey = isNewEntity || (initialKeys && !initialKeys.includes(targetImage.key))
-      if (isPendingKey || isUnsavedNewKey) {
+      const isSavedInDb = !isNewEntity && Boolean(initialKeys && initialKeys.includes(targetImage.key))
+      if (!isSavedInDb) {
         try {
           await deleteMediaKey(targetImage.key)
         } catch (err) {

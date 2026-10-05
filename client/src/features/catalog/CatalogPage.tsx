@@ -386,9 +386,32 @@ function ProductDialog({
         setError('Please wait for image uploads to finish.')
         return
       }
-      const payload = { ...form, imageKeys: [...existingImages, ...stagedKeys] }
-      if (initial) await updateProduct(initial.id, payload)
-      else await createProduct(payload)
+      const currentImageKeys = [...existingImages, ...stagedKeys]
+      if (initial) {
+        const diff: Partial<ProductPayload> = {}
+        if (form.name !== initial.name) diff.name = form.name
+        if (form.sku !== initial.sku) diff.sku = form.sku
+        if (form.barcode !== (initial.barcode ?? '')) diff.barcode = form.barcode
+        if (form.categoryId !== initial.categoryId) diff.categoryId = form.categoryId
+        if (form.brandId !== (initial.brand?.id ?? null)) diff.brandId = form.brandId
+        if (form.supplierId !== (initial.supplier?.id ?? null)) diff.supplierId = form.supplierId
+        if (form.description !== (initial.description ?? '')) diff.description = form.description
+        if (form.rrp !== initial.rrp) diff.rrp = form.rrp
+        if (form.sellingPrice !== initial.sellingPrice) diff.sellingPrice = form.sellingPrice
+        if (form.purchaseCost !== initial.purchaseCost) diff.purchaseCost = form.purchaseCost
+        if (form.stockQuantity !== initial.stockQuantity) diff.stockQuantity = form.stockQuantity
+        if (form.lowStockThreshold !== initial.lowStockThreshold) diff.lowStockThreshold = form.lowStockThreshold
+
+        const initialKeysJson = JSON.stringify(initial.imageKeys ?? [])
+        const currentKeysJson = JSON.stringify(currentImageKeys)
+        if (initialKeysJson !== currentKeysJson) {
+          diff.imageKeys = currentImageKeys
+        }
+
+        await updateProduct(initial.id, diff)
+      } else {
+        await createProduct({ ...form, imageKeys: currentImageKeys })
+      }
       onOpenChange(false)
       onSaved()
     } catch (cause) {
@@ -669,10 +692,32 @@ function EntityDialog({
     setError('')
     try {
       if (kind === 'category') {
-        if (initial) await updateCategory(initial.id, { name, description, parentId, logoKey: logoKey ?? null })
-        else await createCategory({ name, description, parentId, logoKey: logoKey ?? null })
-      } else if (initial) await updateBrand(initial.id, { name, description, logoKey: logoKey ?? null })
-      else await createBrand({ name, description, logoKey: logoKey ?? null })
+        if (initial) {
+          const diff: Partial<CategoryPayload> = {}
+          if (name !== initial.name) diff.name = name
+          if (description !== (initial.description ?? '')) diff.description = description
+          const initParent = (initial as CatalogCategory).parentId ?? null
+          if (parentId !== initParent) diff.parentId = parentId
+          const initLogo = initial.logoKey ?? null
+          const nextLogo = logoKey ?? null
+          if (initLogo !== nextLogo) diff.logoKey = nextLogo
+          await updateCategory(initial.id, diff)
+        } else {
+          await createCategory({ name, description, parentId, logoKey: logoKey ?? null })
+        }
+      } else {
+        if (initial) {
+          const diff: Partial<BrandPayload> = {}
+          if (name !== initial.name) diff.name = name
+          if (description !== (initial.description ?? '')) diff.description = description
+          const initLogo = initial.logoKey ?? null
+          const nextLogo = logoKey ?? null
+          if (initLogo !== nextLogo) diff.logoKey = nextLogo
+          await updateBrand(initial.id, diff)
+        } else {
+          await createBrand({ name, description, logoKey: logoKey ?? null })
+        }
+      }
       onOpenChange(false)
       onSaved()
     } catch (cause) {

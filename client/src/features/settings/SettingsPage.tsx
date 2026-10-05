@@ -154,13 +154,31 @@ function General({ company, onSaved }: { company: Company; onSaved: (company: Co
     setSaving(true)
     setError('')
     try {
-      let logoKey = company.logoKey
+      let logoKey = (form as any).logoKey
       if (file) {
         const upload = await requestCompanyLogoUploadUrl(file.type)
         await uploadCompanyLogo(upload, file)
         logoKey = upload.key
       }
-      const updated = await updateCompany({ ...form, ...(file ? { logoKey } : {}) })
+
+      const diff: Partial<Parameters<typeof updateCompany>[0]> = {}
+      if (form.name !== company.name) diff.name = form.name
+      if (form.phone !== (company.phone ?? '')) diff.phone = form.phone
+      if (form.email !== (company.email ?? '')) diff.email = form.email
+      if (form.addressLine1 !== (company.addressLine1 ?? '')) diff.addressLine1 = form.addressLine1
+      if (form.addressLine2 !== (company.addressLine2 ?? '')) diff.addressLine2 = form.addressLine2
+      if (form.city !== (company.city ?? '')) diff.city = form.city
+      if (form.state !== (company.state ?? '')) diff.state = form.state
+      if (form.postalCode !== (company.postalCode ?? '')) diff.postalCode = form.postalCode
+      if (form.countryCode !== company.countryCode) diff.countryCode = form.countryCode
+
+      const initLogo = company.logoKey ?? null
+      const nextLogo = logoKey === undefined ? initLogo : logoKey
+      if (initLogo !== nextLogo) {
+        diff.logoKey = nextLogo
+      }
+
+      const updated = await updateCompany(diff)
       onSaved(updated)
       setFile(undefined)
     } catch (cause) {

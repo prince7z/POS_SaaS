@@ -140,7 +140,27 @@ function CustomerForm({
     setSaving(true)
     setError('')
     try {
-      const customer = initial ? await updateCustomer(initial.id, form) : await createCustomer(form)
+      let customer: Customer
+      if (initial) {
+        const diff: Partial<CustomerPayload> = {}
+        if (form.name !== initial.name) diff.name = form.name
+        if (form.phone !== (initial.phone ?? '')) diff.phone = form.phone
+        if (form.email !== (initial.email ?? '')) diff.email = form.email
+        if (form.customerType !== (initial.customerType ?? '')) diff.customerType = form.customerType
+        if (form.addressLine1 !== (initial.addressLine1 ?? '')) diff.addressLine1 = form.addressLine1
+        if (form.addressLine2 !== (initial.addressLine2 ?? '')) diff.addressLine2 = form.addressLine2
+        if (form.city !== (initial.city ?? '')) diff.city = form.city
+        if (form.state !== (initial.state ?? '')) diff.state = form.state
+        if (form.postalCode !== (initial.postalCode ?? '')) diff.postalCode = form.postalCode
+        if (form.creditLimit !== initial.creditLimit) diff.creditLimit = form.creditLimit
+        const initProfile = initial.profileImageKey ?? null
+        const nextProfile = (form as any).profileImageKey ?? null
+        if (initProfile !== nextProfile) (diff as any).profileImageKey = nextProfile
+
+        customer = await updateCustomer(initial.id, diff)
+      } else {
+        customer = await createCustomer(form)
+      }
       if (profileFile) {
         const upload = await requestCustomerProfileUpload(customer.id, profileFile.type)
         const response = await fetch(upload.uploadUrl, {

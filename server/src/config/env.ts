@@ -33,6 +33,16 @@ const readPort = (): number => {
 
 const nodeEnv = readOptional("NODE_ENV") ?? "development";
 
+const awsEndpoint = readOptional("AWS_ENDPOINT_URL_S3");
+const awsBucket = readOptional("AWS_S3_BUCKET") ?? readOptional("BUCKET_NAME");
+const awsPublicBaseUrl = readOptional("AWS_S3_PUBLIC_BASE_URL") ?? (
+	awsEndpoint && awsBucket
+		? `${awsEndpoint.replace(/\/$/, "")}/${awsBucket}`
+		: awsEndpoint
+			? awsEndpoint.replace(/\/$/, "")
+			: undefined
+);
+
 export const env = {
 	port: readPort(),
 	nodeEnv,
@@ -46,9 +56,9 @@ export const env = {
 		accessKeyId: readOptional("AWS_ACCESS_KEY_ID"),
 		secretAccessKey: readOptional("AWS_SECRET_ACCESS_KEY"),
 		sessionToken: readOptional("AWS_SESSION_TOKEN"),
-		endpoint: readOptional("AWS_ENDPOINT_URL_S3"),
-		bucket: readOptional("AWS_S3_BUCKET") ?? readOptional("BUCKET_NAME"),
-		publicBaseUrl: readOptional("AWS_S3_PUBLIC_BASE_URL"),
+		endpoint: awsEndpoint,
+		bucket: awsBucket,
+		publicBaseUrl: awsPublicBaseUrl,
 	},
 	redis: {
 		url: readOptional("REDIS_URL") ?? "redis://localhost:6379",
