@@ -36,6 +36,7 @@ export const createSchema = z.object({
 	state: optionalText(100),
 	postalCode: optionalText(30),
 	creditLimit: money.optional().default(0),
+	profileImageKey: optionalText(500),
 });
 export const updateSchema = createSchema.partial();
 export const contentTypeSchema = z.object({ contentType: imageType });

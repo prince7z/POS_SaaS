@@ -22,8 +22,8 @@ export const categoryListSchema = z.object({
 	includeChildren: booleanQuery.optional().default(false),
 });
 export const brandListSchema = z.object({ page: pageSchema, limit: limitSchema, search: z.string().trim().optional(), sortBy: z.enum(["name", "createdAt"]).default("name"), sortOrder: z.enum(["asc", "desc"]).default("asc") });
-const stagedImageKeySchema = z.string().regex(/^companies\/[A-Za-z0-9_-]+\/(?:pending\/product_image\/[0-9a-f-]{36}\.(jpg|png|webp)|products\/[A-Za-z0-9-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp))$/i, "Invalid media key");
-const stagedLogoKeySchema = z.string().regex(/^companies\/[A-Za-z0-9_-]+\/(?:pending\/(?:brand_logo|category_logo)\/[0-9a-f-]{36}\.(jpg|png|webp)|(?:brands|categories)\/[A-Za-z0-9-]{36}\/logo\/[0-9a-f-]{36}\.(jpg|png|webp))$/i, "Invalid media key");
+const stagedImageKeySchema = z.string().regex(/^companies\/[A-Za-z0-9_-]+\/(?:pending\/product_image\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp|gif)|products\/[A-Za-z0-9-]{36}\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp|gif))$/i, "Invalid media key");
+const stagedLogoKeySchema = z.string().regex(/^companies\/[A-Za-z0-9_-]+\/(?:pending\/(?:brand_logo|category_logo|category_image)\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp|gif)|(?:brands|categories)\/[A-Za-z0-9-]{36}\/logo\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp|gif))$/i, "Invalid media key");
 export const categorySchema = z.object({ name: z.string().trim().min(1).max(150), description: optionalText(1000), parentId: uuid.nullable().optional(), logoKey: stagedLogoKeySchema.nullable().optional() });
 export const categoryUpdateSchema = categorySchema.partial();
 export const brandSchema = z.object({ name: z.string().trim().min(1).max(150), description: optionalText(1000), logoKey: stagedLogoKeySchema.nullable().optional() });

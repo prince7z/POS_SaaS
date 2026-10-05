@@ -68,7 +68,7 @@ export const paginationSchema = z.object({
 	limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 export const contentTypeSchema = z.object({ contentType: z.enum(["image/jpeg", "image/png", "image/webp"]) });
-export const logoKeySchema = z.object({ logoKey: z.string().regex(/^companies\/[A-Za-z0-9_-]+\/logo\/[0-9a-f-]{36}\.(jpg|png|webp)$/i, "Invalid company logo key") });
+export const logoKeySchema = z.object({ logoKey: z.string().regex(/^companies\/[A-Za-z0-9_-]+\/(?:pending\/company_logo\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp|gif)|logo\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp|gif))$/i, "Invalid company logo key") });
 
 const safeAudit = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 
@@ -90,7 +90,7 @@ export const createCompanyLogoUploadUrl = async (companyId: string, contentType:
 export const updateCompanyLogo = async (companyId: string, actorUserId: string, logoKey: string) => {
 	const company = await repository.findCompany(prisma, companyId);
 	if (!company) throw new AppError("Company not found", 404, "COMPANY_NOT_FOUND");
-	if (!logoKey.startsWith(`companies/${companyId}/logo/`)) throw validationError("Invalid company logo key");
+	if (!logoKey.startsWith(`companies/${companyId}/logo/`) && !logoKey.startsWith(`companies/${companyId}/pending/company_logo/`)) throw validationError("Invalid company logo key");
 	const updated = await prisma.$transaction(async (tx) => {
 		const result = await repository.updateCompany(tx, companyId, { logoKey });
 		await repository.createAuditLog(tx, { companyId, actorUserId, action: "COMPANY_LOGO_UPDATED", entityType: "Company", entityId: companyId });

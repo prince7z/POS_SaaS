@@ -10,6 +10,7 @@ import purchasesRouter from "./modules/purchases/route";
 import reportsRouter from "./modules/reports/route";
 import salesRouter from "./modules/sales/route";
 import agentRouter from "./modules/agent/route";
+import qrUploadRouter from "./modules/qr-upload/route";
 
 const router = Router();
 
@@ -23,5 +24,6 @@ router.use("/sales", salesRouter);
 router.use("/purchases", purchasesRouter);
 router.use("/reports", reportsRouter);
 router.use("/agent", agentRouter);
+router.use("/qr-upload", qrUploadRouter);
 
 export default router;

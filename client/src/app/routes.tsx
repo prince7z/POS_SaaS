@@ -25,6 +25,9 @@ const InvoiceVerificationPage = lazy(() =>
   import('@/features/invoices/InvoiceVerificationPage').then((module) => ({ default: module.InvoiceVerificationPage })),
 )
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'))
+const MobileUploadPage = lazy(() =>
+  import('@/features/qr-upload/MobileUploadPage').then((module) => ({ default: module.MobileUploadPage })),
+)
 
 function PlaceholderRoute() {
   return (
@@ -47,6 +50,14 @@ export function AppRoutes() {
       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/auth/forgot-password/:token" element={<ResetPasswordPage />} />
       <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+      <Route
+        path="/mobile-upload"
+        element={
+          <Suspense fallback={<SkeletonPage />}>
+            <MobileUploadPage />
+          </Suspense>
+        }
+      />
       <Route
         path="/invoice-verification/:invoiceid"
         element={

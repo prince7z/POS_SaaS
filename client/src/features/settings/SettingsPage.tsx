@@ -61,6 +61,7 @@ import {
   type CompanyUser,
 } from '@/api/endpoints/company'
 import { PageContainer } from '@/components/layout/PageContainer'
+import { QrImageUploader } from '@/components/common/QrImageUploader'
 import { PageHeader } from '@/components/common/PageHeader'
 
 const MotionBox = motion(Box)
@@ -223,49 +224,30 @@ function General({ company, onSaved }: { company: Company; onSaved: (company: Co
         ))}
       </Grid>
       <Separator />
-      <Box>
-        <Heading size="sm">Company Logo</Heading>
-        <Text fontSize="sm" color="secondary">
-          JPG, PNG or WebP · max 5 MB. The image is uploaded only when you save changes.
-        </Text>
-      </Box>
-      <HStack align="center" gap="4">
-        <Box w="20" h="20" borderWidth="1px" borderRadius="md" overflow="hidden" display="grid" placeItems="center">
-          {preview ? (
-            <img
-              src={preview}
-              alt="Company logo preview"
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            />
-          ) : (
-            <Building2 size={28} />
-          )}
-        </Box>
-        <VStack align="start" gap="1">
-          <Button as="label" size="sm" variant="outline" cursor="pointer">
-            <ImagePlus size={15} />
-            Upload company logo
-            <Input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              display="none"
-              onChange={(e) => {
-                const selected = e.target.files?.[0]
-                if (!selected) return
-                if (selected.size > 5 * 1024 * 1024) return setError('Logo must be 5 MB or smaller.')
-                setFile(selected)
-                setPreview(URL.createObjectURL(selected))
-              }}
-            />
-          </Button>
-          {(company.logoKey || file) && (
-            <Button size="xs" variant="ghost" colorPalette="red" onClick={removeLogo}>
-              <Trash2 size={13} />
-              Remove logo
-            </Button>
-          )}
-        </VStack>
-      </HStack>
+      <QrImageUploader
+        label="Company Logo"
+        description="JPG, PNG, or WebP. Scan QR code to upload company logo from phone or choose a file."
+        purpose="COMPANY_LOGO"
+        multiple={false}
+        value={preview ? [{ key: company.logoKey || (form as any).logoKey || '', previewUrl: preview }] : []}
+        onChange={(images) => {
+          if (images[0]) {
+            setForm((current) => ({ ...current, logoKey: images[0].key }))
+            setPreview(images[0].previewUrl)
+            setFile(undefined)
+          }
+        }}
+        onRemove={() => {
+          void removeLogo()
+        }}
+        onManualFileSelect={(selected) => {
+          const selectedFile = selected[0]
+          if (!selectedFile) return
+          if (selectedFile.size > 5 * 1024 * 1024) return setError('Logo must be 5 MB or smaller.')
+          setFile(selectedFile)
+          setPreview(URL.createObjectURL(selectedFile))
+        }}
+      />
       <ErrorText message={error} />
       <HStack justify="flex-end">
         <SaveButton saving={saving} onClick={save} />

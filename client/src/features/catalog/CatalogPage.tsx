@@ -22,6 +22,7 @@ import { useLocation } from 'react-router-dom'
 import { Card as ChakraCard, Grid, HStack, Heading, Text } from '@chakra-ui/react'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
+import { QrImageUploader } from '@/components/common/QrImageUploader'
 import {
   Button,
   Card,
@@ -563,16 +564,24 @@ function ProductDialog({
             </div>
           </div>
           <Separator />
-          <ImageDropzone
+          <QrImageUploader
+            label="Product images"
+            description="Upload product photos directly or scan the QR code to upload from phone."
+            purpose="PRODUCT_IMAGE"
             multiple
-            initialImages={imageUrls}
-            initialImageKeys={existingImages}
-            statusByIndex={uploadStatus}
-            onRemoveExisting={removeExisting}
-            onMoveExisting={moveExisting}
-            onChange={(selected) => {
-              void handleFiles(selected)
+            value={existingImages.map((key, i) => ({
+              key,
+              previewUrl: imageUrls[i] || '',
+            }))}
+            onChange={(images) => {
+              setExistingImages(images.map((img) => img.key))
+              setImageUrls(images.map((img) => img.previewUrl))
             }}
+            onRemove={(idx) => removeExisting(idx)}
+            onManualFileSelect={(selected) => {
+              void handleFiles(Array.from(selected))
+            }}
+            isUploadingManual={uploading}
           />
           {error && <FieldError>{error}</FieldError>}
         </FieldSet>
@@ -712,13 +721,24 @@ function EntityDialog({
             <FieldLabel>Description</FieldLabel>
             <Textarea value={description ?? ''} onChange={(e) => setDescription(e.target.value)} />
           </Field>
-          <ImageDropzone
-            initialImages={initial?.logoUrl ? [initial.logoUrl] : []}
-            initialImageKeys={initial?.logoKey ? [initial.logoKey] : []}
-            statusByIndex={uploadStatus}
-            onChange={(selected) => {
-              void handleFiles(selected)
+          <QrImageUploader
+            label={kind === 'category' ? 'Category logo' : 'Brand logo'}
+            description={`Upload ${kind} logo directly or scan QR code to upload from phone.`}
+            purpose={kind === 'category' ? 'CATEGORY_IMAGE' : 'BRAND_LOGO'}
+            multiple={false}
+            value={logoKey ? [{ key: logoKey, previewUrl: initial?.logoUrl || '' }] : []}
+            onChange={(images) => {
+              if (images[0]) {
+                setLogoKey(images[0].key)
+              } else {
+                setLogoKey(undefined)
+              }
             }}
+            onRemove={() => setLogoKey(undefined)}
+            onManualFileSelect={(selected) => {
+              void handleFiles(Array.from(selected))
+            }}
+            isUploadingManual={uploading}
           />
           {error && <FieldError>{error}</FieldError>}
         </FieldSet>

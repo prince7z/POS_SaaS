@@ -52,6 +52,7 @@ import {
   type CustomerSummary,
 } from '@/api/endpoints/customers'
 import { PageContainer } from '@/components/layout/PageContainer'
+import { QrImageUploader } from '@/components/common/QrImageUploader'
 import { PageHeader } from '@/components/common/PageHeader'
 import { EmptyState } from '@/components/common/EmptyState'
 
@@ -176,33 +177,33 @@ function CustomerForm({
           Store contact and account information for this customer.
         </Text>
       </Box>
-      <HStack align="center" gap="3">
-        <Avatar.Root size="lg">
-          <Avatar.Image src={profilePreview || undefined} />
-          <Avatar.Fallback>{form.name ? getInitials(form.name) : <ImagePlus size={20} />}</Avatar.Fallback>
-        </Avatar.Root>
-        <Box>
-          <Button as="label" size="sm" variant="outline" cursor="pointer">
-            <ImagePlus size={15} />
-            Upload profile picture
-            <Input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              display="none"
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (file) {
-                  setProfileFile(file)
-                  setProfilePreview(URL.createObjectURL(file))
-                }
-              }}
-            />
-          </Button>
-          <Text mt="1" fontSize="xs" color="secondary">
-            JPG, PNG, or WebP
-          </Text>
-        </Box>
-      </HStack>
+      <QrImageUploader
+        label="Customer profile picture"
+        purpose="CUSTOMER_PROFILE"
+        multiple={false}
+        value={profilePreview ? [{ key: (form as any).profileImageKey || '', previewUrl: profilePreview }] : []}
+        onChange={(images) => {
+          if (images[0]) {
+            setForm((prev) => ({ ...prev, profileImageKey: images[0].key }))
+            setProfilePreview(images[0].previewUrl)
+          } else {
+            setForm((prev) => ({ ...prev, profileImageKey: undefined }))
+            setProfilePreview('')
+          }
+        }}
+        onRemove={() => {
+          setForm((prev) => ({ ...prev, profileImageKey: undefined }))
+          setProfilePreview('')
+          setProfileFile(undefined)
+        }}
+        onManualFileSelect={(selected) => {
+          const file = selected[0]
+          if (file) {
+            setProfileFile(file)
+            setProfilePreview(URL.createObjectURL(file))
+          }
+        }}
+      />
       <Grid templateColumns={{ base: '1fr', sm: 'repeat(2, 1fr)' }} gap="3">
         {fields.map(({ key, label, icon: Icon, type }) => (
           <Box key={key}>
