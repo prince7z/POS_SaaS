@@ -707,7 +707,7 @@ export function SuppliersPage() {
                 onSaved={(saved, isNew) => {
                   setFormOpen(false)
                   if (isNew) {
-                    setSuppliers((prev) => [saved, ...prev])
+                    setItems((prev) => [saved, ...prev])
                     setSummary((prev) =>
                       prev
                         ? {
@@ -718,7 +718,7 @@ export function SuppliersPage() {
                         : prev,
                     )
                   } else {
-                    setSuppliers((prev) => prev.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)))
+                    setItems((prev) => prev.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)))
                   }
                 }}
                 onCancel={() => setFormOpen(false)}
