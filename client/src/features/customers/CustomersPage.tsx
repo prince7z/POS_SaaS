@@ -114,7 +114,7 @@ function CustomerForm({
   onCancel,
 }: {
   initial?: Customer
-  onSaved: () => void
+  onSaved: (customer: Customer, isNew: boolean) => void
   onCancel: () => void
 }) {
   const [form, setForm] = useState<CustomerPayload>({
@@ -191,8 +191,9 @@ function CustomerForm({
         })
         if (!response.ok) throw new Error('Profile image upload failed.')
         await attachCustomerProfile(customer.id, upload.key)
+        customer = { ...customer, profileImageKey: upload.key }
       }
-      onSaved()
+      onSaved(customer, !initial)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Customer could not be saved.')
     } finally {
@@ -908,9 +909,22 @@ export function CustomersPage() {
                 {editing !== undefined && (
                   <CustomerForm
                     initial={editing ?? undefined}
-                    onSaved={() => {
+                    onSaved={(saved, isNew) => {
                       setEditing(undefined)
-                      setRefresh((value) => value + 1)
+                      if (isNew) {
+                        setCustomers((prev) => [saved, ...prev])
+                        setSummary((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                totalCustomers: prev.totalCustomers + 1,
+                                activeCustomers: prev.activeCustomers + 1,
+                              }
+                            : prev,
+                        )
+                      } else {
+                        setCustomers((prev) => prev.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)))
+                      }
                     }}
                     onCancel={() => setEditing(undefined)}
                   />

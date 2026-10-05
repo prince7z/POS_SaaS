@@ -86,9 +86,9 @@ function CartRow({
           placeItems="center"
           flexShrink="0"
         >
-          {item.imageKeys[0] ? (
+          {item.imageUrls?.[0] || item.imageKeys?.[0] ? (
             <img
-              src={item.imageKeys[0]}
+              src={item.imageUrls?.[0] || item.imageKeys[0]}
               alt=""
               loading="lazy"
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}

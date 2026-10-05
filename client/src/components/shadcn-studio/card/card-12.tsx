@@ -13,7 +13,7 @@ interface ProductCard12Props {
 
 export function ProductCard12({ product, added, onAdd }: ProductCard12Props) {
   const prefersReducedMotion = useReducedMotion()
-  const imageUrl = product.imageKeys[0]
+  const imageUrl = product.imageUrls?.[0] || product.imageKeys?.[0]
   const outOfStock = product.stockQuantity <= 0
   const lowStock = !outOfStock && product.stockQuantity <= product.lowStockThreshold
 

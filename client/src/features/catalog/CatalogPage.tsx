@@ -326,7 +326,7 @@ function ProductDialog({
   suppliers: SupplierOption[]
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSaved: () => void
+  onSaved: (product: CatalogProduct, isNew: boolean) => void
 }) {
   const [form, setForm] = useState<ProductPayload>({
     name: '',
@@ -408,12 +408,14 @@ function ProductDialog({
           diff.imageKeys = currentImageKeys
         }
 
-        await updateProduct(initial.id, diff)
+        const saved = await updateProduct(initial.id, diff)
+        onOpenChange(false)
+        onSaved(saved, false)
       } else {
-        await createProduct({ ...form, imageKeys: currentImageKeys })
+        const saved = await createProduct({ ...form, imageKeys: currentImageKeys })
+        onOpenChange(false)
+        onSaved(saved, true)
       }
-      onOpenChange(false)
-      onSaved()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Product could not be saved.')
     } finally {
@@ -643,7 +645,7 @@ function EntityDialog({
   categories?: CatalogCategory[]
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSaved: () => void
+  onSaved: (item: CatalogCategory | CatalogBrand, isNew: boolean) => void
 }) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -703,9 +705,13 @@ function EntityDialog({
           const initLogo = initial.logoKey ?? null
           const nextLogo = logoKey === undefined ? initLogo : logoKey
           if (initLogo !== nextLogo) diff.logoKey = nextLogo
-          await updateCategory(initial.id, diff)
+          const saved = await updateCategory(initial.id, diff)
+          onOpenChange(false)
+          onSaved(saved, false)
         } else {
-          await createCategory({ name, description, parentId, logoKey: logoKey ?? null })
+          const saved = await createCategory({ name, description, parentId, logoKey: logoKey ?? null })
+          onOpenChange(false)
+          onSaved(saved, true)
         }
       } else {
         if (initial) {
@@ -715,9 +721,13 @@ function EntityDialog({
           const initLogo = initial.logoKey ?? null
           const nextLogo = logoKey === undefined ? initLogo : logoKey
           if (initLogo !== nextLogo) diff.logoKey = nextLogo
-          await updateBrand(initial.id, diff)
+          const saved = await updateBrand(initial.id, diff)
+          onOpenChange(false)
+          onSaved(saved, false)
         } else {
-          await createBrand({ name, description, logoKey: logoKey ?? null })
+          const saved = await createBrand({ name, description, logoKey: logoKey ?? null })
+          onOpenChange(false)
+          onSaved(saved, true)
         }
       }
       onOpenChange(false)
@@ -1122,7 +1132,14 @@ function ProductsSection() {
         suppliers={suppliers}
         open={dialog.open}
         onOpenChange={(open) => setDialog((current) => ({ ...current, open }))}
-        onSaved={load}
+        onSaved={(saved, isNew) => {
+          if (isNew) {
+            setItems((prev) => [saved, ...prev])
+            setTotalProducts((count) => count + 1)
+          } else {
+            setItems((prev) => prev.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)))
+          }
+        }}
       />
       <ConfirmDelete
         target={remove ? { type: 'product', name: remove.name } : undefined}
@@ -1322,7 +1339,14 @@ function LegacyEntitySection({ kind }: { kind: 'category' | 'brand' }) {
         categories={kind === 'category' ? (items as CatalogCategory[]) : undefined}
         open={dialog.open}
         onOpenChange={(open) => setDialog((current) => ({ ...current, open }))}
-        onSaved={load}
+        onSaved={(saved, isNew) => {
+          if (isNew) {
+            setItems((prev) => [saved, ...prev])
+            setTotalCount((count) => count + 1)
+          } else {
+            setItems((prev) => prev.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)))
+          }
+        }}
       />
       <ConfirmDelete
         target={remove ? { type: kind, name: remove.name } : undefined}

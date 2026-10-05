@@ -582,8 +582,8 @@ function SalesReport({ filters }: { filters: ReportFilters }) {
                 <Table.Row key={item.productId}>
                   <Table.Cell>
                     <Flex align="center" gap="3">
-                      {item.imageKeys?.[0] ? (
-                        <Image src={item.imageKeys[0]} alt="" boxSize="36px" objectFit="cover" borderRadius="md" />
+                      {item.imageUrls?.[0] || item.imageKeys?.[0] ? (
+                        <Image src={item.imageUrls?.[0] || item.imageKeys[0]} alt="" boxSize="36px" objectFit="cover" borderRadius="md" />
                       ) : (
                         <Flex boxSize="36px" align="center" justify="center" borderRadius="md" bg="bg.muted">
                           <ImageIcon size={17} />

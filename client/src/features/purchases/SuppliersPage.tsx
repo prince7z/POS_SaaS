@@ -70,7 +70,7 @@ function SupplierForm({
   onCancel,
 }: {
   initial?: Supplier
-  onSaved: () => void
+  onSaved: (supplier: Supplier, isNew: boolean) => void
   onCancel: () => void
 }) {
   const [form, setForm] = useState<SupplierPayload>({
@@ -98,9 +98,13 @@ function SupplierForm({
     setSaving(true)
     setError('')
     try {
-      if (initial) await updateSupplier(initial.id, form)
-      else await createSupplier(form)
-      onSaved()
+      if (initial) {
+        const saved = await updateSupplier(initial.id, form)
+        onSaved(saved, false)
+      } else {
+        const saved = await createSupplier(form)
+        onSaved(saved, true)
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Supplier could not be saved.')
     } finally {
@@ -700,9 +704,22 @@ export function SuppliersPage() {
             <Drawer.Body>
               <SupplierForm
                 initial={editing}
-                onSaved={() => {
+                onSaved={(saved, isNew) => {
                   setFormOpen(false)
-                  load()
+                  if (isNew) {
+                    setSuppliers((prev) => [saved, ...prev])
+                    setSummary((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            totalSuppliers: prev.totalSuppliers + 1,
+                            activeSuppliers: prev.activeSuppliers + 1,
+                          }
+                        : prev,
+                    )
+                  } else {
+                    setSuppliers((prev) => prev.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)))
+                  }
                 }}
                 onCancel={() => setFormOpen(false)}
               />
