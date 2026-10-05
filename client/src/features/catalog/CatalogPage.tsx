@@ -648,7 +648,8 @@ function EntityDialog({
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [parentId, setParentId] = useState<string | null>(null)
-  const [logoKey, setLogoKey] = useState<string>()
+  const [logoKey, setLogoKey] = useState<string | null | undefined>()
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string>('')
   const [uploadStatus, setUploadStatus] = useState<Record<number, 'uploading' | 'uploaded' | 'error'>>({})
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -658,12 +659,12 @@ function EntityDialog({
     setDescription(initial?.description ?? '')
     setParentId(kind === 'category' ? ((initial as CatalogCategory | undefined)?.parentId ?? null) : null)
     setLogoKey(initial?.logoKey ?? undefined)
+    setLogoPreviewUrl(initial?.logoUrl ?? '')
     setUploadStatus({})
     setUploading(false)
     setError('')
   }, [initial, open, kind])
   const handleFiles = async (selected: File[]) => {
-    setLogoKey(undefined)
     setUploading(Boolean(selected.length))
     setError('')
     try {
@@ -673,6 +674,7 @@ function EntityDialog({
         (index, status) => setUploadStatus((current) => ({ ...current, [index]: status })),
       )
       setLogoKey(keys[0])
+      setLogoPreviewUrl(selected[0] ? URL.createObjectURL(selected[0]) : '')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Logo upload failed.')
     } finally {
@@ -699,7 +701,7 @@ function EntityDialog({
           const initParent = (initial as CatalogCategory).parentId ?? null
           if (parentId !== initParent) diff.parentId = parentId
           const initLogo = initial.logoKey ?? null
-          const nextLogo = logoKey ?? null
+          const nextLogo = logoKey === undefined ? initLogo : logoKey
           if (initLogo !== nextLogo) diff.logoKey = nextLogo
           await updateCategory(initial.id, diff)
         } else {
@@ -711,7 +713,7 @@ function EntityDialog({
           if (name !== initial.name) diff.name = name
           if (description !== (initial.description ?? '')) diff.description = description
           const initLogo = initial.logoKey ?? null
-          const nextLogo = logoKey ?? null
+          const nextLogo = logoKey === undefined ? initLogo : logoKey
           if (initLogo !== nextLogo) diff.logoKey = nextLogo
           await updateBrand(initial.id, diff)
         } else {
@@ -773,15 +775,20 @@ function EntityDialog({
             multiple={false}
             isNewEntity={!initial}
             initialKeys={initial?.logoKey ? [initial.logoKey] : []}
-            value={logoKey ? [{ key: logoKey, previewUrl: initial?.logoUrl || '' }] : []}
+            value={logoKey ? [{ key: logoKey, previewUrl: logoPreviewUrl }] : []}
             onChange={(images) => {
               if (images[0]) {
                 setLogoKey(images[0].key)
+                setLogoPreviewUrl(images[0].previewUrl)
               } else {
-                setLogoKey(undefined)
+                setLogoKey(null)
+                setLogoPreviewUrl('')
               }
             }}
-            onRemove={() => setLogoKey(undefined)}
+            onRemove={() => {
+              setLogoKey(null)
+              setLogoPreviewUrl('')
+            }}
             onManualFileSelect={(selected) => {
               void handleFiles(Array.from(selected))
             }}

@@ -133,7 +133,18 @@ function SkeletonSection() {
 }
 
 function General({ company, onSaved }: { company: Company; onSaved: (company: Company) => void }) {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    name: string
+    phone: string
+    email: string
+    addressLine1: string
+    addressLine2: string
+    city: string
+    state: string
+    postalCode: string
+    countryCode: string
+    logoKey?: string | null
+  }>({
     name: company.name,
     phone: company.phone ?? '',
     email: company.email ?? '',
@@ -143,18 +154,37 @@ function General({ company, onSaved }: { company: Company; onSaved: (company: Co
     state: company.state ?? '',
     postalCode: company.postalCode ?? '',
     countryCode: company.countryCode,
+    logoKey: company.logoKey ?? null,
   })
   const [file, setFile] = useState<File>()
   const [preview, setPreview] = useState(company.logoUrl ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    setForm({
+      name: company.name,
+      phone: company.phone ?? '',
+      email: company.email ?? '',
+      addressLine1: company.addressLine1 ?? '',
+      addressLine2: company.addressLine2 ?? '',
+      city: company.city ?? '',
+      state: company.state ?? '',
+      postalCode: company.postalCode ?? '',
+      countryCode: company.countryCode,
+      logoKey: company.logoKey ?? null,
+    })
+    setPreview(company.logoUrl ?? '')
+    setFile(undefined)
+  }, [company])
+
   const set = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }))
   const save = async () => {
     if (!form.name.trim()) return setError('Company name is required.')
     setSaving(true)
     setError('')
     try {
-      let logoKey = (form as any).logoKey
+      let logoKey = form.logoKey
       if (file) {
         const upload = await requestCompanyLogoUploadUrl(file.type)
         await uploadCompanyLogo(upload, file)
@@ -249,7 +279,7 @@ function General({ company, onSaved }: { company: Company; onSaved: (company: Co
         multiple={false}
         isNewEntity={false}
         initialKeys={company.logoKey ? [company.logoKey] : []}
-        value={preview ? [{ key: (form as any).logoKey || company.logoKey || '', previewUrl: preview }] : []}
+        value={preview ? [{ key: form.logoKey || company.logoKey || '', previewUrl: preview }] : []}
         onChange={(images) => {
           if (images[0]) {
             setForm((current) => ({ ...current, logoKey: images[0].key }))

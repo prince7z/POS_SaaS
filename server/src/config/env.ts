@@ -51,6 +51,7 @@ export const env = {
 	jwtSecret: readRequired("JWT_SECRET"),
 	accessTokenTtl: readOptional("ACCESS_TOKEN_TTL") ?? "15m",
 	refreshTokenTtlDays: Number(readOptional("REFRESH_TOKEN_TTL_DAYS") ?? "30"),
+	mockBaseUrl: readOptional("MOCK_BASE_URL") ?? readOptional("MOCK_BASE") ?? "https://images.unsplash.com",
 	aws: {
 		region: readOptional("AWS_REGION") ?? "us-east-2",
 		accessKeyId: readOptional("AWS_ACCESS_KEY_ID"),

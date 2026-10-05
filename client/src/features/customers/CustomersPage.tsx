@@ -128,11 +128,32 @@ function CustomerForm({
     state: initial?.state ?? '',
     postalCode: initial?.postalCode ?? '',
     creditLimit: initial?.creditLimit ?? 0,
+    profileImageKey: initial?.profileImageKey ?? undefined,
   })
   const [profileFile, setProfileFile] = useState<File>()
   const [profilePreview, setProfilePreview] = useState(initial?.profileImageUrl ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    setForm({
+      name: initial?.name ?? '',
+      phone: initial?.phone ?? '',
+      email: initial?.email ?? '',
+      customerType: initial?.customerType ?? '',
+      addressLine1: initial?.addressLine1 ?? '',
+      addressLine2: initial?.addressLine2 ?? '',
+      city: initial?.city ?? '',
+      state: initial?.state ?? '',
+      postalCode: initial?.postalCode ?? '',
+      creditLimit: initial?.creditLimit ?? 0,
+      profileImageKey: initial?.profileImageKey ?? undefined,
+    })
+    setProfilePreview(initial?.profileImageUrl ?? '')
+    setProfileFile(undefined)
+    setError('')
+  }, [initial])
+
   const set = (key: keyof CustomerPayload, value: string) =>
     setForm((current) => ({ ...current, [key]: key === 'creditLimit' ? Number(value) : value }))
   const submit = async () => {
@@ -154,7 +175,7 @@ function CustomerForm({
         if (form.postalCode !== (initial.postalCode ?? '')) diff.postalCode = form.postalCode
         if (form.creditLimit !== initial.creditLimit) diff.creditLimit = form.creditLimit
         const initProfile = initial.profileImageKey ?? null
-        const nextProfile = (form as any).profileImageKey ?? null
+        const nextProfile = form.profileImageKey === undefined ? initProfile : form.profileImageKey
         if (initProfile !== nextProfile) (diff as any).profileImageKey = nextProfile
 
         customer = await updateCustomer(initial.id, diff)

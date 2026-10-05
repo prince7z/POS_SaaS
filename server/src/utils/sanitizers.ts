@@ -7,6 +7,8 @@ export const sanitizeUser = (user: User) => ({
 	fullName: user.fullName,
 	email: user.email,
 	phone: user.phone,
+	profileImageKey: user.profileImageKey,
+	profileImageUrl: user.profileImageKey ? toPublicMediaUrl(user.profileImageKey) : null,
 	roleName: user.roleName,
 	accesses: user.accesses,
 	isActive: user.isActive,

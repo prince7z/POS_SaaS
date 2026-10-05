@@ -14,7 +14,7 @@ export type MediaResource =
 	| "COMPANY_LOGO"
 	| "PRODUCT_IMAGE"
 	| "BRAND_LOGO"
- 	| "CATEGORY_LOGO"
+	| "CATEGORY_LOGO"
 	| "INVOICE_PDF"
 	| "DOCUMENT";
 
@@ -83,10 +83,28 @@ const validateKey = (key: string): void => {
 };
 
 export const toPublicMediaUrl = (key: string): string => {
-	if (/^https?:\/\//i.test(key)) return key;
+	if (!key) return "";
+
+	let cleanKey = key.trim();
+	if (cleanKey.includes("images.unsplash.com/")) {
+		cleanKey = cleanKey.split("images.unsplash.com/")[1] || cleanKey;
+	} else if (cleanKey.includes("images.unsplash.com")) {
+		cleanKey = cleanKey.replace(/^https?:\/\/images\.unsplash\.com\/?/, "");
+	}
+	cleanKey = cleanKey.replace(/^\//, "");
+
+	if (cleanKey.includes("photo-1") || cleanKey.startsWith("photo-")) {
+		const mockBase = env.mockBaseUrl?.replace(/\/$/, "") ?? "https://images.unsplash.com";
+		return `${mockBase}/${cleanKey}`;
+	}
+
+	if (/^https?:\/\//i.test(key)) {
+		return key;
+	}
+
 	const baseUrl = env.aws.publicBaseUrl?.replace(/\/$/, "");
-	if (!baseUrl) return key;
-	return `${baseUrl}/${key.split("/").map(encodeURIComponent).join("/")}`;
+	if (!baseUrl) return cleanKey;
+	return `${baseUrl}/${cleanKey.split("/").map((part) => (part.includes("?") ? part : encodeURIComponent(part))).join("/")}`;
 };
 
 type MediaUploadInput = {

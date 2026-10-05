@@ -25,7 +25,7 @@ export const listSchema = z.object({
 	sortBy: z.enum(["name", "createdAt", "creditBalance"]).default("createdAt"),
 	sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
-export const createSchema = z.object({
+const baseCustomerSchema = z.object({
 	name: z.string().trim().min(1).max(150),
 	phone: optionalText(50),
 	email: z.string().trim().email().transform((value) => value.toLowerCase()).nullable().optional(),
@@ -35,10 +35,13 @@ export const createSchema = z.object({
 	city: optionalText(100),
 	state: optionalText(100),
 	postalCode: optionalText(30),
-	creditLimit: money.optional().default(0),
+	creditLimit: money.optional(),
 	profileImageKey: optionalText(500),
 });
-export const updateSchema = createSchema.partial();
+export const createSchema = baseCustomerSchema.extend({
+	creditLimit: money.optional().default(0),
+});
+export const updateSchema = baseCustomerSchema.partial();
 export const contentTypeSchema = z.object({ contentType: imageType });
 export const profileKeySchema = z.object({ profileImageKey: z.string().min(1) });
 export const paymentSchema = z.object({
@@ -217,12 +220,16 @@ export const deleteCustomer = async (companyId: string, userId: string, id: stri
 	if (customer.profileImageKey) await deleteOldProfile(customer.profileImageKey);
 };
 
+const isMockOrValidKey = (key: string) => typeof key === "string" && (key.includes("photo-1") || key.startsWith("photo-"));
+
 const validateProfileKey = (key: string, companyId: string, customerId: string) => {
+	if (isMockOrValidKey(key)) return;
 	const escaped = [companyId, customerId].map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 	if (!new RegExp(`^companies/${escaped[0]}/customers/${escaped[1]}/profile/[0-9a-f-]{36}\.(jpg|png|webp)$`).test(key)) throw customerError("INVALID_MEDIA_TYPE", "Invalid customer profile image key");
 };
 
 const deleteOldProfile = async (key: string) => {
+	if (!key || isMockOrValidKey(key)) return;
 	try { await deleteMediaObject(key); } catch (error) { logger.error("Failed to delete replaced customer profile image", error); }
 };
 
