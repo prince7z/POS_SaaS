@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { z } from "zod";
 
 import { RedisKeys, redisClient } from "../../infrastructure/redis";
-import { createStagedMediaUploadUrls, toPublicMediaUrl, type MediaResource } from "../../integrations/aws/media";
+import { createStagedMediaUploadUrls, deleteMediaObject, toPublicMediaUrl, type MediaResource } from "../../integrations/aws/media";
 import { mediaError, validationError } from "../../utils/errors";
 
 export const QrPurposeEnum = z.enum([
@@ -213,3 +213,12 @@ export const deleteQrSession = async (rawToken: string) => {
 	const redisKey = RedisKeys.qrUploadSession(tokenHash);
 	await redisClient.del(redisKey);
 };
+
+export const deleteMediaKey = async (companyId: string, key: string) => {
+	if (typeof key !== "string" || !key || !key.startsWith(`companies/${companyId}/`) || key.includes("..")) {
+		throw validationError("Invalid key structure or unauthorized media key");
+	}
+	await deleteMediaObject(key);
+	return { success: true };
+};
+

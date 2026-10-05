@@ -229,16 +229,24 @@ function General({ company, onSaved }: { company: Company; onSaved: (company: Co
         description="JPG, PNG, or WebP. Scan QR code to upload company logo from phone or choose a file."
         purpose="COMPANY_LOGO"
         multiple={false}
-        value={preview ? [{ key: company.logoKey || (form as any).logoKey || '', previewUrl: preview }] : []}
+        isNewEntity={false}
+        initialKeys={company.logoKey ? [company.logoKey] : []}
+        value={preview ? [{ key: (form as any).logoKey || company.logoKey || '', previewUrl: preview }] : []}
         onChange={(images) => {
           if (images[0]) {
             setForm((current) => ({ ...current, logoKey: images[0].key }))
             setPreview(images[0].previewUrl)
             setFile(undefined)
+          } else {
+            setForm((current) => ({ ...current, logoKey: null as any }))
+            setPreview('')
+            setFile(undefined)
           }
         }}
         onRemove={() => {
-          void removeLogo()
+          setForm((current) => ({ ...current, logoKey: null as any }))
+          setPreview('')
+          setFile(undefined)
         }}
         onManualFileSelect={(selected) => {
           const selectedFile = selected[0]

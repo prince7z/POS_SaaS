@@ -181,7 +181,9 @@ function CustomerForm({
         label="Customer profile picture"
         purpose="CUSTOMER_PROFILE"
         multiple={false}
-        value={profilePreview ? [{ key: (form as any).profileImageKey || '', previewUrl: profilePreview }] : []}
+        isNewEntity={!initial}
+        initialKeys={initial?.profileImageKey ? [initial.profileImageKey] : []}
+        value={profilePreview ? [{ key: (form as any).profileImageKey || initial?.profileImageKey || '', previewUrl: profilePreview }] : []}
         onChange={(images) => {
           if (images[0]) {
             setForm((prev) => ({ ...prev, profileImageKey: images[0].key }))

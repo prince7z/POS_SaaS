@@ -32,6 +32,7 @@ import QRCode from 'qrcode'
 
 import {
   createQrUploadSession,
+  deleteMediaKey,
   getQrUploadStatus,
   type QrUploadPurpose,
 } from '@/api/endpoints/qrUpload'
@@ -54,6 +55,8 @@ export interface QrImageUploaderProps {
   label?: string
   description?: string
   maxFiles?: number
+  isNewEntity?: boolean
+  initialKeys?: string[]
 }
 
 const PURPOSE_LABELS: Record<QrUploadPurpose, { title: string; subtitle: string }> = {
@@ -90,6 +93,8 @@ export function QrImageUploader({
   label,
   description,
   maxFiles = multiple ? 10 : 1,
+  isNewEntity = false,
+  initialKeys,
 }: QrImageUploaderProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [sessionToken, setSessionToken] = useState<string | null>(null)
@@ -236,12 +241,25 @@ export function QrImageUploader({
     return `${mins}:${s < 10 ? '0' : ''}${s}`
   }
 
-  const handleRemoveImage = (index: number) => {
+  const handleRemoveImage = async (index: number) => {
+    const targetImage = value[index]
     if (onRemove) {
       onRemove(index)
     } else if (onChange) {
       const updated = value.filter((_, i) => i !== index)
       onChange(updated)
+    }
+
+    if (targetImage?.key) {
+      const isPendingKey = targetImage.key.includes('/pending/')
+      const isUnsavedNewKey = isNewEntity || (initialKeys && !initialKeys.includes(targetImage.key))
+      if (isPendingKey || isUnsavedNewKey) {
+        try {
+          await deleteMediaKey(targetImage.key)
+        } catch (err) {
+          console.error('Failed to delete pending media object:', err)
+        }
+      }
     }
   }
 

@@ -137,7 +137,7 @@ export const updateCompany = async (companyId: string, actorUserId: string, inpu
 		});
 		return company;
 	});
-	if (input.logoKey && before.logoKey && input.logoKey !== before.logoKey) {
+	if (input.logoKey !== undefined && before.logoKey && input.logoKey !== before.logoKey) {
 		try { await deleteMediaObject(before.logoKey); } catch (error) { logger.error("Failed to delete replaced company logo", error); }
 	}
 	return sanitizeCompany(updated);

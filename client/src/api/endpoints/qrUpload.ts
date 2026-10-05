@@ -84,3 +84,10 @@ export function deleteQrUploadSession(token: string) {
     method: 'DELETE',
   })
 }
+
+export function deleteMediaKey(key: string) {
+  return apiRequest<{ success: boolean }>('/qr-upload/delete-media', {
+    method: 'POST',
+    body: JSON.stringify({ key }),
+  })
+}

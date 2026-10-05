@@ -344,6 +344,7 @@ function ProductDialog({
   })
   const [stagedKeys, setStagedKeys] = useState<string[]>([])
   const [existingImages, setExistingImages] = useState<string[]>(initial?.imageKeys ?? [])
+  const [imageUrls, setImageUrls] = useState<string[]>(initial?.imageUrls ?? initial?.imageKeys ?? [])
   const [uploadStatus, setUploadStatus] = useState<Record<number, 'uploading' | 'uploaded' | 'error'>>({})
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -365,6 +366,7 @@ function ProductDialog({
       imageKeys: initial?.imageKeys ?? [],
     })
     setExistingImages(initial?.imageKeys ?? [])
+    setImageUrls(initial?.imageUrls ?? initial?.imageKeys ?? [])
     setStagedKeys([])
     setUploadStatus({})
     setUploading(false)
@@ -395,15 +397,6 @@ function ProductDialog({
       setSaving(false)
     }
   }
-  const removeExisting = async (key: string) => {
-    if (!initial) return
-    try {
-      const result = await removeProductImage(initial.id, key)
-      setExistingImages(result.imageKeys)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Image could not be removed.')
-    }
-  }
   const moveExisting = async (index: number, direction: 'left' | 'right') => {
     if (!initial) return
     const next = [...existingImages]
@@ -416,17 +409,15 @@ function ProductDialog({
       setError(cause instanceof Error ? cause.message : 'Image order could not be saved.')
     }
   }
-  const imageUrls = initial?.imageUrls ?? initial?.imageKeys ?? []
   const handleFiles = async (selected: File[]) => {
-    setStagedKeys([])
     setUploading(Boolean(selected.length))
     setError('')
     try {
-      setStagedKeys(
-        await stageFiles('PRODUCT_IMAGE', selected, (index, status) =>
-          setUploadStatus((current) => ({ ...current, [index]: status })),
-        ),
+      const keys = await stageFiles('PRODUCT_IMAGE', selected, (index, status) =>
+        setUploadStatus((current) => ({ ...current, [index]: status })),
       )
+      setStagedKeys((prev) => [...prev, ...keys])
+      setImageUrls((prev) => [...prev, ...selected.map((f) => URL.createObjectURL(f))])
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Image upload failed.')
     } finally {
@@ -569,15 +560,24 @@ function ProductDialog({
             description="Upload product photos directly or scan the QR code to upload from phone."
             purpose="PRODUCT_IMAGE"
             multiple
-            value={existingImages.map((key, i) => ({
+            isNewEntity={!initial}
+            initialKeys={initial?.imageKeys ?? []}
+            value={[...existingImages, ...stagedKeys].map((key, i) => ({
               key,
               previewUrl: imageUrls[i] || '',
             }))}
             onChange={(images) => {
               setExistingImages(images.map((img) => img.key))
               setImageUrls(images.map((img) => img.previewUrl))
+              setStagedKeys([])
             }}
-            onRemove={(idx) => removeExisting(idx)}
+            onRemove={(idx) => {
+              const allKeys = [...existingImages, ...stagedKeys]
+              const removedKey = allKeys[idx]
+              setExistingImages((prev) => prev.filter((k) => k !== removedKey))
+              setStagedKeys((prev) => prev.filter((k) => k !== removedKey))
+              setImageUrls((prev) => prev.filter((_, i) => i !== idx))
+            }}
             onManualFileSelect={(selected) => {
               void handleFiles(Array.from(selected))
             }}
@@ -726,6 +726,8 @@ function EntityDialog({
             description={`Upload ${kind} logo directly or scan QR code to upload from phone.`}
             purpose={kind === 'category' ? 'CATEGORY_IMAGE' : 'BRAND_LOGO'}
             multiple={false}
+            isNewEntity={!initial}
+            initialKeys={initial?.logoKey ? [initial.logoKey] : []}
             value={logoKey ? [{ key: logoKey, previewUrl: initial?.logoUrl || '' }] : []}
             onChange={(images) => {
               if (images[0]) {

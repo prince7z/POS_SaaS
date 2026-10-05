@@ -201,6 +201,7 @@ export const updateCustomer = async (companyId: string, userId: string, id: stri
 		await repository.createAuditLog(tx, { companyId, actorUserId: userId, action: "CUSTOMER_UPDATED", entityType: "Customer", entityId: id, beforeData: safeAudit({ name: before.name, creditLimit: before.creditLimit }), afterData: safeAudit({ name: updated.name, creditLimit: updated.creditLimit }) });
 		return updated;
 	});
+	if (input.profileImageKey !== undefined && input.profileImageKey !== before.profileImageKey && before.profileImageKey) await deleteOldProfile(before.profileImageKey);
 	return customerView(customer);
 };
 
@@ -213,6 +214,7 @@ export const deleteCustomer = async (companyId: string, userId: string, id: stri
 		await repository.softDeleteCustomer(tx, id);
 		await repository.createAuditLog(tx, { companyId, actorUserId: userId, action: "CUSTOMER_DELETED", entityType: "Customer", entityId: id });
 	});
+	if (customer.profileImageKey) await deleteOldProfile(customer.profileImageKey);
 };
 
 const validateProfileKey = (key: string, companyId: string, customerId: string) => {

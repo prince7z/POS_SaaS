@@ -214,6 +214,7 @@ export const deleteCategory = async (companyId: string, userId: string, id: stri
 		await repository.softDeleteCategory(tx, id);
 		await repository.createAuditLog(tx, { companyId, actorUserId: userId, action: "CATEGORY_DELETED", entityType: "Category", entityId: id });
 	});
+	if (category.logoKey) await deleteOldObject(category.logoKey);
 };
 
 export const listBrands = async (companyId: string, input: z.infer<typeof brandListSchema>) => {
@@ -261,6 +262,7 @@ export const deleteBrand = async (companyId: string, userId: string, id: string)
 		await repository.softDeleteBrand(tx, id);
 		await repository.createAuditLog(tx, { companyId, actorUserId: userId, action: "BRAND_DELETED", entityType: "Brand", entityId: id });
 	});
+	if (brand.logoKey) await deleteOldObject(brand.logoKey);
 };
 
 const validateLogoKey = (key: string, companyId: string, resource: "brands" | "categories", id: string, allowStaged = false) => {
@@ -384,6 +386,12 @@ export const updateProduct = async (companyId: string, userId: string, id: strin
 		await repository.createAuditLog(tx, { companyId, actorUserId: userId, action: "PRODUCT_UPDATED", entityType: "Product", entityId: id, beforeData: safeAudit({ name: before.name, sku: before.sku, rrp: before.rrp, sellingPrice: before.sellingPrice, purchaseCost: before.purchaseCost }), afterData: safeAudit({ name: updated.name, sku: updated.sku, rrp: updated.rrp, sellingPrice: updated.sellingPrice, purchaseCost: updated.purchaseCost }), metadata: safeAudit({ priceChanged }) });
 		return updated;
 	});
+	if (input.imageKeys) {
+		const removedKeys = before.imageKeys.filter((key) => !input.imageKeys!.includes(key));
+		for (const key of removedKeys) {
+			await deleteOldObject(key);
+		}
+	}
 	return productView(product);
 };
 
@@ -394,6 +402,11 @@ export const deleteProduct = async (companyId: string, userId: string, id: strin
 		await repository.softDeleteProduct(tx, id);
 		await repository.createAuditLog(tx, { companyId, actorUserId: userId, action: "PRODUCT_DELETED", entityType: "Product", entityId: id });
 	});
+	if (product.imageKeys && product.imageKeys.length > 0) {
+		for (const key of product.imageKeys) {
+			await deleteOldObject(key);
+		}
+	}
 };
 
 const validateProductImageKey = (key: string, companyId: string, productId: string) => {

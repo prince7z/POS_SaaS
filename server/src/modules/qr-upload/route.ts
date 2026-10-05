@@ -5,6 +5,7 @@ import { sendSuccess } from "../../utils/apiResponse";
 import {
 	completeSession,
 	createQrSession,
+	deleteMediaKey,
 	deleteQrSession,
 	getSessionInfo,
 	getStatus,
@@ -77,6 +78,17 @@ router.delete("/:token", async (request, response, next) => {
 		const { token } = request.params;
 		await deleteQrSession(token);
 		return sendSuccess(response, { success: true });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/delete-media", requireAuth, async (request, response, next) => {
+	try {
+		const auth = authContext(request);
+		const { key } = request.body || {};
+		const result = await deleteMediaKey(auth.companyId, key);
+		return sendSuccess(response, result);
 	} catch (error) {
 		next(error);
 	}
