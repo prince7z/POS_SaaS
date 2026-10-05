@@ -20,10 +20,23 @@ import { AgentPerfTracker } from "./utils/perfLogger";
 
 const trustedUser = async (request: Parameters<RequestHandler>[0], tracker?: AgentPerfTracker) => {
 	if (!request.auth) throw unauthorized();
+	tracker?.log({ layer: "backend", module: "controller.ts", operation: "trustedUser start" });
+
+	const dbStart = performance.now();
+	tracker?.log({ layer: "backend", module: "controller.ts", operation: "before prisma.user.findFirst()" });
+
 	const user = await prisma.user.findFirst({
 		where: { id: request.auth.userId, companyId: request.auth.companyId, isActive: true, deletedAt: null },
 		select: { id: true, companyId: true, accesses: true },
 	});
+
+	const dbDurationMs = Math.round((performance.now() - dbStart) * 100) / 100;
+	tracker?.log({
+		layer: "backend",
+		module: "controller.ts",
+		operation: `after prisma.user.findFirst() (${dbDurationMs}ms)`,
+	});
+
 	if (!user) throw unauthorized();
 	tracker?.log({ layer: "backend", module: "controller.ts", operation: "auth completed" });
 	tracker?.log({ layer: "backend", module: "controller.ts", operation: "authorization completed" });
@@ -285,15 +298,23 @@ export const stream: RequestHandler = async (request, response, next) => {
 		if (!content) throw validationError("Message content is required");
 
 		let conversationId = bodyObj.conversationId || (request.params.conversationId ? routeParam(request.params.conversationId) : undefined);
+		const convDbStart = performance.now();
+		tracker.log({ layer: "backend", module: "controller.ts", operation: "before conversation DB lookup" });
 		if (conversationId) {
 			await getConversation(conversationId, user.id, user.companyId);
 		} else {
 			const newConv = await createConversation(user.id, user.companyId, content.slice(0, 40));
 			conversationId = newConv.id;
 		}
+		const convDbDurationMs = Math.round((performance.now() - convDbStart) * 100) / 100;
+		tracker.log({ layer: "backend", module: "controller.ts", operation: `after conversation DB lookup (${convDbDurationMs}ms)` });
 
 		tracker.conversationId = conversationId;
+		const msgDbStart = performance.now();
+		tracker.log({ layer: "backend", module: "controller.ts", operation: "before addMessage DB query" });
 		await addMessage(conversationId, "user", content);
+		const msgDbDurationMs = Math.round((performance.now() - msgDbStart) * 100) / 100;
+		tracker.log({ layer: "backend", module: "controller.ts", operation: `after addMessage DB query (${msgDbDurationMs}ms)` });
 		const controller = registerRun(runId);
 		startAgentStream(response);
 
