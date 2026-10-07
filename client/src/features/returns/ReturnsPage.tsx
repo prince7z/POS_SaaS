@@ -46,6 +46,7 @@ import {
   type ReturnableSale,
   type SaleSummary,
 } from '@/api/endpoints/sales'
+import { showSuccess, showError } from '@/components/feedback/notifications'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 
@@ -172,6 +173,7 @@ function CreateReturn({ open, onClose, onCreated }: { open: boolean; onClose: ()
     setMessage('')
     try {
       await createReturn(sale.saleId, { refundType, reason, notes: notes || undefined, items })
+      showSuccess('Return processed', 'Return created successfully.')
       setMessage('Return processed successfully.')
       setSale(undefined)
       setInvoice('')
@@ -180,6 +182,7 @@ function CreateReturn({ open, onClose, onCreated }: { open: boolean; onClose: ()
       setQuantities({})
       onCreated()
     } catch (cause) {
+      showError('Unable to process return', cause)
       setError(cause instanceof Error ? cause.message : 'Return could not be processed.')
     } finally {
       setSaving(false)

@@ -49,6 +49,7 @@ import {
   type ExpenseInput,
   type ExpenseSummary,
 } from '@/api/endpoints/expenses'
+import { showSuccess, showError } from '@/components/feedback/notifications'
 import { EChart } from '@/components/charts/EChart'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -81,10 +82,16 @@ function ExpenseForm({ initial, onSaved, onCancel }: { initial?: Expense; onSave
     setSaving(true)
     setError('')
     try {
-      if (initial) await updateExpense(initial.id, form)
-      else await createExpense(form)
+      if (initial) {
+        await updateExpense(initial.id, form)
+        showSuccess('Expense updated', `Expense updated successfully.`)
+      } else {
+        await createExpense(form)
+        showSuccess('Expense created', `Expense created successfully.`)
+      }
       onSaved()
     } catch (cause) {
+      showError(initial ? 'Unable to update expense' : 'Unable to create expense', cause)
       setError(cause instanceof Error ? cause.message : 'Expense could not be saved.')
     } finally {
       setSaving(false)
@@ -304,20 +311,27 @@ export function ExpensesPage() {
       page: 1,
     }))
   const download = async () => {
-    const blob = await exportExpenses(filters)
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = 'expenses.csv'
-    anchor.click()
-    URL.revokeObjectURL(url)
+    try {
+      const blob = await exportExpenses(filters)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = 'expenses.csv'
+      anchor.click()
+      URL.revokeObjectURL(url)
+      showSuccess('CSV Exported', 'Expenses exported to CSV successfully.')
+    } catch (cause) {
+      showError('Export failed', cause)
+    }
   }
   const remove = async (expense: Expense) => {
     if (!window.confirm(`Delete expense "${expense.description}"?`)) return
     try {
       await deleteExpense(expense.id)
+      showSuccess('Expense deleted', `Expense "${expense.description}" deleted.`)
       setRefresh((value) => value + 1)
     } catch (cause) {
+      showError('Unable to delete expense', cause)
       setError(cause instanceof Error ? cause.message : 'Expense could not be deleted.')
     }
   }

@@ -49,6 +49,7 @@ import {
   type PurchaseOrderSummary,
   type Supplier,
 } from '@/api/endpoints/purchases'
+import { showSuccess, showError } from '@/components/feedback/notifications'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -101,8 +102,10 @@ function OrderForm({
       }
       if (initial) await createPurchaseOrder(payload)
       else await createPurchaseOrder(payload)
+      showSuccess('Purchase order saved', 'Purchase order recorded successfully.')
       onSaved()
     } catch (cause) {
+      showError('Unable to save purchase order', cause)
       setError(cause instanceof Error ? cause.message : 'Purchase order could not be saved.')
     } finally {
       setSaving(false)
@@ -297,18 +300,28 @@ function OrderDetails({ id, onClose, onChanged }: { id?: string; onClose: () => 
       .filter((item) => item.remainingQuantity > 0)
       .map((item) => ({ purchaseOrderItemId: item.id, quantityReceived: item.remainingQuantity }))
     if (items.length) {
-      await receivePurchaseOrder(order.id, items)
-      onChanged()
-      onClose()
+      try {
+        await receivePurchaseOrder(order.id, items)
+        showSuccess('Inventory received', 'Received items into inventory.')
+        onChanged()
+        onClose()
+      } catch (cause) {
+        showError('Receive items failed', cause)
+      }
     }
   }
   const pay = async () => {
     if (!order || Number(payment) <= 0) return
-    await addPurchasePayment(order.id, { amount: Number(payment), paymentMethod: 'BANK_TRANSFER' })
-    onChanged()
-    setPayment('')
-    const refreshed = await getPurchaseOrder(order.id)
-    setOrder(refreshed)
+    try {
+      await addPurchasePayment(order.id, { amount: Number(payment), paymentMethod: 'BANK_TRANSFER' })
+      showSuccess('Payment added', 'Payment recorded for purchase order.')
+      onChanged()
+      setPayment('')
+      const refreshed = await getPurchaseOrder(order.id)
+      setOrder(refreshed)
+    } catch (cause) {
+      showError('Payment failed', cause)
+    }
   }
   return (
     <Drawer.Root

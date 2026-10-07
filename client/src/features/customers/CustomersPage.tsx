@@ -51,6 +51,7 @@ import {
   type CustomerPayload,
   type CustomerSummary,
 } from '@/api/endpoints/customers'
+import { showSuccess, showError } from '@/components/feedback/notifications'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { QrImageUploader } from '@/components/common/QrImageUploader'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -193,8 +194,10 @@ function CustomerForm({
         await attachCustomerProfile(customer.id, upload.key)
         customer = { ...customer, profileImageKey: upload.key }
       }
+      showSuccess(initial ? 'Customer updated' : 'Customer created', `Saved profile for ${customer.name}`)
       onSaved(customer, !initial)
     } catch (cause) {
+      showError(initial ? 'Unable to update customer' : 'Unable to create customer', cause)
       setError(cause instanceof Error ? cause.message : 'Customer could not be saved.')
     } finally {
       setSaving(false)
@@ -647,8 +650,10 @@ export function CustomersPage() {
     if (!window.confirm(`Delete ${customer.name}?`)) return
     try {
       await deleteCustomer(customer.id)
+      showSuccess('Customer deleted', `Customer ${customer.name} deactivated/deleted.`)
       setRefresh((value) => value + 1)
     } catch (cause) {
+      showError('Unable to delete customer', cause)
       setError(cause instanceof Error ? cause.message : 'Customer could not be deleted.')
     }
   }

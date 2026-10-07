@@ -48,6 +48,7 @@ import {
   type Supplier,
   type SupplierPayload,
 } from '@/api/endpoints/purchases'
+import { showSuccess, showError } from '@/components/feedback/notifications'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -100,12 +101,15 @@ function SupplierForm({
     try {
       if (initial) {
         const saved = await updateSupplier(initial.id, form)
+        showSuccess('Supplier updated', `Updated ${saved.name}`)
         onSaved(saved, false)
       } else {
         const saved = await createSupplier(form)
+        showSuccess('Supplier created', `Created ${saved.name}`)
         onSaved(saved, true)
       }
     } catch (cause) {
+      showError(initial ? 'Unable to update supplier' : 'Unable to create supplier', cause)
       setError(cause instanceof Error ? cause.message : 'Supplier could not be saved.')
     } finally {
       setSaving(false)
@@ -477,8 +481,13 @@ export function SuppliersPage() {
   }
   const remove = async (supplier: Supplier) => {
     if (!window.confirm(`Deactivate ${supplier.name}?`)) return
-    await deleteSupplier(supplier.id)
-    load()
+    try {
+      await deleteSupplier(supplier.id)
+      showSuccess('Supplier deactivated', `Deactivated ${supplier.name}`)
+      load()
+    } catch (cause) {
+      showError('Unable to deactivate supplier', cause)
+    }
   }
   return (
     <PageContainer>

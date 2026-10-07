@@ -22,6 +22,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { showSuccess, showError } from '@/components/feedback/notifications'
 import {
   Badge,
   Box,
@@ -163,13 +164,18 @@ function ReportFilters({
 }) {
   const download = async () => {
     if (!onExport) return
-    const blob = await onExport()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = exportName
-    link.click()
-    URL.revokeObjectURL(url)
+    try {
+      const blob = await onExport()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = exportName
+      link.click()
+      URL.revokeObjectURL(url)
+      showSuccess('CSV Exported', `Report ${exportName} downloaded.`)
+    } catch (cause) {
+      showError('Export failed', cause)
+    }
   }
   return (
     <Flex gap="3" wrap="wrap" align="end" mb="6" data-export-ignore="true">

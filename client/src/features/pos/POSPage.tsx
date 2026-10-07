@@ -5,6 +5,9 @@ import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 import { appConfig } from '@/config/app'
 import { createSaleDraft, completeSale, type SaleDiscountType, type SalePaymentMethod } from '@/api/endpoints/sales'
+import { showSuccess, showError, showInfo } from '@/components/feedback/notifications'
+import { celebrateSale } from '@/components/feedback/saleCelebration'
+
 import { fetchPOSProducts, loadPOSInitialData } from './pos.service'
 import { calculateSaleTotals } from './pos.calculations'
 import type { CartItem, CatalogCategory, CatalogProduct, Customer, POSFilters } from './types'
@@ -40,7 +43,6 @@ export function POSPage() {
   const [loading, setLoading] = useState(true)
   const [initialLoading, setInitialLoading] = useState(true)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [addedProductId, setAddedProductId] = useState<string | null>(null)
 
   const [discountType, setDiscountType] = useState<SaleDiscountType | null>(null)
@@ -53,7 +55,7 @@ export function POSPage() {
   const [recipientType, setRecipientType] = useState<'CUSTOMER' | 'OTHER'>('CUSTOMER')
   const [customEmail, setCustomEmail] = useState('')
 
-  // 1. Load initial static metadata (categories and customers)
+  // 1. Load initial static metadata
   useEffect(() => {
     let active = true
     loadPOSInitialData()
@@ -63,8 +65,11 @@ export function POSPage() {
         setCustomers(customerResult.items)
         setCustomerId((current) => current ?? customerResult.items.find((c) => c.isWalkIn)?.id ?? null)
       })
-      .catch(() => {
-        if (active) setError('Failed to load POS metadata. Please check your network connection.')
+      .catch((err) => {
+        if (active) {
+          showError('Failed to load POS metadata', err)
+          setError('Failed to load POS metadata. Please check your network connection.')
+        }
       })
       .finally(() => {
         if (active) setInitialLoading(false)
@@ -93,7 +98,9 @@ export function POSPage() {
         setPagination(res.pagination)
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Could not fetch catalog products.')
+        const msg = err instanceof Error ? err.message : 'Could not fetch catalog products.'
+        setError(msg)
+        showError('Catalog fetch failed', err)
       })
       .finally(() => {
         setLoading(false)
@@ -106,7 +113,7 @@ export function POSPage() {
     }
   }, [initialLoading, loadProducts])
 
-  // Filter change helpers (reset page to 1 on filter/search/sort change)
+  // Filter change helpers
   const handleSearchChange = (search: string) => {
     setFilters((prev) => ({ ...prev, search, page: 1 }))
   }
@@ -183,7 +190,6 @@ export function POSPage() {
   const submitSale = async () => {
     if (!cart.length) return
     setSubmitting(true)
-    setSuccess('')
     setError('')
     try {
       const draft = await createSaleDraft({
@@ -203,23 +209,29 @@ export function POSPage() {
         notifyCustomer,
         notificationEmail: notifyCustomer && recipientType === 'OTHER' ? customEmail : undefined,
       })
-      setSuccess(
+
+      // 1. Show global success toast
+      showSuccess(
+        'Sale completed',
         completed.invoiceNumber
-          ? `Sale ${completed.invoiceNumber} completed successfully.${notifyCustomer ? ' Receipt email queued.' : ''}`
-          : 'Sale completed successfully.',
+          ? `Invoice ${completed.invoiceNumber} created successfully.`
+          : 'The sale was completed successfully.',
       )
+
+      // 2. Trigger celebration
+      celebrateSale()
+
+      // 3. Clear cart & reset parameters
       setCart([])
       setDiscountType(null)
       setDiscountValue(0)
       setNotifyCustomer(false)
       setCustomEmail('')
 
-      // Refresh product list to update inventory numbers after completed sale
+      // 4. Refresh product list to update inventory numbers
       loadProducts()
     } catch (submissionError) {
-      setError(
-        submissionError instanceof Error ? submissionError.message : 'The sale could not be completed.',
-      )
+      showError('Sale failed', submissionError)
     } finally {
       setSubmitting(false)
     }
@@ -253,27 +265,14 @@ export function POSPage() {
         </Alert.Root>
       )}
 
-      {success && (
-        <Alert.Root status="success" mb="4">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Description>{success}</Alert.Description>
-          </Alert.Content>
-          <IconButton aria-label="Dismiss success" size="sm" variant="ghost" onClick={() => setSuccess('')}>
-            <X size={15} />
-          </IconButton>
-        </Alert.Root>
-      )}
-
       <Grid templateColumns={{ base: '1fr', xl: 'minmax(0, 1fr) 350px' }} gap="5" alignItems="start">
-        {/* Left Area: Catalog Toolbar, Grid & Pagination */}
+        {/* Left Area */}
         <Box minW="0">
-          {/* Search Bar + Sort Dropdown */}
           <HStack gap="2.5" mb="3">
             <ProductSearch
               value={filters.search}
               onChange={handleSearchChange}
-              onBarcodeScan={() => setError('Barcode scanning is ready for hardware integration.')}
+              onBarcodeScan={() => showInfo('Hardware Integration', 'Barcode scanning is ready for hardware scanner integration.')}
             />
             <ProductSort
               sortBy={filters.sortBy}
@@ -282,14 +281,12 @@ export function POSPage() {
             />
           </HStack>
 
-          {/* Horizontal Category Navigation */}
           <CategoryFilter
             categories={categories}
             selectedCategoryId={filters.categoryId}
             onSelectCategory={handleCategoryChange}
           />
 
-          {/* Product Grid / Loading Skeleton / Empty State */}
           {loading || initialLoading ? (
             <ProductGridSkeleton count={filters.limit} />
           ) : products.length > 0 ? (
@@ -305,7 +302,6 @@ export function POSPage() {
             />
           )}
 
-          {/* Server-Side Pagination */}
           {!loading && !initialLoading && products.length > 0 && (
             <ProductPagination
               page={pagination.page}
@@ -318,7 +314,7 @@ export function POSPage() {
           )}
         </Box>
 
-        {/* Right Area: Sticky Cart Panel */}
+        {/* Right Area */}
         <VStack align="stretch" gap="0">
           <CartPanel
             cart={cart}

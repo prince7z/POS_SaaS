@@ -91,6 +91,7 @@ import {
 import type { CatalogBrand, CatalogCategory, CatalogProduct, ProductPayload } from '@/api/endpoints/catalog'
 import { getSuppliers, type SupplierOption } from '@/api/endpoints/purchases'
 import { getInventorySummary, type InventorySummary } from '@/api/endpoints/inventory'
+import { showSuccess, showError } from '@/components/feedback/notifications'
 
 type Section = 'products' | 'categories' | 'brands'
 const pageSize = 20
@@ -409,16 +410,20 @@ function ProductDialog({
         }
 
         const saved = await updateProduct(initial.id, diff)
+        showSuccess('Product updated', `Updated ${saved.name}`)
         onOpenChange(false)
         onSaved(saved, false)
       } else {
         const saved = await createProduct({ ...form, imageKeys: currentImageKeys })
+        showSuccess('Product created', `Created ${saved.name}`)
         onOpenChange(false)
         onSaved(saved, true)
       }
     } catch (cause) {
+      showError(initial ? 'Unable to update product' : 'Unable to create product', cause)
       setError(cause instanceof Error ? cause.message : 'Product could not be saved.')
     } finally {
+
       setSaving(false)
     }
   }
@@ -706,10 +711,12 @@ function EntityDialog({
           const nextLogo = logoKey === undefined ? initLogo : logoKey
           if (initLogo !== nextLogo) diff.logoKey = nextLogo
           const saved = await updateCategory(initial.id, diff)
+          showSuccess('Category updated', `Updated category ${saved.name}`)
           onOpenChange(false)
           onSaved(saved, false)
         } else {
           const saved = await createCategory({ name, description, parentId, logoKey: logoKey ?? null })
+          showSuccess('Category created', `Created category ${saved.name}`)
           onOpenChange(false)
           onSaved(saved, true)
         }
@@ -722,17 +729,18 @@ function EntityDialog({
           const nextLogo = logoKey === undefined ? initLogo : logoKey
           if (initLogo !== nextLogo) diff.logoKey = nextLogo
           const saved = await updateBrand(initial.id, diff)
+          showSuccess('Brand updated', `Updated brand ${saved.name}`)
           onOpenChange(false)
           onSaved(saved, false)
         } else {
           const saved = await createBrand({ name, description, logoKey: logoKey ?? null })
+          showSuccess('Brand created', `Created brand ${saved.name}`)
           onOpenChange(false)
           onSaved(saved, true)
         }
       }
-      onOpenChange(false)
-      onSaved()
     } catch (cause) {
+      showError(`Unable to save ${kind}`, cause)
       setError(cause instanceof Error ? cause.message : `Could not save ${kind}.`)
     } finally {
       setSaving(false)
@@ -973,9 +981,11 @@ function ProductsSection() {
     if (!remove) return
     try {
       await deleteProduct(remove.id)
+      showSuccess('Product deleted', `Removed ${remove.name} from catalog`)
       setRemove(undefined)
       load()
     } catch (cause) {
+      showError('Unable to delete product', cause)
       setError(cause instanceof Error ? cause.message : 'Product could not be deleted.')
     }
   }
@@ -1183,11 +1193,17 @@ function LegacyEntitySection({ kind }: { kind: 'category' | 'brand' }) {
   const removeItem = async () => {
     if (!remove) return
     try {
-      if (kind === 'category') await deleteCategory(remove.id)
-      else await deleteBrand(remove.id)
+      if (kind === 'category') {
+        await deleteCategory(remove.id)
+        showSuccess('Category deleted', `Removed category ${remove.name}`)
+      } else {
+        await deleteBrand(remove.id)
+        showSuccess('Brand deleted', `Removed brand ${remove.name}`)
+      }
       setRemove(undefined)
       load()
     } catch (cause) {
+      showError(`Could not delete ${kind}`, cause)
       setError(cause instanceof Error ? cause.message : `Could not delete ${kind}.`)
     }
   }
