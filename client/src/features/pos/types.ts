@@ -3,9 +3,11 @@ import type { Customer } from '@/api/endpoints/customers'
 import type { SaleDiscountType, SalePaymentMethod } from '@/api/endpoints/sales'
 
 export type { CatalogCategory, CatalogProduct, Customer, SaleDiscountType, SalePaymentMethod }
+
 export interface CartItem extends CatalogProduct {
   quantity: number
 }
+
 export interface SaleTotals {
   subtotal: number
   discount: number
@@ -13,8 +15,12 @@ export interface SaleTotals {
   tax: number
   total: number
 }
+
 export interface POSFilters {
   search: string
-  categoryId: string | null
+  categoryId?: string
+  sortBy: 'name' | 'sellingPrice' | 'stockQuantity' | 'createdAt'
+  sortOrder: 'asc' | 'desc'
   page: number
+  limit: number
 }
