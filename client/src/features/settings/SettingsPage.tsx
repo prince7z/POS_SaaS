@@ -60,6 +60,7 @@ import {
   type Company,
   type CompanyUser,
 } from '@/api/endpoints/company'
+import { showSuccess, showError } from '@/components/feedback/notifications'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { QrImageUploader } from '@/components/common/QrImageUploader'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -209,9 +210,11 @@ function General({ company, onSaved }: { company: Company; onSaved: (company: Co
       }
 
       const updated = await updateCompany(diff)
+      showSuccess('Company settings saved', 'Company details updated successfully.')
       onSaved(updated)
       setFile(undefined)
     } catch (cause) {
+      showError('Unable to save company settings', cause)
       setError(cause instanceof Error ? cause.message : 'Company settings could not be saved.')
     } finally {
       setSaving(false)
@@ -222,9 +225,11 @@ function General({ company, onSaved }: { company: Company; onSaved: (company: Co
     setError('')
     try {
       await deleteCompanyLogo()
+      showSuccess('Company logo removed', 'Logo deleted successfully.')
       onSaved({ ...company, logoKey: null, logoUrl: null })
       setPreview('')
     } catch (cause) {
+      showError('Unable to remove company logo', cause)
       setError(cause instanceof Error ? cause.message : 'Company logo could not be removed.')
     } finally {
       setSaving(false)

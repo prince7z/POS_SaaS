@@ -46,6 +46,6 @@ export function notifyPromise<T>(
     success: { title: string; description?: string }
     error: { title: string; description?: string }
   },
-): Promise<T> {
+) {
   return toaster.promise(promise, messages)
 }

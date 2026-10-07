@@ -17,8 +17,7 @@ export function celebrateSale() {
     spread: 55,
     startVelocity: 28,
     origin: { x: 0.25, y: 0.65 },
-    disableForReducedMotion: true,
-    useWorker: true,
+    disableForReducedMotion: false,
     scalar: 0.9,
   })
 
@@ -28,8 +27,7 @@ export function celebrateSale() {
     spread: 55,
     startVelocity: 28,
     origin: { x: 0.75, y: 0.65 },
-    disableForReducedMotion: true,
-    useWorker: true,
+    disableForReducedMotion: false,
     scalar: 0.9,
   })
 }
