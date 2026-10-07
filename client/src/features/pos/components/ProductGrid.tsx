@@ -18,8 +18,8 @@ export function ProductGrid({
     <AnimatePresence mode="popLayout">
       <SimpleGrid
         mt="3"
-        columns={{ base: 1, sm: 2, md: 3, xl: 4 }}
-        gap="3"
+        columns={{ base: 1, sm: 2, md: 3, lg: 4, xl: 5 }}
+        gap="2.5"
       >
         {products.map((product) => (
           <MotionBox

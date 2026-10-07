@@ -84,14 +84,21 @@ export function CartPanel({
     <Card.Root
       variant="outline"
       borderRadius="md"
-      position={{ base: 'static', xl: 'sticky' }}
-      top="80px"
+      position={{ base: 'static', xl: 'fixed' }}
+      top={{ base: 'auto', xl: '84px' }}
+      right={{ base: 'auto', xl: '24px' }}
+      w={{ base: 'full', xl: '350px' }}
+      h={{ base: 'auto', xl: 'calc(100vh - 104px)' }}
+      zIndex="10"
       bg="bg.panel"
+      display="flex"
+      flexDirection="column"
+      shadow="sm"
     >
-      <Card.Header py="3" px="4" borderBottomWidth="1px" borderColor="border">
+      <Card.Header py="2.5" px="3.5" borderBottomWidth="1px" borderColor="border" flexShrink={0}>
         <Flex justify="space-between" align="center">
           <Box>
-            <Text fontWeight="700" fontSize="md">
+            <Text fontWeight="700" fontSize="sm">
               Current Cart
             </Text>
             <Text fontSize="xs" color="fg.subtle">
@@ -112,11 +119,11 @@ export function CartPanel({
         </Flex>
       </Card.Header>
 
-      <Card.Body p="4" pt="3">
+      <Card.Body p="3" display="flex" flexDirection="column" flex="1" overflow="hidden">
         {!cart.length ? (
-          <VStack py="12" gap="3" textAlign="center">
+          <VStack py="12" gap="3" textAlign="center" my="auto">
             <Box p="3" borderRadius="full" bg="bg.muted" color="fg.muted">
-              <ShoppingCart size={28} />
+              <ShoppingCart size={26} />
             </Box>
             <VStack gap="1">
               <Text fontWeight="600" fontSize="sm">
@@ -128,9 +135,9 @@ export function CartPanel({
             </VStack>
           </VStack>
         ) : (
-          <VStack align="stretch" gap="3">
-            {/* Cart Items List */}
-            <Box maxH={{ base: '320px', xl: '380px' }} overflowY="auto" pr="1">
+          <Flex direction="column" h="full" gap="2.5" overflow="hidden">
+            {/* Scrollable Cart Items List */}
+            <Box flex="1" minH="0" overflowY="auto" pr="1.5">
               <AnimatePresence initial={false}>
                 {cart.map((item) => (
                   <CartItem
@@ -143,119 +150,122 @@ export function CartPanel({
               </AnimatePresence>
             </Box>
 
-            {/* Discount Section */}
-            <VStack align="stretch" gap="1.5" pt="1">
-              <Text fontSize="xs" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
-                Discount
-              </Text>
-              <DiscountSelector
-                discountType={discountType}
-                discountValue={discountValue}
-                onDiscountTypeChange={onDiscountTypeChange}
-                onDiscountValueChange={onDiscountValueChange}
-              />
-            </VStack>
+            {/* Pinned Bottom Controls & Checkout */}
+            <VStack align="stretch" gap="2" pt="2" borderTopWidth="1px" borderColor="border" flexShrink={0}>
+              {/* Discount Section */}
+              <VStack align="stretch" gap="1">
+                <Text fontSize="10px" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+                  Discount
+                </Text>
+                <DiscountSelector
+                  discountType={discountType}
+                  discountValue={discountValue}
+                  onDiscountTypeChange={onDiscountTypeChange}
+                  onDiscountValueChange={onDiscountValueChange}
+                />
+              </VStack>
 
-            {/* Customer Section */}
-            <VStack align="stretch" gap="1.5">
-              <Text fontSize="xs" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
-                Customer
-              </Text>
-              <CustomerSelector
-                customers={customers}
-                selectedCustomerId={selectedCustomerId}
-                onSelectCustomer={onSelectCustomer}
-              />
-            </VStack>
+              {/* Customer Section */}
+              <VStack align="stretch" gap="1">
+                <Text fontSize="10px" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+                  Customer
+                </Text>
+                <CustomerSelector
+                  customers={customers}
+                  selectedCustomerId={selectedCustomerId}
+                  onSelectCustomer={onSelectCustomer}
+                />
+              </VStack>
 
-            {/* Payment Method Section */}
-            <VStack align="stretch" gap="1.5">
-              <Text fontSize="xs" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
-                Payment Method
-              </Text>
-              <PaymentMethodSelector
-                value={paymentMethod}
-                onChange={onPaymentMethodChange}
-              />
-            </VStack>
+              {/* Payment Method Section */}
+              <VStack align="stretch" gap="1">
+                <Text fontSize="10px" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+                  Payment Method
+                </Text>
+                <PaymentMethodSelector
+                  value={paymentMethod}
+                  onChange={onPaymentMethodChange}
+                />
+              </VStack>
 
-            {/* Email Receipt Option */}
-            <Box py="2" borderTopWidth="1px" borderBottomWidth="1px" borderColor="border">
-              <HStack justify="space-between" cursor="pointer" onClick={onToggleNotifyCustomer}>
-                <HStack gap="2">
-                  <Mail size={15} color="var(--chakra-colors-blue-500)" />
-                  <Text fontSize="xs" fontWeight="600">
-                    Email Receipt
-                  </Text>
-                </HStack>
-                <Button
-                  size="xs"
-                  variant={notifyCustomer ? 'solid' : 'outline'}
-                  colorPalette={notifyCustomer ? 'blue' : undefined}
-                >
-                  {notifyCustomer ? 'Enabled' : 'Off'}
-                </Button>
-              </HStack>
-
-              <AnimatePresence>
-                {notifyCustomer && (
-                  <MotionBox
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    overflow="hidden"
-                    mt="2"
+              {/* Email Receipt Option */}
+              <Box py="1" borderTopWidth="1px" borderBottomWidth="1px" borderColor="border">
+                <HStack justify="space-between" cursor="pointer" onClick={onToggleNotifyCustomer}>
+                  <HStack gap="1.5">
+                    <Mail size={14} color="var(--chakra-colors-blue-500)" />
+                    <Text fontSize="xs" fontWeight="600">
+                      Email Receipt
+                    </Text>
+                  </HStack>
+                  <Button
+                    size="2xs"
+                    variant={notifyCustomer ? 'solid' : 'outline'}
+                    colorPalette={notifyCustomer ? 'blue' : undefined}
                   >
-                    <VStack align="stretch" gap="2">
-                      <HStack gap="1.5">
-                        <Button
-                          size="xs"
-                          flex="1"
-                          variant={recipientType === 'CUSTOMER' ? 'solid' : 'outline'}
-                          onClick={() => onRecipientTypeChange('CUSTOMER')}
-                        >
-                          Customer Email
-                        </Button>
-                        <Button
-                          size="xs"
-                          flex="1"
-                          variant={recipientType === 'OTHER' ? 'solid' : 'outline'}
-                          onClick={() => onRecipientTypeChange('OTHER')}
-                        >
-                          Other Email
-                        </Button>
-                      </HStack>
-                      {recipientType === 'OTHER' && (
-                        <Input
-                          size="sm"
-                          type="email"
-                          placeholder="Enter recipient email..."
-                          value={customEmail}
-                          onChange={(e) => onCustomEmailChange(e.target.value)}
-                        />
-                      )}
-                    </VStack>
-                  </MotionBox>
-                )}
-              </AnimatePresence>
-            </Box>
+                    {notifyCustomer ? 'Enabled' : 'Off'}
+                  </Button>
+                </HStack>
 
-            {/* Totals Summary */}
-            <CartSummary totals={totals} />
+                <AnimatePresence>
+                  {notifyCustomer && (
+                    <MotionBox
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      overflow="hidden"
+                      mt="2"
+                    >
+                      <VStack align="stretch" gap="1.5">
+                        <HStack gap="1.5">
+                          <Button
+                            size="2xs"
+                            flex="1"
+                            variant={recipientType === 'CUSTOMER' ? 'solid' : 'outline'}
+                            onClick={() => onRecipientTypeChange('CUSTOMER')}
+                          >
+                            Customer Email
+                          </Button>
+                          <Button
+                            size="2xs"
+                            flex="1"
+                            variant={recipientType === 'OTHER' ? 'solid' : 'outline'}
+                            onClick={() => onRecipientTypeChange('OTHER')}
+                          >
+                            Other Email
+                          </Button>
+                        </HStack>
+                        {recipientType === 'OTHER' && (
+                          <Input
+                            size="xs"
+                            type="email"
+                            placeholder="Enter recipient email..."
+                            value={customEmail}
+                            onChange={(e) => onCustomEmailChange(e.target.value)}
+                          />
+                        )}
+                      </VStack>
+                    </MotionBox>
+                  )}
+                </AnimatePresence>
+              </Box>
 
-            {/* Complete Sale Action */}
-            <Button
-              size="md"
-              colorPalette="blue"
-              w="full"
-              loading={submitting}
-              onClick={onSubmitSale}
-              fontWeight="600"
-            >
-              <Check size={16} />
-              Complete Sale
-            </Button>
-          </VStack>
+              {/* Totals Summary */}
+              <CartSummary totals={totals} />
+
+              {/* Complete Sale Action */}
+              <Button
+                size="sm"
+                colorPalette="blue"
+                w="full"
+                loading={submitting}
+                onClick={onSubmitSale}
+                fontWeight="600"
+              >
+                <Check size={15} />
+                Complete Sale
+              </Button>
+            </VStack>
+          </Flex>
         )}
       </Card.Body>
     </Card.Root>

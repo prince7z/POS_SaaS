@@ -36,50 +36,51 @@ export function ProductCard({
         flexDirection="column"
         bg="bg.panel"
       >
-        <ProductImage imageUrls={product.imageUrls} name={product.name} />
+        <ProductImage
+          imageUrls={product.imageUrls}
+          name={product.name}
+          brandName={product.brand?.name}
+          sku={product.sku}
+        />
 
-        <Card.Body display="flex" flexDirection="column" gap="1.5" p="3" flex="1">
-          <Text fontSize="xs" color="fg.subtle" lineClamp={1}>
-            {product.brand?.name ?? '—'}
-          </Text>
-
-          <Text fontWeight="600" fontSize="sm" lineClamp={2} title={product.name} minH="2.5em">
+        <Card.Body display="flex" flexDirection="column" gap="1" p="2.5" flex="1">
+          <Text fontWeight="600" fontSize="xs" lineClamp={2} title={product.name}>
             {product.name}
           </Text>
 
-          <Text fontSize="xs" color="fg.muted">
-            SKU: {product.sku}
-          </Text>
-
-          <Flex align="baseline" gap="2" mt="auto" pt="1">
-            <Text fontWeight="700" fontSize="md" color="fg.default">
-              {formatCurrency(product.sellingPrice)}
-            </Text>
-            {product.rrp && product.rrp > product.sellingPrice ? (
-              <Text as="s" fontSize="xs" color="fg.subtle">
-                {formatCurrency(product.rrp)}
+          {/* Price on Left, Stock Badge on Right - minimal gap under title */}
+          <Flex align="center" justify="space-between" gap="1" mt="1">
+            <Box minW="0">
+              <Text fontWeight="700" fontSize="sm" color="fg.default" lineClamp={1}>
+                {formatCurrency(product.sellingPrice)}
               </Text>
-            ) : null}
-          </Flex>
+              {product.rrp && product.rrp > product.sellingPrice ? (
+                <Text as="s" fontSize="10px" color="fg.subtle" display="block" lineHeight="1">
+                  {formatCurrency(product.rrp)}
+                </Text>
+              ) : null}
+            </Box>
 
-          <Box mt="0.5">
-            <StockBadge
-              stockQuantity={product.stockQuantity}
-              lowStockThreshold={product.lowStockThreshold}
-            />
-          </Box>
+            <Box flexShrink={0}>
+              <StockBadge
+                stockQuantity={product.stockQuantity}
+                lowStockThreshold={product.lowStockThreshold}
+              />
+            </Box>
+          </Flex>
         </Card.Body>
 
-        <Card.Footer p="3" pt="0">
+        <Card.Footer p="2.5" pt="0">
           <Button
-            size="sm"
+            size="xs"
             variant={added ? 'solid' : 'outline'}
             colorPalette={added ? 'green' : undefined}
             disabled={isOutOfStock}
             onClick={() => onAdd(product)}
             w="full"
+            fontWeight="600"
           >
-            {added ? <Check size={14} /> : <Plus size={14} />}
+            {added ? <Check size={13} /> : <Plus size={13} />}
             {added ? 'Added' : isOutOfStock ? 'Out of stock' : 'Add'}
           </Button>
         </Card.Footer>
