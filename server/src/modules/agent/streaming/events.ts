@@ -13,6 +13,7 @@ export type AgentEventType =
 	| "question"
 	| "confirmation"
 	| "upload_required"
+	| "email_preview"
 	| "error"
 	| "done";
 

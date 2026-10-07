@@ -100,6 +100,11 @@ const colors = {
 	white: "\x1b[97m",
 };
 
+const shouldDisplayPerf = (): boolean => {
+	const val = process.env.DISPLAY_PERF || process.env.DISPLAY_PERF_LOGS;
+	return val?.trim().toLowerCase() === "true";
+};
+
 export class AgentPerfTracker {
 	public requestId: string;
 	public startWallTime: string;
@@ -161,22 +166,24 @@ export class AgentPerfTracker {
 
 		this.entries.push(entry);
 
-		const convStr = entry.conversationId ? ` ${colors.gray}| conv:${entry.conversationId}${colors.reset}` : "";
-		const evtStr = entry.eventType ? ` ${colors.gray}| evt:${entry.eventType}(${entry.eventId || ""})${colors.reset}` : "";
-		const llmStr = entry.llmCallId ? ` ${colors.brightYellow}| llm:${entry.llmCallId}${colors.reset}` : "";
-		const chunkStr = entry.chunkIndex !== undefined ? ` ${colors.cyan}| chunk #${entry.chunkIndex} (len:${entry.chunkLength})${colors.reset}` : "";
+		if (shouldDisplayPerf()) {
+			const convStr = entry.conversationId ? ` ${colors.gray}| conv:${entry.conversationId}${colors.reset}` : "";
+			const evtStr = entry.eventType ? ` ${colors.gray}| evt:${entry.eventType}(${entry.eventId || ""})${colors.reset}` : "";
+			const llmStr = entry.llmCallId ? ` ${colors.brightYellow}| llm:${entry.llmCallId}${colors.reset}` : "";
+			const chunkStr = entry.chunkIndex !== undefined ? ` ${colors.cyan}| chunk #${entry.chunkIndex} (len:${entry.chunkLength})${colors.reset}` : "";
 
-		const layerColor =
-			entry.layer === "backend" ? colors.brightBlue :
-			entry.layer === "langgraph" ? colors.brightMagenta :
-			entry.layer === "llm" ? colors.brightYellow :
-			colors.brightGreen;
+			const layerColor =
+				entry.layer === "backend" ? colors.brightBlue :
+				entry.layer === "langgraph" ? colors.brightMagenta :
+				entry.layer === "llm" ? colors.brightYellow :
+				colors.brightGreen;
 
-		const timeStr = new Date(entry.timestamp).toLocaleTimeString();
+			const timeStr = new Date(entry.timestamp).toLocaleTimeString();
 
-		console.log(
-			`${colors.gray}[${timeStr}]${colors.reset} ${layerColor}[PERF][${entry.layer.toUpperCase()}]${colors.reset} ${colors.cyan}+${entry.elapsedMs.toFixed(1)}ms${colors.reset} | ${colors.bold}req:${entry.requestId}${colors.reset}${llmStr} | ${colors.white}${entry.module}::${entry.operation}${colors.reset}${evtStr}${convStr}${chunkStr}`
-		);
+			console.log(
+				`${colors.gray}[${timeStr}]${colors.reset} ${layerColor}[PERF][${entry.layer.toUpperCase()}]${colors.reset} ${colors.cyan}+${entry.elapsedMs.toFixed(1)}ms${colors.reset} | ${colors.bold}req:${entry.requestId}${colors.reset}${llmStr} | ${colors.white}${entry.module}::${entry.operation}${colors.reset}${evtStr}${convStr}${chunkStr}`
+			);
+		}
 
 		return entry;
 	}
@@ -236,41 +243,43 @@ export class AgentPerfTracker {
 		const elapsedFromPrev = Math.round((performance.now() - this.lastNodeTime) * 100) / 100;
 		const isDebug = process.env.AGENT_PERF_DEBUG === "true";
 
-		const border = colors.cyan;
-		const r = colors.reset;
-		const b = colors.bold;
-		const w = colors.white;
-		const g = colors.gray;
-		const y = colors.brightYellow;
-		const m = colors.brightMagenta;
+		if (shouldDisplayPerf()) {
+			const border = colors.cyan;
+			const r = colors.reset;
+			const b = colors.bold;
+			const w = colors.white;
+			const g = colors.gray;
+			const y = colors.brightYellow;
+			const m = colors.brightMagenta;
 
-		console.log(`\n${border}┌─────────────────────────────────────────────────────────────────────────────┐${r}`);
-		console.log(`${border}│${r} ${b}${y}⚡ LLM CALL PRE-REQUEST SUMMARY${r} ${g}[callId: ${metrics.llmCallId}]${r}`);
-		console.log(`${border}├─────────────────────────────────────────────────────────────────────────────┤${r}`);
-		console.log(`${border}│${r}  ${b}requestId:${r} ${colors.cyan}${this.requestId}${r}`);
-		console.log(`${border}│${r}  ${b}node:${r}      ${m}${metrics.node}${r}`);
-		console.log(`${border}│${r}  ${b}model:${r}     ${w}${metrics.model}${r}`);
-		console.log(`${border}│${r}  ${b}messages:${r}  ${metrics.messageCount || 0} messages`);
-		console.log(`${border}│${r}  ${b}prep delay:${r}${y}+${elapsedFromPrev}ms${r} from previous node`);
-		console.log(`${border}├─────────────────────────────────────────────────────────────────────────────┤${r}`);
-		console.log(`${border}│${r} ${b}${colors.brightCyan}📥 INPUT CONTEXT BREAKDOWN${r} ${g}(estimated @ ~4 chars/token)${r}`);
-		console.log(`${border}│${r}  • system prompt : ${w}${(metrics.systemPromptChars || 0).toLocaleString().padStart(7)} chars${r} │ ${y}~${(metrics.systemPromptTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
-		console.log(`${border}│${r}  • user prompt   : ${w}${(metrics.userPromptChars || 0).toLocaleString().padStart(7)} chars${r} │ ${y}~${(metrics.userPromptTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
-		console.log(`${border}│${r}  • history       : ${w}${(metrics.historyChars || 0).toLocaleString().padStart(7)} chars${r} │ ${y}~${(metrics.historyTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
-		console.log(`${border}│${r}  • state context : ${w}${(metrics.stateChars || 0).toLocaleString().padStart(7)} chars${r} │ ${y}~${(metrics.stateTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
-		console.log(`${border}│${r}  • tools payload : ${w}${(metrics.toolsChars || 0).toLocaleString().padStart(7)} chars${r} │ ${y}~${(metrics.toolsTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
+			console.log(`\n${border}┌─────────────────────────────────────────────────────────────────────────────┐${r}`);
+			console.log(`${border}│${r} ${b}${y}⚡ LLM CALL PRE-REQUEST SUMMARY${r} ${g}[callId: ${metrics.llmCallId}]${r}`);
+			console.log(`${border}├─────────────────────────────────────────────────────────────────────────────┤${r}`);
+			console.log(`${border}│${r}  ${b}requestId:${r} ${colors.cyan}${this.requestId}${r}`);
+			console.log(`${border}│${r}  ${b}node:${r}      ${m}${metrics.node}${r}`);
+			console.log(`${border}│${r}  ${b}model:${r}     ${w}${metrics.model}${r}`);
+			console.log(`${border}│${r}  ${b}messages:${r}  ${metrics.messageCount || 0} messages`);
+			console.log(`${border}│${r}  ${b}prep delay:${r}${y}+${elapsedFromPrev}ms${r} from previous node`);
+			console.log(`${border}├─────────────────────────────────────────────────────────────────────────────┤${r}`);
+			console.log(`${border}│${r} ${b}${colors.brightCyan}📥 INPUT CONTEXT BREAKDOWN${r} ${g}(estimated @ ~4 chars/token)${r}`);
+			console.log(`${border}│${r}  • system prompt : ${w}${(metrics.systemPromptChars || 0).toLocaleString().padStart(7)} chars${r} │ ${y}~${(metrics.systemPromptTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
+			console.log(`${border}│${r}  • user prompt   : ${w}${(metrics.userPromptChars || 0).toLocaleString().padStart(7)} chars${r} │ ${y}~${(metrics.userPromptTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
+			console.log(`${border}│${r}  • history       : ${w}${(metrics.historyChars || 0).toLocaleString().padStart(7)} chars${r} │ ${y}~${(metrics.historyTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
+			console.log(`${border}│${r}  • state context : ${w}${(metrics.stateChars || 0).toLocaleString().padStart(7)} chars${r} │ ${y}~${(metrics.stateTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
+			console.log(`${border}│${r}  • tools payload : ${w}${(metrics.toolsChars || 0).toLocaleString().padStart(7)} chars${r} │ ${y}~${(metrics.toolsTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
 
-		if (metrics.stateKeys && metrics.stateKeys.length > 0) {
-			console.log(`${border}│${r}  ${g}├─ state keys:${r} [${metrics.stateKeys.join(", ")}]`);
+			if (metrics.stateKeys && metrics.stateKeys.length > 0) {
+				console.log(`${border}│${r}  ${g}├─ state keys:${r} [${metrics.stateKeys.join(", ")}]`);
+			}
+			if (metrics.numToolCalls && metrics.numToolCalls > 0) {
+				console.log(`${border}│${r}  ${g}├─ tool calls:${r} ${metrics.numToolCalls} tools [${(metrics.toolNames || []).join(", ")}]`);
+			}
+
+			console.log(`${border}├─────────────────────────────────────────────────────────────────────────────┤${r}`);
+			console.log(`${border}│${r}  ${b}${colors.brightGreen}TOTAL INPUT : ${(metrics.totalInputChars || 0).toLocaleString()} chars │ ~${(metrics.totalInputTokens || 0).toLocaleString()} tokens${r}`);
+			console.log(`${border}│${r}  ${g}max output : 4000 tokens │ temp=0 │ reasoning={exclude:true}${r}`);
+			console.log(`${border}└─────────────────────────────────────────────────────────────────────────────┘${r}\n`);
 		}
-		if (metrics.numToolCalls && metrics.numToolCalls > 0) {
-			console.log(`${border}│${r}  ${g}├─ tool calls:${r} ${metrics.numToolCalls} tools [${(metrics.toolNames || []).join(", ")}]`);
-		}
-
-		console.log(`${border}├─────────────────────────────────────────────────────────────────────────────┤${r}`);
-		console.log(`${border}│${r}  ${b}${colors.brightGreen}TOTAL INPUT : ${(metrics.totalInputChars || 0).toLocaleString()} chars │ ~${(metrics.totalInputTokens || 0).toLocaleString()} tokens${r}`);
-		console.log(`${border}│${r}  ${g}max output : 4000 tokens │ temp=0 │ reasoning={exclude:true}${r}`);
-		console.log(`${border}└─────────────────────────────────────────────────────────────────────────────┘${r}\n`);
 
 		this.log({
 			layer: "llm",
@@ -295,44 +304,46 @@ export class AgentPerfTracker {
 		this.lastNodeTime = performance.now();
 		const isDebug = process.env.AGENT_PERF_DEBUG === "true";
 
-		const border = colors.green;
-		const r = colors.reset;
-		const b = colors.bold;
-		const w = colors.white;
-		const g = colors.gray;
-		const y = colors.brightYellow;
-		const gr = colors.brightGreen;
-		const m = colors.brightMagenta;
-		const c = colors.brightCyan;
+		if (shouldDisplayPerf()) {
+			const border = colors.green;
+			const r = colors.reset;
+			const b = colors.bold;
+			const w = colors.white;
+			const g = colors.gray;
+			const y = colors.brightYellow;
+			const gr = colors.brightGreen;
+			const m = colors.brightMagenta;
+			const c = colors.brightCyan;
 
-		console.log(`\n${border}┌─────────────────────────────────────────────────────────────────────────────┐${r}`);
-		console.log(`${border}│${r} ${b}${gr}📊 LLM CALL POST-REQUEST SUMMARY${r} ${g}[callId: ${metrics.llmCallId}]${r}`);
-		console.log(`${border}├─────────────────────────────────────────────────────────────────────────────┤${r}`);
-		console.log(`${border}│${r}  ${b}requestId:${r} ${colors.cyan}${this.requestId}${r}`);
-		console.log(`${border}│${r}  ${b}node:${r}      ${m}${metrics.node}${r}`);
-		console.log(`${border}│${r}  ${b}model:${r}     ${w}${metrics.model}${r}`);
-		console.log(`${border}├─────────────────────────────────────────────────────────────────────────────┤${r}`);
-		console.log(`${border}│${r}  ${b}INPUT :${r}  ${w}${(metrics.totalInputChars || 0).toLocaleString().padStart(7)} chars${r} │ ${y}~${(metrics.totalInputTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
-		console.log(`${border}│${r}  ${b}OUTPUT:${r}  ${w}${(metrics.totalOutputChars || 0).toLocaleString().padStart(7)} chars${r} │ ${gr}~${(metrics.totalOutputTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
-		if (metrics.providerUsage) {
-			console.log(`${border}│${r}  ${g}Provider Usage : prompt=${metrics.providerUsage.promptTokens ?? "N/A"}, completion=${metrics.providerUsage.completionTokens ?? "N/A"}, total=${metrics.providerUsage.totalTokens ?? "N/A"}${r}`);
+			console.log(`\n${border}┌─────────────────────────────────────────────────────────────────────────────┐${r}`);
+			console.log(`${border}│${r} ${b}${gr}📊 LLM CALL POST-REQUEST SUMMARY${r} ${g}[callId: ${metrics.llmCallId}]${r}`);
+			console.log(`${border}├─────────────────────────────────────────────────────────────────────────────┤${r}`);
+			console.log(`${border}│${r}  ${b}requestId:${r} ${colors.cyan}${this.requestId}${r}`);
+			console.log(`${border}│${r}  ${b}node:${r}      ${m}${metrics.node}${r}`);
+			console.log(`${border}│${r}  ${b}model:${r}     ${w}${metrics.model}${r}`);
+			console.log(`${border}├─────────────────────────────────────────────────────────────────────────────┤${r}`);
+			console.log(`${border}│${r}  ${b}INPUT :${r}  ${w}${(metrics.totalInputChars || 0).toLocaleString().padStart(7)} chars${r} │ ${y}~${(metrics.totalInputTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
+			console.log(`${border}│${r}  ${b}OUTPUT:${r}  ${w}${(metrics.totalOutputChars || 0).toLocaleString().padStart(7)} chars${r} │ ${gr}~${(metrics.totalOutputTokens || 0).toLocaleString().padStart(5)} tokens${r}`);
+			if (metrics.providerUsage) {
+				console.log(`${border}│${r}  ${g}Provider Usage : prompt=${metrics.providerUsage.promptTokens ?? "N/A"}, completion=${metrics.providerUsage.completionTokens ?? "N/A"}, total=${metrics.providerUsage.totalTokens ?? "N/A"}${r}`);
+			}
+			console.log(`${border}├─────────────────────────────────────────────────────────────────────────────┤${r}`);
+			console.log(`${border}│${r} ${b}${c}⏱️  TIMINGS & STREAMING${r}`);
+			console.log(`${border}│${r}  • Node Prep Delay : ${colors.yellow}${metrics.timeBeforeLLMReqMs.toFixed(1)}ms${r}`);
+			console.log(`${border}│${r}  • Provider TTFT   : ${y}${metrics.ttftMs ? metrics.ttftMs.toFixed(1) + "ms" : "N/A"}${r} ${g}(Time To First Token)${r}`);
+			console.log(`${border}│${r}  • Token Generation: ${gr}${metrics.tokenGenDurationMs ? metrics.tokenGenDurationMs.toFixed(1) + "ms" : "N/A"}${r}`);
+			console.log(`${border}│${r}  • Post Processing : ${g}${(metrics.postProcessingMs || 0).toFixed(1)}ms${r}`);
+			console.log(`${border}│${r}  • Total LLM Time  : ${b}${c}${(metrics.totalLLMDurationMs || 0).toFixed(1)}ms${r}`);
+			console.log(`${border}│${r}  • Stream Chunks   : ${metrics.chunkCount}`);
+			if (metrics.avgInterChunkMs !== undefined) {
+				console.log(`${border}│${r}  • Avg Chunk Gap   : ${metrics.avgInterChunkMs.toFixed(1)}ms`);
+			}
+			if (metrics.maxInterChunkGapMs !== undefined) {
+				console.log(`${border}│${r}  • Max Chunk Gap   : ${metrics.maxInterChunkGapMs.toFixed(1)}ms`);
+			}
+			console.log(`${border}│${r}  • Finish Reason   : ${colors.cyan}${metrics.finishReason || "stop"}${r}`);
+			console.log(`${border}└─────────────────────────────────────────────────────────────────────────────┘${r}\n`);
 		}
-		console.log(`${border}├─────────────────────────────────────────────────────────────────────────────┤${r}`);
-		console.log(`${border}│${r} ${b}${c}⏱️  TIMINGS & STREAMING${r}`);
-		console.log(`${border}│${r}  • Node Prep Delay : ${colors.yellow}${metrics.timeBeforeLLMReqMs.toFixed(1)}ms${r}`);
-		console.log(`${border}│${r}  • Provider TTFT   : ${y}${metrics.ttftMs ? metrics.ttftMs.toFixed(1) + "ms" : "N/A"}${r} ${g}(Time To First Token)${r}`);
-		console.log(`${border}│${r}  • Token Generation: ${gr}${metrics.tokenGenDurationMs ? metrics.tokenGenDurationMs.toFixed(1) + "ms" : "N/A"}${r}`);
-		console.log(`${border}│${r}  • Post Processing : ${g}${(metrics.postProcessingMs || 0).toFixed(1)}ms${r}`);
-		console.log(`${border}│${r}  • Total LLM Time  : ${b}${c}${(metrics.totalLLMDurationMs || 0).toFixed(1)}ms${r}`);
-		console.log(`${border}│${r}  • Stream Chunks   : ${metrics.chunkCount}`);
-		if (metrics.avgInterChunkMs !== undefined) {
-			console.log(`${border}│${r}  • Avg Chunk Gap   : ${metrics.avgInterChunkMs.toFixed(1)}ms`);
-		}
-		if (metrics.maxInterChunkGapMs !== undefined) {
-			console.log(`${border}│${r}  • Max Chunk Gap   : ${metrics.maxInterChunkGapMs.toFixed(1)}ms`);
-		}
-		console.log(`${border}│${r}  • Finish Reason   : ${colors.cyan}${metrics.finishReason || "stop"}${r}`);
-		console.log(`${border}└─────────────────────────────────────────────────────────────────────────────┘${r}\n`);
 
 		this.log({
 			layer: "llm",
@@ -356,6 +367,8 @@ export class AgentPerfTracker {
 	}
 
 	public printTimeline(): void {
+		if (!shouldDisplayPerf()) return;
+
 		const border = colors.brightBlue;
 		const r = colors.reset;
 		const b = colors.bold;

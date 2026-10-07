@@ -6,9 +6,11 @@ import * as expenses from "../../expenses/service";
 import * as catalog from "../../catalog/service";
 import * as purchases from "../../purchases/service";
 import * as company from "../../company/service";
+import { queueCustomEmail } from "../../notification/notification.service";
+import { logger } from "../../../lib/logger";
 import { findAgentTool } from "../registry";
 import type { AgentGraphState } from "./state";
-import { interrupt } from "@langchain/langgraph";
+import { interrupt, isGraphInterrupt } from "@langchain/langgraph";
 
 const safeFailure = (safeMessage: string) => ({
 	success: false as const,
@@ -16,6 +18,22 @@ const safeFailure = (safeMessage: string) => ({
 	safeMessage,
 	retryable: false,
 });
+
+const isConfirmationApproved = (res: unknown): boolean => {
+	if (res === true || res === "true" || res === "confirm" || res === "yes" || res === "proceed" || res === "approve") {
+		return true;
+	}
+	if (typeof res === "object" && res !== null) {
+		const val =
+			(res as { selectedOption?: unknown; value?: unknown; id?: unknown }).selectedOption ??
+			(res as { selectedOption?: unknown; value?: unknown; id?: unknown }).value ??
+			(res as { selectedOption?: unknown; value?: unknown; id?: unknown }).id;
+		if (val === true || val === "true" || val === "confirm" || val === "yes" || val === "proceed" || val === "approve") {
+			return true;
+		}
+	}
+	return false;
+};
 
 import { estimateTokens, type AgentPerfTracker } from "../utils/perfLogger";
 
@@ -65,7 +83,7 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 		}
 
 		if (step.type !== "tool") continue;
-		if (step.requiresConfirmation) {
+		if (step.requiresConfirmation && step.tool !== "email_tool") {
 			const response = interrupt({
 				type: "confirmation",
 				question: `Continue with: ${step.description}?`,
@@ -73,8 +91,8 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 					{ id: "confirm", label: "Continue" },
 					{ id: "cancel", label: "Cancel" },
 				],
-			}) as { selectedOption?: string };
-			if (response?.selectedOption !== "confirm") {
+			});
+			if (!isConfirmationApproved(response)) {
 				stepResults[step.id] = safeFailure("The requested action was cancelled.");
 				continue;
 			}
@@ -226,6 +244,70 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 				case "company_tool:list_available_accesses":
 					stepResults[step.id] = { success: true, data: company.getAccesses() };
 					break;
+				case "email_tool:send_custom_email": {
+					const draftId = `email_draft_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+					const toRaw = args.to || args.recipient || args.recipients;
+					const to = Array.isArray(toRaw) ? toRaw.map(String) : [String(toRaw || "")];
+					const subject = String(args.subject || "No Subject");
+					const html = String(args.html || args.body || "");
+
+					const approvalResponse = interrupt({
+						type: "email_approval",
+						draftId,
+						to,
+						subject,
+						html,
+					});
+
+					let action: string | undefined = undefined;
+					let feedback: string | undefined = undefined;
+					if (typeof approvalResponse === "string") {
+						action = approvalResponse;
+					} else if (typeof approvalResponse === "object" && approvalResponse !== null) {
+						const obj = approvalResponse as Record<string, unknown>;
+						action = String(obj.action || obj.value || obj.id || "");
+						feedback = typeof obj.feedback === "string" ? obj.feedback : undefined;
+					}
+
+					if (action === "approve" || action === "confirm" || action === "yes") {
+						await queueCustomEmail({
+							companyId: state.user.companyId,
+							to,
+							subject,
+							html,
+							triggeredBy: "agent_email_tool",
+						});
+						stepResults[step.id] = {
+							success: true,
+							status: "queued",
+							message: "Email queued successfully.",
+							summary: "Email queued successfully.",
+						};
+					} else if (action === "reject" || action === "cancel" || action === "no") {
+						stepResults[step.id] = {
+							success: false,
+							errorCode: "EMAIL_REJECTED",
+							safeMessage: "Email draft was rejected by user.",
+							summary: "Email draft was rejected by user.",
+						};
+					} else if (action === "change") {
+						stepResults[step.id] = {
+							success: false,
+							errorCode: "EMAIL_CHANGES_REQUESTED",
+							feedback,
+							safeMessage: `User requested changes to email draft: ${feedback}`,
+							summary: `User requested changes to email draft: ${feedback}`,
+						};
+					} else {
+						stepResults[step.id] = {
+							success: false,
+							errorCode: "EMAIL_APPROVAL_REQUIRED",
+							safeMessage: "Email requires explicit user approval before enqueuing.",
+							summary: "Email requires explicit user approval before enqueuing.",
+						};
+					}
+					break;
+				}
 				default:
 					stepResults[step.id] = safeFailure("That operation is not available yet.");
 			}
@@ -240,7 +322,11 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 			});
 			tracker?.log({ layer: "langgraph", module: "executor.ts", operation: "tool end", toolCallId: step.id });
 			tracker?.log({ layer: "langgraph", module: "executor.ts", operation: "tool result", toolCallId: step.id });
-		} catch {
+		} catch (err) {
+			if (isGraphInterrupt(err)) {
+				throw err;
+			}
+			logger.error("Agent tool execution failed", { stepId: step.id, tool: step.tool, operation: step.operation, error: err });
 			stepResults[step.id] = safeFailure("The requested business operation could not be completed.");
 			tracker?.log({ layer: "langgraph", module: "executor.ts", operation: "tool end (failed)", toolCallId: step.id });
 		}

@@ -3,6 +3,7 @@ export enum EmailType {
 	PASSWORD_RESET = "PASSWORD_RESET",
 	ORDER_SUCCESS = "ORDER_SUCCESS",
 	INVOICE_SEND = "INVOICE_SEND",
+	CUSTOM = "CUSTOM",
 }
 
 export interface EmailJob {
@@ -21,6 +22,9 @@ export interface EmailJob {
 		userId?: string;
 		resetToken?: string;
 		invoiceNumber?: string;
+		subject?: string;
+		html?: string;
+		to?: string | string[];
 	};
 	metadata?: {
 		triggeredBy?: string;

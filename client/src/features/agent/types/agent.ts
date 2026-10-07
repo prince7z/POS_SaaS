@@ -12,6 +12,7 @@ export type AgentEventType =
   | 'question'
   | 'confirmation'
   | 'upload_required'
+  | 'email_preview'
   | 'error'
   | 'done'
 
@@ -136,15 +137,16 @@ export interface ConfirmationData {
   options?: ConfirmationOption[]
 }
 
-// 9. Image Upload HITL
-export interface UploadRequiredData {
-  uploadId: string
-  purpose: string
-  uploadUrl?: string
-  contentTypes?: string[]
+// 10. Email Preview HITL
+export interface EmailPreviewData {
+  draftId: string
+  to: string[]
+  subject: string
+  html: string
+  type: string
 }
 
-// 10. Error
+// 11. Error
 export interface ErrorEventData {
   code?: string
   message: string
@@ -226,6 +228,14 @@ export type UploadRequiredBlock = {
   uploadedKey?: string
 }
 
+export type EmailPreviewBlock = {
+  type: 'email_preview'
+  data: EmailPreviewData
+  answered?: boolean
+  actionTaken?: 'approve' | 'reject' | 'change'
+  feedback?: string
+}
+
 export type ErrorBlock = {
   type: 'error'
   code?: string
@@ -244,6 +254,7 @@ export type AgentBlock =
   | QuestionBlock
   | ConfirmationBlock
   | UploadRequiredBlock
+  | EmailPreviewBlock
   | ErrorBlock
 
 export interface AgentMessage {
@@ -271,6 +282,7 @@ export interface InteractionPayload {
   questionId?: string
   confirmationId?: string
   uploadId?: string
+  draftId?: string
   response: {
     type: 'option' | 'text' | 'upload'
     value: string | boolean | Record<string, unknown>

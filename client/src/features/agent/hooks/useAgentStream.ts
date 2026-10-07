@@ -233,6 +233,19 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
                 uploadedKey: val?.key || 'uploaded_image',
               }
             }
+            if (
+              block.type === 'email_preview' &&
+              payload.draftId &&
+              block.data.draftId === payload.draftId
+            ) {
+              const val = payload.response.value as { action: 'approve' | 'reject' | 'change'; feedback?: string }
+              return {
+                ...block,
+                answered: true,
+                actionTaken: val.action,
+                feedback: val.feedback,
+              }
+            }
             return block
           })
           return { ...msg, blocks: updatedBlocks }

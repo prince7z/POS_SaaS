@@ -11,6 +11,7 @@ import { TodoBlock } from './TodoBlock'
 import { ToolCallBlock } from './ToolCallBlock'
 import { ToolResultBlock } from './ToolResultBlock'
 import { UploadRequiredBlock } from './UploadRequiredBlock'
+import { EmailPreviewBlock } from './EmailPreviewBlock'
 
 export function AgentBlockRenderer({
   block,
@@ -45,6 +46,8 @@ export function AgentBlockRenderer({
       return <ConfirmationBlock block={block} conversationId={conversationId} onRespond={onRespond} />
     case 'upload_required':
       return <UploadRequiredBlock block={block} conversationId={conversationId} onRespond={onRespond} />
+    case 'email_preview':
+      return <EmailPreviewBlock block={block} conversationId={conversationId} onRespond={onRespond} />
     case 'error':
       return <ErrorBlock block={block} />
     default:

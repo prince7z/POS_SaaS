@@ -5,6 +5,7 @@ import type {
   ChartBatchData,
   ChartSpec,
   ConfirmationData,
+  EmailPreviewData,
   ErrorEventData,
   QuestionData,
   TableData,
@@ -235,6 +236,16 @@ export function reduceAgentEvent(currentMessage: AgentMessage, event: AgentEvent
         type: 'upload_required',
         data,
         uploaded: false,
+      })
+      break
+    }
+
+    case 'email_preview': {
+      const data = event.data as EmailPreviewData
+      blocks.push({
+        type: 'email_preview',
+        data,
+        answered: false,
       })
       break
     }

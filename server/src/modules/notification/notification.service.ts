@@ -32,5 +32,20 @@ export const queueInvoiceEmail = async (input: { companyId: string; invoiceId: s
 		metadata: { triggeredBy: input.triggeredBy },
 	});
 
+export const queueCustomEmail = async (input: { companyId?: string; to: string | string[]; subject: string; html: string; triggeredBy?: string }) => {
+	const primaryEmail = Array.isArray(input.to) ? input.to[0] : input.to;
+	return enqueueEmail({
+		type: EmailType.CUSTOM,
+		companyId: input.companyId,
+		recipient: { email: primaryEmail },
+		data: {
+			to: input.to,
+			subject: input.subject,
+			html: input.html,
+		},
+		metadata: { triggeredBy: input.triggeredBy || "agent_email_tool" },
+	});
+};
+
 export const hashResetToken = (token: string) => crypto.createHash("sha256").update(token).digest("hex");
 export const generateResetToken = () => crypto.randomBytes(32).toString("hex");

@@ -45,6 +45,11 @@ Return JSON with exactly this shape:
 				currentRequest: request,
 				conversationHistory: historyContext,
 				availableTools,
+				userContext: {
+					userName: user.userName || "Store Manager",
+					companyName: user.companyName || "POS SaaS",
+					companyLogoUrl: user.companyLogoUrl || null,
+				},
 				instruction: `Create an ordered plan using only available tools or human_input/final steps. Take previous conversation history into full account to understand context.
 For expense requests, use finance_tool. Use list_expenses for "what/recent/show/list expenses"; use expense_summary for totals or counts;
 use expense_analytics for trends or category breakdowns; use pnl_dashboard when the request asks about profit or loss.
@@ -106,6 +111,9 @@ Date filters must use YYYY-MM-DD. Always include a final step.`,
 						};
 					} else if (rawType === "tool" || rawType === "action" || "tool" in step) {
 						step.type = "tool";
+						if (step.tool === "email_tool") {
+							step.requiresConfirmation = false;
+						}
 					} else {
 						step.type = "final";
 					}

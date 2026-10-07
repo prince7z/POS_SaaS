@@ -71,6 +71,7 @@ export const env = {
 		from: readOptional("EMAIL_FROM") ?? "no-reply@localhost",
 	},
 	frontendUrl: readOptional("FRONTEND_URL") ?? "http://localhost:5173",
+	displayPerf: readBoolean("DISPLAY_PERF", false),
 	agent: {
 		openRouterApiKey: readOptional("OPENROUTER_API_KEY"),
 		model: readOptional("OPENROUTER_MODEL") ?? "openai/gpt-4o-mini",

@@ -68,6 +68,12 @@ export const agentToolRegistry: readonly AgentToolDefinition[] = [
 		operations: ["create_upload_url"],
 		requiredAccessByOperation: { create_upload_url: Access.SETTINGS },
 	},
+	{
+		name: "email_tool",
+		description: "Use this tool when the user asks you to compose and send an email. Creates a professional custom HTML email containing recipient(s), subject, HTML body, and type 'custom'. Before sending, the user MUST explicitly approve the draft preview.",
+		operations: ["send_custom_email"],
+		requiredAccessByOperation: { send_custom_email: Access.CUSTOMERS },
+	},
 ] as const;
 
 export const findAgentTool = (name: string, operation: string) => {

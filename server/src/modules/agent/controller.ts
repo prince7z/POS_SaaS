@@ -10,6 +10,7 @@ import { startAgentStream, writeAgentEvent } from "./streaming/events";
 import { getAgentCheckpointer } from "./checkpoint";
 import { Command, isGraphInterrupt } from "@langchain/langgraph";
 import { logger } from "../../lib/logger";
+import { toPublicMediaUrl } from "../../integrations/aws/media";
 
 const routeParam = (value: string | string[] | undefined) => {
 	if (typeof value !== "string" || !value) throw validationError("Invalid conversation identifier");
@@ -27,7 +28,18 @@ const trustedUser = async (request: Parameters<RequestHandler>[0], tracker?: Age
 
 	const user = await prisma.user.findFirst({
 		where: { id: request.auth.userId, companyId: request.auth.companyId, isActive: true, deletedAt: null },
-		select: { id: true, companyId: true, accesses: true },
+		select: {
+			id: true,
+			companyId: true,
+			accesses: true,
+			fullName: true,
+			company: {
+				select: {
+					name: true,
+					logoKey: true,
+				},
+			},
+		},
 	});
 
 	const dbDurationMs = Math.round((performance.now() - dbStart) * 100) / 100;
@@ -40,7 +52,14 @@ const trustedUser = async (request: Parameters<RequestHandler>[0], tracker?: Age
 	if (!user) throw unauthorized();
 	tracker?.log({ layer: "backend", module: "controller.ts", operation: "auth completed" });
 	tracker?.log({ layer: "backend", module: "controller.ts", operation: "authorization completed" });
-	return { id: user.id, companyId: user.companyId, permissions: user.accesses.map(String) };
+	return {
+		id: user.id,
+		companyId: user.companyId,
+		permissions: user.accesses.map(String),
+		userName: user.fullName || undefined,
+		companyName: user.company?.name || undefined,
+		companyLogoUrl: user.company?.logoKey ? toPublicMediaUrl(user.company.logoKey) : null,
+	};
 };
 
 export const create = async (request: Parameters<RequestHandler>[0], response: Parameters<RequestHandler>[1]) => {
@@ -662,7 +681,23 @@ function handleInterrupt(response: Parameters<RequestHandler>[1], error: unknown
 }
 
 function handleInterruptPayload(response: Parameters<RequestHandler>[1], interruptValue: unknown, tracker?: AgentPerfTracker) {
-	if (interruptValue && typeof interruptValue === "object" && "uploadId" in interruptValue) {
+	if (interruptValue && typeof interruptValue === "object" && ("draftId" in interruptValue || (interruptValue as { type?: string }).type === "email_approval")) {
+		const val = interruptValue as { draftId: string; to: string | string[]; subject: string; html: string };
+		writeAgentEvent(
+			response,
+			{
+				type: "email_preview",
+				data: {
+					draftId: String(val.draftId),
+					to: Array.isArray(val.to) ? val.to : [String(val.to)],
+					subject: String(val.subject),
+					html: String(val.html),
+					type: "custom",
+				},
+			},
+			tracker
+		);
+	} else if (interruptValue && typeof interruptValue === "object" && "uploadId" in interruptValue) {
 		const val = interruptValue as { uploadId: unknown; uploadUrl?: unknown; purpose?: unknown; contentTypes?: unknown[] };
 		writeAgentEvent(
 			response,

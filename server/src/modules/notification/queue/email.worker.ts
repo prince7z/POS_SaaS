@@ -19,7 +19,18 @@ export const createEmailWorker = () => {
 			const payload = parseEmailJob(job.data);
 			logger.info("Email job started", JSON.stringify({ jobId: job.id, emailType: payload.type, companyId: payload.companyId }));
 
-			if (payload.type === EmailType.PASSWORD_RESET) {
+			if (payload.type === EmailType.CUSTOM) {
+				const toRecipients = payload.data.to || payload.recipient.email;
+				const subject = payload.data.subject || "No Subject";
+				const html = payload.data.html || "";
+				const primaryEmail = Array.isArray(toRecipients) ? toRecipients[0] : toRecipients;
+				await emailProvider.send({
+					to: primaryEmail,
+					toName: payload.recipient.name,
+					subject,
+					html,
+				});
+			} else if (payload.type === EmailType.PASSWORD_RESET) {
 				const template = renderTemplate(payload.type, {
 					name: payload.recipient.name,
 					resetUrl: `${env.frontendUrl}/auth/forgot-password/${payload.data.resetToken}`,

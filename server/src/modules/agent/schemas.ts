@@ -5,6 +5,9 @@ export const agentUserSchema = z.object({
 	id: z.string().uuid(),
 	companyId: z.string().uuid(),
 	permissions: z.array(z.string()),
+	userName: z.string().optional(),
+	companyName: z.string().optional(),
+	companyLogoUrl: z.string().nullable().optional(),
 });
 
 export type AgentUser = z.infer<typeof agentUserSchema>;
