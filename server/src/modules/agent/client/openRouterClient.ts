@@ -153,78 +153,99 @@ const request = async (
 	const fetchStartPerf = performance.now();
 	let lastFailure = "OpenRouter returned an empty response";
 
-	for (let attempt = 0; attempt < 2; attempt += 1) {
-		const response = await fetch(OPEN_ROUTER_BASE_URL, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${env.agent.openRouterApiKey}`,
-				"Content-Type": "application/json",
-				"HTTP-Referer": env.agent.siteUrl,
-				"X-Title": env.agent.siteName,
-			},
-			body: JSON.stringify({
-				model: env.agent.model,
-				messages,
-				temperature: 0,
-				max_tokens: 4000,
-				reasoning: { exclude: true },
-				...(responseFormat ? { response_format: { type: responseFormat } } : {}),
-			}),
-			signal,
-		});
+	const candidateModels = Array.from(new Set([
+		env.agent.model,
+		"google/gemini-2.0-flash-lite-preview-02-05:free",
+		"meta-llama/llama-3.3-70b-instruct:free",
+		"qwen/qwen-2.5-72b-instruct:free",
+		"openai/gpt-4o-mini",
+	]));
 
-		const fetchEndPerf = performance.now();
-		const payload = (await response.json()) as OpenRouterResponse;
-		if (!response.ok) {
-			throw new Error(payload.error?.message ?? "OpenRouter request failed");
+	for (const modelToTry of candidateModels) {
+		for (let attempt = 0; attempt < 2; attempt += 1) {
+			try {
+				const response = await fetch(OPEN_ROUTER_BASE_URL, {
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${env.agent.openRouterApiKey}`,
+						"Content-Type": "application/json",
+						"HTTP-Referer": env.agent.siteUrl,
+						"X-Title": env.agent.siteName,
+					},
+					body: JSON.stringify({
+						model: modelToTry,
+						messages,
+						temperature: 0,
+						max_tokens: 4000,
+						...(responseFormat ? { response_format: { type: responseFormat } } : {}),
+					}),
+					signal,
+				});
+
+				const fetchEndPerf = performance.now();
+				const payload = (await response.json()) as OpenRouterResponse;
+				if (!response.ok) {
+					lastFailure = payload.error?.message ?? `OpenRouter request failed (${response.status})`;
+					continue;
+				}
+
+				const choice = payload.choices?.[0];
+				const msgObj = choice?.message as (Record<string, unknown> & { content?: unknown }) | undefined;
+				const rawContent =
+					msgObj?.content ??
+					msgObj?.reasoning ??
+					msgObj?.reasoning_content ??
+					msgObj?.thinking ??
+					(choice as (Record<string, unknown> & { text?: unknown }) | undefined)?.text;
+
+				const content =
+					typeof rawContent === "string"
+						? rawContent
+						: Array.isArray(rawContent)
+						? rawContent
+								.map((part) => (typeof part === "object" && part !== null && "text" in part ? String(part.text) : ""))
+								.join("")
+						: "";
+
+				if (content.trim()) {
+					const postPerf = performance.now();
+					const totalLLMDurationMs = Math.round((fetchEndPerf - fetchStartPerf) * 100) / 100;
+					const postProcessingMs = Math.round((postPerf - fetchEndPerf) * 100) / 100;
+
+					tracker?.logLLMPostRequest({
+						llmCallId,
+						requestId: tracker.requestId,
+						node,
+						model: modelToTry,
+						startTimestamp: new Date(fetchStartPerf).toISOString(),
+						endTimestamp: new Date(fetchEndPerf).toISOString(),
+						elapsedFromPrevNodeMs: Math.round((fetchStartPerf - preStartPerf) * 100) / 100,
+						...analyzed,
+						timeBeforeLLMReqMs: Math.round((fetchStartPerf - (tracker?.startPerfTime || fetchStartPerf)) * 100) / 100,
+						ttftMs: totalLLMDurationMs,
+						tokenGenDurationMs: 0,
+						totalLLMDurationMs,
+						postProcessingMs,
+						chunkCount: 1,
+						totalOutputChars: content.length,
+						totalOutputTokens: estimateTokens(content),
+						finishReason: choice?.finish_reason || "stop",
+						providerUsage: payload.usage
+							? {
+									promptTokens: payload.usage.prompt_tokens,
+									completionTokens: payload.usage.completion_tokens,
+									totalTokens: payload.usage.total_tokens,
+							  }
+							: undefined,
+					});
+
+					return content;
+				}
+				lastFailure = `Model ${modelToTry} returned no text content (finish reason: ${choice?.finish_reason ?? "unknown"})`;
+			} catch (err) {
+				lastFailure = err instanceof Error ? err.message : String(err);
+			}
 		}
-
-		const choice = payload.choices?.[0];
-		const rawContent = choice?.message?.content;
-		const content =
-			typeof rawContent === "string"
-				? rawContent
-				: Array.isArray(rawContent)
-				? rawContent
-						.map((part) => (typeof part === "object" && part !== null && "text" in part ? String(part.text) : ""))
-						.join("")
-				: "";
-
-		if (content.trim()) {
-			const postPerf = performance.now();
-			const totalLLMDurationMs = Math.round((fetchEndPerf - fetchStartPerf) * 100) / 100;
-			const postProcessingMs = Math.round((postPerf - fetchEndPerf) * 100) / 100;
-
-			tracker?.logLLMPostRequest({
-				llmCallId,
-				requestId: tracker.requestId,
-				node,
-				model: env.agent.model,
-				startTimestamp: new Date(fetchStartPerf).toISOString(),
-				endTimestamp: new Date(fetchEndPerf).toISOString(),
-				elapsedFromPrevNodeMs: Math.round((fetchStartPerf - preStartPerf) * 100) / 100,
-				...analyzed,
-				timeBeforeLLMReqMs: Math.round((fetchStartPerf - (tracker?.startPerfTime || fetchStartPerf)) * 100) / 100,
-				ttftMs: totalLLMDurationMs,
-				tokenGenDurationMs: 0,
-				totalLLMDurationMs,
-				postProcessingMs,
-				chunkCount: 1,
-				totalOutputChars: content.length,
-				totalOutputTokens: estimateTokens(content),
-				finishReason: choice?.finish_reason || "stop",
-				providerUsage: payload.usage
-					? {
-							promptTokens: payload.usage.prompt_tokens,
-							completionTokens: payload.usage.completion_tokens,
-							totalTokens: payload.usage.total_tokens,
-					  }
-					: undefined,
-			});
-
-			return content;
-		}
-		lastFailure = `OpenRouter returned no text content (finish reason: ${choice?.finish_reason ?? "unknown"})`;
 	}
 	throw new Error(lastFailure);
 };
