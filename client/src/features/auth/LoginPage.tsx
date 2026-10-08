@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Alert,
   Box,
@@ -13,8 +13,8 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { motion } from 'motion/react'
-import { Eye, EyeOff, Lock, LogIn, Mail } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Eye, EyeOff, Lock, LogIn, Mail, Sparkles } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { login } from '@/api/endpoints/auth'
 import { setAuthSession } from '@/lib/auth'
 
@@ -22,12 +22,27 @@ const MotionCard = motion.create(Card.Root)
 const MotionBox = motion.create(Box)
 
 export function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [searchParams] = useSearchParams()
+  const isDemoQuery = searchParams.get('demo') === '1' || searchParams.get('demo') === 'true'
+
+  const [email, setEmail] = useState(isDemoQuery ? 'Demo@pcodes.tech' : '')
+  const [password, setPassword] = useState(isDemoQuery ? 'Demo@123' : '')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (isDemoQuery) {
+      setEmail('Demo@pcodes.tech')
+      setPassword('Demo@123')
+    }
+  }, [isDemoQuery])
+
+  const fillDemoCredentials = () => {
+    setEmail('Demo@pcodes.tech')
+    setPassword('Demo@123')
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -48,8 +63,8 @@ export function LoginPage() {
       // Store auth session tokens & cookies
       setAuthSession(response)
 
-      // Redirect to main POS app
-      navigate('/')
+      // Redirect to main POS app dashboard
+      navigate('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid email or password.')
     } finally {
@@ -76,15 +91,20 @@ export function LoginPage() {
             w="12"
             h="12"
             borderRadius="lg"
-            bg="blue.subtle"
-            color="blue.solid"
+            bg="white"
+            color="black"
+            border="1px solid"
+            borderColor="zinc.300"
             display="grid"
             placeItems="center"
+            fontWeight="900"
+            fontSize="xs"
+            style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
           >
-            <LogIn size={24} />
+            Jcom
           </MotionBox>
-          <Heading size="lg" fontWeight="700">
-            Sign in to POS SaaS
+          <Heading size="lg" fontWeight="800" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+            Sign in to Jcom
           </Heading>
           <Text color="secondary" fontSize="sm" mt="1">
             Enter your user credentials to access your store workspace.
@@ -93,7 +113,7 @@ export function LoginPage() {
 
         <Card.Body pt="2" pb="8">
           <form onSubmit={handleLogin}>
-            <VStack align="stretch" gap="4">
+            <VStack align="stretch" gap="3.5">
               {error && (
                 <Alert.Root status="error" size="sm" borderRadius="md">
                   <Alert.Indicator />
@@ -103,6 +123,7 @@ export function LoginPage() {
                 </Alert.Root>
               )}
 
+              {/* Email Field */}
               <Box>
                 <Text fontSize="sm" fontWeight="600" mb="1.5">
                   Email Address
@@ -114,7 +135,7 @@ export function LoginPage() {
                   borderRadius="md"
                   px="3"
                   py="1"
-                  _focusWithin={{ borderColor: 'blue.solid' }}
+                  _focusWithin={{ borderColor: 'zinc.900' }}
                 >
                   <Mail size={16} color="var(--chakra-colors-secondary)" />
                   <Input
@@ -132,18 +153,11 @@ export function LoginPage() {
                 </HStack>
               </Box>
 
+              {/* Password Field */}
               <Box>
-                <HStack justify="space-between" mb="1.5">
-                  <Text fontSize="sm" fontWeight="600">
-                    Password
-                  </Text>
-                  <Link
-                    to="/auth/forgot-password"
-                    style={{ fontSize: '0.8rem', color: 'var(--chakra-colors-blue-solid)', textDecoration: 'none' }}
-                  >
-                    Forgot password?
-                  </Link>
-                </HStack>
+                <Text fontSize="sm" fontWeight="600" mb="1.5">
+                  Password
+                </Text>
                 <HStack
                   gap="2"
                   border="1px solid"
@@ -151,7 +165,7 @@ export function LoginPage() {
                   borderRadius="md"
                   px="3"
                   py="1"
-                  _focusWithin={{ borderColor: 'blue.solid' }}
+                  _focusWithin={{ borderColor: 'zinc.900' }}
                 >
                   <Lock size={16} color="var(--chakra-colors-secondary)" />
                   <Input
@@ -177,13 +191,59 @@ export function LoginPage() {
                 </HStack>
               </Box>
 
+              {/* Forgot Password Link */}
+              <HStack justify="flex-end" pt="0.5">
+                <Link
+                  to="/auth/forgot-password"
+                  style={{ fontSize: '0.8rem', color: '#18181b', textDecoration: 'underline', fontWeight: 500 }}
+                >
+                  Forgot password?
+                </Link>
+              </HStack>
+
+              {/* Demo Credentials Card rendered ONLY if ?demo=true or ?demo=1 is in URL */}
+              {isDemoQuery && (
+                <Box
+                  p="3"
+                  borderRadius="md"
+                  bg="zinc.50"
+                  border="1px solid"
+                  borderColor="zinc.200"
+                  fontSize="xs"
+                >
+                  <HStack justify="space-between" align="center">
+                    <HStack gap="2">
+                      <Sparkles size={14} color="#18181b" />
+                      <Text fontWeight="600" color="zinc.900">
+                        Demo Account Available
+                      </Text>
+                    </HStack>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      onClick={fillDemoCredentials}
+                    >
+                      Auto-Fill Demo
+                    </Button>
+                  </HStack>
+                  <Text color="zinc.600" mt="1" fontSize="xs">
+                    Email: <strong>Demo@pcodes.tech</strong> &bull; Password: <strong>Demo@123</strong>
+                  </Text>
+                </Box>
+              )}
+
+              {/* Sign In Button */}
               <Button
                 type="submit"
-                colorPalette="blue"
+                colorPalette="gray"
+                bg="zinc.900"
+                color="white"
+                _hover={{ bg: 'zinc.800' }}
                 size="lg"
                 w="full"
                 loading={loading}
-                mt="2"
+                mt="1"
               >
                 <LogIn size={16} />
                 Sign In

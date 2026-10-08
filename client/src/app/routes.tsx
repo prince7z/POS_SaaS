@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageContainer } from '@/components/layout/PageContainer'
@@ -41,10 +41,14 @@ function PlaceholderRoute() {
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
+// import { LandingPage } from '@/features/landing/LandingPage'
 
 export function AppRoutes() {
   return (
     <Routes>
+      {/* Landing page disabled: base URL / redirects to /dashboard (or login if unauthenticated) */}
+      {/* <Route path="/" element={<LandingPage />} /> */}
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
@@ -68,6 +72,7 @@ export function AppRoutes() {
       />
       <Route element={<AppShell />}>
         <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path={ROUTES.CATALOG} element={<CatalogPage />} />
         <Route path={ROUTES.POS} element={<POSPage />} />
         <Route path={ROUTES.INVENTORY} element={<InventoryPage />} />

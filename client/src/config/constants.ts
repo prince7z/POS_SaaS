@@ -1,7 +1,8 @@
 // ─── Route Paths ───────────────────────────────────────────────────────
 
 export const ROUTES = {
-  DASHBOARD: '/',
+  LANDING: '/',
+  DASHBOARD: '/dashboard',
   POS: '/pos',
   CATALOG: '/catalog',
   PRODUCTS: '/catalog/products',

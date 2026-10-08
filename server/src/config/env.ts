@@ -76,6 +76,6 @@ export const env = {
 		openRouterApiKey: readOptional("OPENROUTER_API_KEY"),
 		model: readOptional("OPENROUTER_MODEL") ?? "openai/gpt-4o-mini",
 		siteUrl: readOptional("OPENROUTER_SITE_URL") ?? "http://localhost:5173",
-		siteName: readOptional("OPENROUTER_SITE_NAME") ?? "POS SaaS",
+		siteName: readOptional("OPENROUTER_SITE_NAME") ?? "Jcom",
 	},
 } as const;

@@ -1,4 +1,4 @@
-# POS SaaS API Reference
+# Jcom POS API Reference
 
 This document is the frontend integration contract for the Express API. It describes the current routes, authentication, request shapes, query/path parameters, response envelopes, validation behavior, and known runtime caveats.
 

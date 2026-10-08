@@ -156,11 +156,13 @@ export const login = async (input: z.infer<typeof loginSchema>) => {
 	const user = await repository.findUserForLogin(prisma, input.email);
 
 	if (!user) {
+		//console.log("user not found for : ", input.email)
 		throw new AppError("Invalid email or password", 401, "INVALID_CREDENTIALS");
 	}
 
 	const passwordValid = await bcrypt.compare(input.password, user.passwordHash);
 	if (!passwordValid) {
+		//console.log("pss not valid")
 		if (user.companyUsers.length > 0) {
 			await repository.createAuditLog(prisma, {
 				companyId: user.companyUsers[0].companyId,

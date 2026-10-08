@@ -47,7 +47,7 @@ Return JSON with exactly this shape:
 				availableTools,
 				userContext: {
 					userName: user.userName || "Store Manager",
-					companyName: user.companyName || "POS SaaS",
+					companyName: user.companyName || "Jcom",
 					companyLogoUrl: user.companyLogoUrl || null,
 				},
 				instruction: `Create an ordered plan using only available tools or human_input/final steps. Take previous conversation history into full account to understand context.

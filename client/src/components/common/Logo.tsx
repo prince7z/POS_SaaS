@@ -26,7 +26,7 @@ export function Logo({ collapsed = false }: { collapsed?: boolean }) {
     }
   }
 
-  const name = company?.name || 'POS SaaS'
+  const name = company?.name || 'Jcom'
   const logoUrl = company?.logoUrl
 
   const content = (
@@ -36,14 +36,14 @@ export function Logo({ collapsed = false }: { collapsed?: boolean }) {
           <img src={logoUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </Box>
       ) : (
-        <Box bg="primary" color="white" boxSize="34px" borderRadius="md" flexShrink={0} display="grid" placeItems="center">
-          <Store size={18} />
+        <Box bg="white" color="black" border="1px solid" borderColor="border" boxSize="34px" borderRadius="md" flexShrink={0} display="grid" placeItems="center" fontWeight="800" fontSize="xs" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+          Jcom
         </Box>
       )}
       {!collapsed && (
         <Box minW="0" overflow="hidden" textAlign="left">
           <HStack gap="1">
-            <Text fontWeight="700" lineHeight="1.2" truncate maxW="120px">
+            <Text fontWeight="800" lineHeight="1.2" truncate maxW="120px" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
               {name}
             </Text>
             {companies.length > 1 && <ChevronDown size={13} color="var(--chakra-colors-secondary)" />}

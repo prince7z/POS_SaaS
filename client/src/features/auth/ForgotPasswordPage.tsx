@@ -63,8 +63,8 @@ export function ForgotPasswordPage() {
             w="12"
             h="12"
             borderRadius="lg"
-            bg="blue.subtle"
-            color="blue.solid"
+            bg="zinc.900"
+            color="white"
             display="grid"
             placeItems="center"
           >
@@ -117,7 +117,7 @@ export function ForgotPasswordPage() {
 
                 <Box>
                   <Text fontSize="sm" fontWeight="600" mb="1.5">
-                    Email address
+                    Email Address
                   </Text>
                   <HStack
                     gap="2"
@@ -126,13 +126,13 @@ export function ForgotPasswordPage() {
                     borderRadius="md"
                     px="3"
                     py="1"
-                    _focusWithin={{ borderColor: 'blue.solid' }}
+                    _focusWithin={{ borderColor: 'zinc.900' }}
                   >
                     <Mail size={16} color="var(--chakra-colors-secondary)" />
                     <Input
                       type="email"
                       required
-                      placeholder="name@company.com"
+                      placeholder="user@company.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       border="none"
@@ -146,7 +146,10 @@ export function ForgotPasswordPage() {
 
                 <Button
                   type="submit"
-                  colorPalette="blue"
+                  colorPalette="gray"
+                  bg="zinc.900"
+                  color="white"
+                  _hover={{ bg: 'zinc.800' }}
                   size="lg"
                   w="full"
                   loading={loading}
@@ -159,7 +162,7 @@ export function ForgotPasswordPage() {
                 <HStack justify="center" pt="2">
                   <Link
                     to="/auth/login"
-                    style={{ fontSize: '0.85rem', textDecoration: 'none', color: 'var(--chakra-colors-blue-solid)' }}
+                    style={{ fontSize: '0.85rem', textDecoration: 'none', color: '#18181b', fontWeight: 500 }}
                   >
                     <HStack gap="1">
                       <ArrowLeft size={14} />

@@ -1,6 +1,6 @@
 // ─── Application Metadata ──────────────────────────────────────────────
 
-export const APP_NAME = 'POS SaaS'
+export const APP_NAME = 'Jcom'
 export const APP_DESCRIPTION = 'Multi-location Point of Sale & Analytics Suite'
 export const APP_VERSION = '1.0.0'
 

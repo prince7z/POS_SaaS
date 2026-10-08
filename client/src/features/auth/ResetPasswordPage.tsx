@@ -85,8 +85,8 @@ export function ResetPasswordPage() {
             w="12"
             h="12"
             borderRadius="lg"
-            bg="blue.subtle"
-            color="blue.solid"
+            bg="zinc.900"
+            color="white"
             display="grid"
             placeItems="center"
           >
@@ -118,7 +118,15 @@ export function ResetPasswordPage() {
                   </Alert.Description>
                 </Alert.Content>
               </Alert.Root>
-              <Button colorPalette="blue" size="lg" w="full" onClick={() => navigate('/auth/login')}>
+              <Button
+                colorPalette="gray"
+                bg="zinc.900"
+                color="white"
+                _hover={{ bg: 'zinc.800' }}
+                size="lg"
+                w="full"
+                onClick={() => navigate('/auth/login')}
+              >
                 Go to Login
               </Button>
             </MotionBox>
@@ -154,7 +162,7 @@ export function ResetPasswordPage() {
                     borderRadius="md"
                     px="3"
                     py="1"
-                    _focusWithin={{ borderColor: 'blue.solid' }}
+                    _focusWithin={{ borderColor: 'zinc.900' }}
                   >
                     <Lock size={16} color="var(--chakra-colors-secondary)" />
                     <Input
@@ -191,7 +199,7 @@ export function ResetPasswordPage() {
                     borderRadius="md"
                     px="3"
                     py="1"
-                    _focusWithin={{ borderColor: 'blue.solid' }}
+                    _focusWithin={{ borderColor: 'zinc.900' }}
                   >
                     <Lock size={16} color="var(--chakra-colors-secondary)" />
                     <Input
@@ -219,7 +227,10 @@ export function ResetPasswordPage() {
 
                 <Button
                   type="submit"
-                  colorPalette="blue"
+                  colorPalette="gray"
+                  bg="zinc.900"
+                  color="white"
+                  _hover={{ bg: 'zinc.800' }}
                   size="lg"
                   w="full"
                   loading={loading}
@@ -232,7 +243,7 @@ export function ResetPasswordPage() {
                 <HStack justify="center" pt="2">
                   <Link
                     to="/auth/login"
-                    style={{ fontSize: '0.85rem', textDecoration: 'none', color: 'var(--chakra-colors-secondary)' }}
+                    style={{ fontSize: '0.85rem', textDecoration: 'underline', color: '#18181b', fontWeight: 500 }}
                   >
                     Cancel & Return to Login
                   </Link>
