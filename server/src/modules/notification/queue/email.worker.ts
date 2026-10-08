@@ -57,7 +57,7 @@ export const createEmailWorker = () => {
 
 				if (sale) {
 					const logoUrl = sale.company.logoKey ? toPublicMediaUrl(sale.company.logoKey) : null;
-					const verificationUrl = `${env.frontendUrl}/invoice-verification/${sale.id}`;
+					const verificationUrl = `${env.origin}/invoice-verification/${sale.id}`;
 
 					let qrCodeDataUrl: string | undefined = undefined;
 					let qrCodeBuffer: Buffer | null = null;
