@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { Access, type Prisma } from "@prisma/client";
+import { Access, CountryCode, CurrencyCode, type Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { createMediaUploadUrl, deleteMediaObject } from "../../integrations/aws/media";
@@ -22,8 +22,8 @@ export const companyUpdateSchema = z.object({
 	city: optionalText(100),
 	state: optionalText(100),
 	postalCode: optionalText(30),
-	countryCode: z.string().trim().length(2).toUpperCase().optional(),
-	currencyCode: z.string().trim().length(3).toUpperCase().optional(),
+	countryCode: z.nativeEnum(CountryCode).optional(),
+	currencyCode: z.nativeEnum(CurrencyCode).optional(),
 	timezone: z.string().trim().min(1).max(100).optional(),
 	defaultTaxRate: z.number().min(0).max(100).optional(),
 	dateFormat: z.string().trim().min(1).max(50).optional(),

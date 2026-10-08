@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { prisma } from "../../lib/prisma";
 import { validationError } from "../../utils/errors";
+import { toPublicMediaUrl } from "../../integrations/aws/media";
 import * as repository from "./repository";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);

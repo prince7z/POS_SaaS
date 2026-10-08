@@ -52,6 +52,7 @@ import {
   type CustomerSummary,
 } from '@/api/endpoints/customers'
 import { showSuccess, showError } from '@/components/feedback/notifications'
+import { formatCurrency } from '@/lib/formatters'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { QrImageUploader } from '@/components/common/QrImageUploader'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -400,10 +401,10 @@ function CustomerDetails({
                 </HStack>{' '}
                 <Grid templateColumns={{ base: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }} gap="3">
                   {[
-                    ['Total purchases', details.stats.totalPurchases.toFixed(2)],
+                    ['Total purchases', formatCurrency(details.stats.totalPurchases)],
                     ['Orders', String(details.stats.totalOrders)],
-                    ['Credit limit', details.stats.creditLimit.toFixed(2)],
-                    ['Store credit', details.stats.storeCreditBalance.toFixed(2)],
+                    ['Credit limit', formatCurrency(details.stats.creditLimit)],
+                    ['Store credit', formatCurrency(details.stats.storeCreditBalance)],
                   ].map(([label, value]) => (
                     <Stat.Root key={label} borderWidth="1px" borderColor="border" borderRadius="md" p="3">
                       <Stat.Label>{label}</Stat.Label>
@@ -483,7 +484,7 @@ function CustomerDetails({
                               </HStack>
                             </Table.Cell>
                             <Table.Cell>{product.quantity}</Table.Cell>
-                            <Table.Cell>{product.total.toFixed(2)}</Table.Cell>
+                            <Table.Cell>{formatCurrency(product.total)}</Table.Cell>
                           </Table.Row>
                         ))}
                       </Table.Body>
@@ -513,8 +514,8 @@ function CustomerDetails({
                           <Table.Row key={sale.id}>
                             <Table.Cell>{sale.invoiceNumber}</Table.Cell>
                             <Table.Cell>{new Date(sale.soldAt).toLocaleDateString()}</Table.Cell>
-                            <Table.Cell>{sale.total.toFixed(2)}</Table.Cell>
-                            <Table.Cell>{sale.balanceDue.toFixed(2)}</Table.Cell>
+                            <Table.Cell>{formatCurrency(sale.total)}</Table.Cell>
+                            <Table.Cell>{formatCurrency(sale.balanceDue)}</Table.Cell>
                           </Table.Row>
                         ))}
                       </Table.Body>
@@ -541,7 +542,7 @@ function CustomerDetails({
                         <Text fontSize="sm">
                           {new Date(payment.paidAt).toLocaleDateString()} · {payment.paymentMethod}
                         </Text>
-                        <Text fontWeight="600">{payment.amount.toFixed(2)}</Text>
+                        <Text fontWeight="600">{formatCurrency(payment.amount)}</Text>
                       </HStack>
                     ))
                   ) : (
@@ -694,7 +695,7 @@ export function CustomersPage() {
               {summary ? (
                 <>
                   <Stat.ValueText mt="2">
-                    {label === 'Customer sales' ? Number(value).toFixed(2) : value}
+                    {label === 'Customer sales' ? formatCurrency(Number(value)) : value}
                   </Stat.ValueText>
                   <Text mt="1" fontSize="xs" color="secondary">
                     {detail}
@@ -816,7 +817,7 @@ export function CustomersPage() {
                         <Table.Cell>{customer.phone || '—'}</Table.Cell>
                         <Table.Cell>{customer.email || '—'}</Table.Cell>
                         <Table.Cell>{customer.customerType || '—'}</Table.Cell>
-                        <Table.Cell>{customer.stats ? customer.stats.totalPurchases.toFixed(2) : '—'}</Table.Cell>
+                        <Table.Cell>{customer.stats ? formatCurrency(customer.stats.totalPurchases) : '—'}</Table.Cell>
                         <Table.Cell>
                           {customer.stats?.lastPurchaseAt
                             ? new Date(customer.stats.lastPurchaseAt).toLocaleDateString()

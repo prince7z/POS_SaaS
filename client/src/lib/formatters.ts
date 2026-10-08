@@ -2,16 +2,7 @@ import { appConfig } from '@/config/app'
 
 // ─── Currency ──────────────────────────────────────────────────────────
 
-const currencyFormatter = new Intl.NumberFormat(appConfig.defaultLocale, {
-  style: 'currency',
-  currency: appConfig.defaultCurrency,
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-
-export function formatCurrency(value: number): string {
-  return currencyFormatter.format(value)
-}
+export { formatCurrency, getActiveCurrencyCode, getActiveCurrencySymbol } from './currency'
 
 // ─── Numbers ───────────────────────────────────────────────────────────
 

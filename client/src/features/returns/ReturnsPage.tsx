@@ -47,11 +47,11 @@ import {
   type SaleSummary,
 } from '@/api/endpoints/sales'
 import { showSuccess, showError } from '@/components/feedback/notifications'
+import { formatCurrency } from '@/lib/formatters'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 
-const money = (value: number) =>
-  new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value)
+const money = (value: number) => formatCurrency(value)
 const date = (value: string) =>
   new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value))
 const initials = (value: string) =>

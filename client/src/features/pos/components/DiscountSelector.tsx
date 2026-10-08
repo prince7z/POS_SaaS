@@ -1,5 +1,6 @@
 import { Button, HStack, Input, Menu } from '@chakra-ui/react'
 import { ChevronDown, Percent } from 'lucide-react'
+import { getActiveCurrencySymbol } from '@/lib/formatters'
 import type { SaleDiscountType } from '../types'
 
 export function DiscountSelector({
@@ -13,7 +14,8 @@ export function DiscountSelector({
   onDiscountTypeChange: (type: SaleDiscountType | null) => void
   onDiscountValueChange: (value: number) => void
 }) {
-  const typeLabel = discountType === 'PERCENT' ? '%' : discountType === 'FIXED' ? 'Fixed ($)' : 'None'
+  const sym = getActiveCurrencySymbol()
+  const typeLabel = discountType === 'PERCENT' ? '%' : discountType === 'FIXED' ? `Fixed (${sym})` : 'None'
 
   return (
     <HStack gap="2" w="full">
@@ -34,7 +36,7 @@ export function DiscountSelector({
               Percentage (%)
             </Menu.Item>
             <Menu.Item value="fixed" onClick={() => onDiscountTypeChange('FIXED')}>
-              Fixed Amount
+              Fixed Amount ({sym})
             </Menu.Item>
           </Menu.Content>
         </Menu.Positioner>

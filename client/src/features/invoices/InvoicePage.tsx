@@ -63,9 +63,10 @@ import {
   type InvoiceItem,
 } from '@/api/endpoints/invoices'
 import type { SaleDiscountType, SaleSummary } from '@/api/endpoints/sales'
+import { formatCurrency } from '@/lib/formatters'
 import { formatInvoiceTime } from './invoiceFormatting'
 
-const money = (value: number) => value.toFixed(2)
+const money = (value: number) => formatCurrency(value)
 const date = (value?: string | null) =>
   value
     ? new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value))

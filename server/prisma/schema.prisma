@@ -108,8 +108,35 @@ enum EmailStatus {
   FAILED
 }
 
+enum CurrencyCode {
+  INR
+  USD
+  ZAR
+  EUR
+  GBP
+  CAD
+  AUD
+  AED
+  SGD
+  JPY
+}
+
+enum CountryCode {
+  IN
+  US
+  ZA
+  GB
+  AE
+  CA
+  AU
+  SG
+  JP
+  DE
+  FR
+}
+
 model Company {
-  id                        String    @id @default(uuid())
+  id                        String        @id @default(uuid())
   name                      String
   phone                     String?
   email                     String?
@@ -119,12 +146,12 @@ model Company {
   city                      String?
   state                     String?
   postalCode                String?
-  countryCode               String    @default("ZA")
-  currencyCode              String    @default("ZAR")
-  timezone                  String    @default("Africa/Johannesburg")
-  defaultTaxRate            Decimal   @default(0) @db.Decimal(14, 2)
-  dateFormat                String    @default("yyyy-MM-dd")
-  timeFormat                String    @default("HH:mm")
+  countryCode               CountryCode   @default(ZA)
+  currencyCode              CurrencyCode  @default(ZAR)
+  timezone                  String        @default("Africa/Johannesburg")
+  defaultTaxRate            Decimal       @default(0) @db.Decimal(14, 2)
+  dateFormat                String        @default("yyyy-MM-dd")
+  timeFormat                String        @default("HH:mm")
   lowStockAlerts            Boolean   @default(true)
   showProductImages         Boolean   @default(true)
   autoGenerateInvoiceNumber Boolean   @default(true)

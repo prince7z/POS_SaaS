@@ -49,12 +49,12 @@ import {
   type SupplierPayload,
 } from '@/api/endpoints/purchases'
 import { showSuccess, showError } from '@/components/feedback/notifications'
+import { formatCurrency } from '@/lib/formatters'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 
-const money = (value = 0) =>
-  new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value)
+const money = (value = 0) => formatCurrency(value)
 const date = (value: string) =>
   new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value))
 const initials = (name: string) =>

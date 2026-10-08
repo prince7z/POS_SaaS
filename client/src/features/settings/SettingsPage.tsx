@@ -61,6 +61,8 @@ import {
   type CompanyUser,
 } from '@/api/endpoints/company'
 import { showSuccess, showError } from '@/components/feedback/notifications'
+import { setStoredCompany } from '@/lib/auth'
+import { SUPPORTED_COUNTRIES, SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { QrImageUploader } from '@/components/common/QrImageUploader'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -265,16 +267,30 @@ function General({ company, onSaved }: { company: Company; onSaved: (company: Co
         </Text>
       </Box>
       <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap="4">
-        {(['addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'countryCode'] as const).map((key) => (
+        {(['addressLine1', 'addressLine2', 'city', 'state', 'postalCode'] as const).map((key) => (
           <Box key={key}>
             <Label icon={inputIcon[key] ?? MapPin}>{fieldLabels[key]}</Label>
             <Input
               value={form[key]}
               onChange={(e) => set(key, e.target.value)}
-              maxLength={key === 'countryCode' ? 2 : undefined}
             />
           </Box>
         ))}
+        <Box>
+          <Label icon={Globe2}>Country</Label>
+          <NativeSelect.Root>
+            <NativeSelect.Field
+              value={form.countryCode}
+              onChange={(e) => set('countryCode', e.target.value)}
+            >
+              {SUPPORTED_COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.name} ({c.code})
+                </option>
+              ))}
+            </NativeSelect.Field>
+          </NativeSelect.Root>
+        </Box>
       </Grid>
       <Separator />
       <QrImageUploader
@@ -365,8 +381,11 @@ function Business({ company, onSaved }: { company: Company; onSaved: (company: C
     setSaving(true)
     setError('')
     try {
-      onSaved(await updateCompany(form))
+      const updated = await updateCompany(form)
+      showSuccess('Preferences saved', `Regional settings and currency (${form.currencyCode}) updated successfully.`)
+      onSaved(updated)
     } catch (cause) {
+      showError('Unable to save preferences', cause)
       setError(cause instanceof Error ? cause.message : 'Preferences could not be saved.')
     } finally {
       setSaving(false)
@@ -386,10 +405,11 @@ function Business({ company, onSaved }: { company: Company; onSaved: (company: C
           <Label icon={CircleDollarSign}>Currency</Label>
           <NativeSelect.Root>
             <NativeSelect.Field value={form.currencyCode} onChange={(e) => set('currencyCode', e.target.value)}>
-              <option value="ZAR">ZAR — South African rand</option>
-              <option value="USD">USD — US dollar</option>
-              <option value="EUR">EUR — Euro</option>
-              <option value="GBP">GBP — Pound sterling</option>
+              {SUPPORTED_CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.name}
+                </option>
+              ))}
             </NativeSelect.Field>
           </NativeSelect.Root>
         </Box>
@@ -609,10 +629,12 @@ function UsersSettings({
                   if (!confirmUser) return
                   try {
                     await deactivateCompanyUser(confirmUser.id)
+                    showSuccess('User deactivated', `${confirmUser.fullName} has been deactivated.`)
                     setConfirmUser(undefined)
                     onReload()
                     setPage(1)
                   } catch (cause) {
+                    showError('Failed to deactivate user', cause)
                     setError(cause instanceof Error ? cause.message : 'User could not be deactivated.')
                   }
                 }}
@@ -679,14 +701,15 @@ function UserForm({
     setSaving(true)
     setError('')
     try {
-      if (user)
+      if (user) {
         await updateCompanyUser(user.id, {
           fullName: form.fullName,
           phone: form.phone,
           roleName: form.roleName,
           accesses: form.selected,
         })
-      else
+        showSuccess('User updated', `${form.fullName} updated successfully.`)
+      } else {
         await createCompanyUser({
           fullName: form.fullName,
           email: form.email,
@@ -695,8 +718,11 @@ function UserForm({
           roleName: form.roleName,
           accesses: form.selected,
         })
+        showSuccess('User created', `${form.fullName} added successfully.`)
+      }
       onSaved()
     } catch (cause) {
+      showError('Failed to save user', cause)
       setError(cause instanceof Error ? cause.message : 'User could not be saved.')
     } finally {
       setSaving(false)
@@ -846,8 +872,14 @@ function SimpleCompanySection({
                 takealotSellerId: form.takealotSellerId,
                 ...(form.takealotApiKey ? { takealotApiKey: form.takealotApiKey } : {}),
               }
-      onSaved(await updateCompany(payload))
+      const updated = await updateCompany(payload)
+      showSuccess(
+        'Settings updated',
+        `${section === 'tax' ? 'Tax' : section === 'invoice' ? 'Invoice' : 'Integration'} preferences saved successfully.`
+      )
+      onSaved(updated)
     } catch (cause) {
+      showError('Failed to save settings', cause)
       setError(cause instanceof Error ? cause.message : 'Settings could not be saved.')
     } finally {
       setSaving(false)
@@ -1077,8 +1109,10 @@ function Security() {
       await changePassword(current, next)
       setCurrent('')
       setNext('')
+      showSuccess('Password changed', 'Your password has been changed. Existing sessions have been revoked.')
       setMessage('Password changed successfully. Existing sessions have been revoked.')
     } catch (cause) {
+      showError('Failed to change password', cause)
       setError(cause instanceof Error ? cause.message : 'Password could not be changed.')
     } finally {
       setSaving(false)
@@ -1141,6 +1175,11 @@ export function SettingsPage() {
       })
       .finally(() => setLoading(false))
   }, [])
+  const handleCompanySaved = (updated: Company) => {
+    setCompany(updated)
+    setStoredCompany(updated)
+  }
+
   return (
     <PageContainer>
       <PageHeader title="Settings" description="Manage your store, preferences, team access, and system security." />
@@ -1201,15 +1240,15 @@ export function SettingsPage() {
             >
               <Card.Root variant="outline">
                 <Card.Body p={{ base: '4', md: '6' }}>
-                  {section === 'general' && <General company={company} onSaved={setCompany} />}
-                  {section === 'business' && <Business company={company} onSaved={setCompany} />}
+                  {section === 'general' && <General company={company} onSaved={handleCompanySaved} />}
+                  {section === 'business' && <Business company={company} onSaved={handleCompanySaved} />}
                   {section === 'users' && <UsersSettings users={users} accesses={accesses} onReload={reloadUsers} />}
                   {section === 'invoice' && (
-                    <SimpleCompanySection section="invoice" company={company} onSaved={setCompany} />
+                    <SimpleCompanySection section="invoice" company={company} onSaved={handleCompanySaved} />
                   )}
-                  {section === 'tax' && <SimpleCompanySection section="tax" company={company} onSaved={setCompany} />}
+                  {section === 'tax' && <SimpleCompanySection section="tax" company={company} onSaved={handleCompanySaved} />}
                   {section === 'integrations' && (
-                    <SimpleCompanySection section="integrations" company={company} onSaved={setCompany} />
+                    <SimpleCompanySection section="integrations" company={company} onSaved={handleCompanySaved} />
                   )}
                   {section === 'security' && <Security />}
                 </Card.Body>

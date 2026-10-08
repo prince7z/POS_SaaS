@@ -8,7 +8,9 @@ import { formatInvoiceTime } from './invoiceFormatting'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
 
-const money = (value: number) => value.toFixed(2)
+import { formatCurrency } from '@/lib/formatters'
+
+const money = (value: number) => formatCurrency(value)
 
 export function InvoiceVerificationPage() {
   const { invoiceid } = useParams()

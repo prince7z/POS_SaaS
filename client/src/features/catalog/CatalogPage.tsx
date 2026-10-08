@@ -92,6 +92,7 @@ import type { CatalogBrand, CatalogCategory, CatalogProduct, ProductPayload } fr
 import { getSuppliers, type SupplierOption } from '@/api/endpoints/purchases'
 import { getInventorySummary, type InventorySummary } from '@/api/endpoints/inventory'
 import { showSuccess, showError } from '@/components/feedback/notifications'
+import { formatCurrency } from '@/lib/formatters'
 
 type Section = 'products' | 'categories' | 'brands'
 const pageSize = 20
@@ -1103,8 +1104,8 @@ function ProductsSection() {
                             categories.find((category) => category.id === item.categoryId)?.name ??
                             '—'}
                         </TableCell>
-                        <TableCell>${(item.purchaseCost ?? 0).toFixed(2)}</TableCell>
-                        <TableCell>${item.sellingPrice.toFixed(2)}</TableCell>
+                        <TableCell>{formatCurrency(item.purchaseCost ?? 0)}</TableCell>
+                        <TableCell>{formatCurrency(item.sellingPrice)}</TableCell>
                         <TableCell className={stockClass(item.stockQuantity, item.lowStockThreshold)}>
                           {item.stockQuantity}
                         </TableCell>

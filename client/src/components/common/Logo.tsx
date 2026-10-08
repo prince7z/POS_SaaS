@@ -3,6 +3,7 @@ import { Box, Button, HStack, Menu, Spinner, Text } from '@chakra-ui/react'
 import { Check, ChevronDown, Store } from 'lucide-react'
 import { getStoredCompany, getStoredCompanies, setAuthSession } from '@/lib/auth'
 import { switchCompany } from '@/api/endpoints/auth'
+import { showError, stashToast } from '@/components/feedback/notifications'
 
 export function Logo({ collapsed = false }: { collapsed?: boolean }) {
   const company = getStoredCompany()
@@ -11,13 +12,16 @@ export function Logo({ collapsed = false }: { collapsed?: boolean }) {
 
   const handleSwitchCompany = async (targetCompanyId: string) => {
     if (targetCompanyId === company?.id || switchingId) return
+    const targetComp = companies.find((c) => c.id === targetCompanyId)
     try {
       setSwitchingId(targetCompanyId)
       const res = await switchCompany(targetCompanyId)
       setAuthSession(res)
+      stashToast('success', 'Store switched', `Now managing ${res.company.name || targetComp?.name || 'store'}`)
       window.location.reload()
     } catch (err) {
       console.error('Failed to switch company', err)
+      showError('Failed to switch store', err)
       setSwitchingId(null)
     }
   }

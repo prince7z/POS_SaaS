@@ -45,6 +45,13 @@ export function getStoredCompany(): AuthResponse['company'] | null {
   }
 }
 
+export function setStoredCompany(company: AuthResponse['company']) {
+  if (company) {
+    localStorage.setItem('pos-company', JSON.stringify(company))
+    window.dispatchEvent(new CustomEvent('pos-company-updated', { detail: company }))
+  }
+}
+
 export function getStoredCompanies(): CompanyOption[] {
   const raw = localStorage.getItem('pos-companies')
   if (!raw) return []

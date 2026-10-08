@@ -9,6 +9,7 @@ export function showSuccess(title: string, description?: string) {
     type: 'success',
     title,
     description,
+    duration: 4000,
   })
 }
 
@@ -22,6 +23,7 @@ export function showError(title: string, error?: unknown) {
     type: 'error',
     title,
     description,
+    duration: 5000,
   })
 }
 
@@ -33,7 +35,33 @@ export function showInfo(title: string, description?: string) {
     type: 'info',
     title,
     description,
+    duration: 4000,
   })
+}
+
+/**
+ * Stash a toast notification across page reloads (e.g. after company switch).
+ */
+export function stashToast(type: 'success' | 'error' | 'info', title: string, description?: string) {
+  try {
+    sessionStorage.setItem('pos-pending-toast', JSON.stringify({ type, title, description }))
+  } catch {}
+}
+
+/**
+ * Consume and show any stashed toast after page reload.
+ */
+export function consumeStashedToast() {
+  try {
+    const raw = sessionStorage.getItem('pos-pending-toast')
+    if (raw) {
+      sessionStorage.removeItem('pos-pending-toast')
+      const { type, title, description } = JSON.parse(raw)
+      if (type === 'success') showSuccess(title, description)
+      else if (type === 'error') showError(title, description)
+      else showInfo(title, description)
+    }
+  } catch {}
 }
 
 /**

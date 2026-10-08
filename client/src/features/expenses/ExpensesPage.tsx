@@ -50,12 +50,12 @@ import {
   type ExpenseSummary,
 } from '@/api/endpoints/expenses'
 import { showSuccess, showError } from '@/components/feedback/notifications'
+import { formatCurrency } from '@/lib/formatters'
 import { EChart } from '@/components/charts/EChart'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 
-const money = (value = 0) =>
-  new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value)
+const money = (value = 0) => formatCurrency(value)
 const date = (value: string) =>
   new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value))
 const label = (value: string) => value.replaceAll('_', ' ').replace(/\b\w/g, (character) => character.toUpperCase())

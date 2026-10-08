@@ -3,6 +3,7 @@ import { Avatar, Button, Menu, Spinner, Text, VStack } from '@chakra-ui/react'
 import { Check, ChevronDown, LogOut, Settings, Store, User } from 'lucide-react'
 import { clearAuthSession, getStoredCompany, getStoredCompanies, getStoredUser, setAuthSession } from '@/lib/auth'
 import { switchCompany } from '@/api/endpoints/auth'
+import { showError, stashToast } from '@/components/feedback/notifications'
 import { useNavigate } from 'react-router-dom'
 
 export function UserMenu({ collapsed = false, compact = false }: { collapsed?: boolean; compact?: boolean }) {
@@ -19,13 +20,16 @@ export function UserMenu({ collapsed = false, compact = false }: { collapsed?: b
 
   const handleSwitchCompany = async (targetCompanyId: string) => {
     if (targetCompanyId === currentCompany?.id || switchingId) return
+    const targetComp = companies.find((c) => c.id === targetCompanyId)
     try {
       setSwitchingId(targetCompanyId)
       const res = await switchCompany(targetCompanyId)
       setAuthSession(res)
+      stashToast('success', 'Store switched', `Now managing ${res.company.name || targetComp?.name || 'store'}`)
       window.location.reload()
     } catch (err) {
       console.error('Failed to switch company', err)
+      showError('Failed to switch store', err)
       setSwitchingId(null)
     }
   }

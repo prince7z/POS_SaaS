@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
-import { Access, type Prisma } from "@prisma/client";
+import { Access, CountryCode, CurrencyCode, type Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { env } from "../../config/env";
@@ -23,8 +23,8 @@ export const registerSchema = z.object({
 		name: z.string().trim().min(1).max(150),
 		phone: optionalText(50),
 		email: email.optional(),
-		countryCode: z.string().trim().length(2).toUpperCase().optional(),
-		currencyCode: z.string().trim().length(3).toUpperCase().optional(),
+		countryCode: z.nativeEnum(CountryCode).optional(),
+		currencyCode: z.nativeEnum(CurrencyCode).optional(),
 		timezone: z.string().trim().min(1).max(100).optional(),
 	}),
 	admin: z.object({
