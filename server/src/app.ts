@@ -26,7 +26,7 @@ app.use((request, _response, next) => {
 	next();
 });
 
-app.use("/api", apiRouter);
+app.use("/", apiRouter);
 app.use(notFound);
 app.use(errorHandler);
 

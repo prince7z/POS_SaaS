@@ -1,10 +1,14 @@
 // ─── Application Metadata ──────────────────────────────────────────────
-
 export const APP_NAME = 'Jcom'
 export const APP_DESCRIPTION = 'Multi-location Point of Sale & Analytics Suite'
 export const APP_VERSION = '1.0.0'
 
 // ─── Configuration ─────────────────────────────────────────────────────
+export const apiBaseUrl =
+  (import.meta.env.VITE_BE_API as string | undefined) ||
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+  (typeof process !== 'undefined' ? process.env?.BE_API : undefined) ||
+  'http://localhost:4000'
 
 export const appConfig = {
   name: APP_NAME,

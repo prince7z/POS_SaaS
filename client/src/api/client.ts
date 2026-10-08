@@ -1,4 +1,5 @@
 import { clearAuthSession } from '@/lib/auth'
+import { apiBaseUrl } from '@/config/app'
 
 export interface ApiSuccess<T> {
   success: true
@@ -22,7 +23,7 @@ export class ApiError extends Error {
   }
 }
 
-const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? '/api'
+const baseUrl = `${apiBaseUrl}`
 
 export async function apiBlob(path: string): Promise<Blob> {
   const token = localStorage.getItem('pos-auth-token')
