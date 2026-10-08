@@ -863,9 +863,9 @@ function ProfitLossReport({ filters }: { filters: ReportFilters }) {
                   {' '}
                   <Table.Cell>
                     <Flex align="center" gap="3">
-                      {Array.isArray(item.imageKeys) && item.imageKeys[0] ? (
+                      {(item.imageUrls as string[] | undefined)?.[0] || (item.imageUrl as string | undefined) || (Array.isArray(item.imageKeys) && item.imageKeys[0]) ? (
                         <Image
-                          src={String(item.imageKeys[0])}
+                          src={String((item.imageUrls as string[] | undefined)?.[0] || (item.imageUrl as string | undefined) || item.imageKeys?.[0])}
                           alt=""
                           boxSize="36px"
                           objectFit="cover"
@@ -1245,9 +1245,9 @@ function InventoryCustomerReport({ filters }: { filters: ReportFilters }) {
               <Table.Row key={String(item.productId ?? item.id ?? index)}>
                 <Table.Cell>
                   <Flex align="center" gap="3">
-                    {Array.isArray(item.imageKeys) && item.imageKeys[0] ? (
+                    {(item.imageUrls as string[] | undefined)?.[0] || (item.imageUrl as string | undefined) || (Array.isArray(item.imageKeys) && item.imageKeys[0]) ? (
                       <Image
-                        src={String(item.imageKeys[0])}
+                        src={String((item.imageUrls as string[] | undefined)?.[0] || (item.imageUrl as string | undefined) || item.imageKeys?.[0])}
                         alt=""
                         boxSize="36px"
                         objectFit="cover"

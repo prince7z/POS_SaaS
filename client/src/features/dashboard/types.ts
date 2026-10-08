@@ -44,6 +44,8 @@ export interface TopSellingProduct {
   productId: string
   productName: string
   imageKeys: string[]
+  imageUrls?: string[]
+  imageUrl?: string | null
   unitsSold: number
   revenue: number
 }
@@ -52,6 +54,8 @@ export interface LowStockAlert {
   productId: string
   productName: string
   imageKeys: string[]
+  imageUrls?: string[]
+  imageUrl?: string | null
   currentStock: number
   threshold: number
   status: StockStatus

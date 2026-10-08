@@ -32,6 +32,8 @@ export interface SalesReport {
     productName: string
     sku: string
     imageKeys: string[]
+    imageUrls?: string[]
+    imageUrl?: string | null
     quantitySold: number
     totalSales: number
   }>

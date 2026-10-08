@@ -77,9 +77,9 @@ export function TopSellingProducts({ items }: { items: TopSellingProduct[] }) {
               display="grid"
               placeItems="center"
             >
-              {item.imageUrls?.[0] || item.imageKeys?.[0] ? (
+              {item.imageUrl || item.imageUrls?.[0] || item.imageKeys?.[0] ? (
                 <img
-                  src={item.imageUrls?.[0] || item.imageKeys[0]}
+                  src={item.imageUrl || item.imageUrls?.[0] || item.imageKeys[0]}
                   alt=""
                   loading="lazy"
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
@@ -129,9 +129,9 @@ export function LowStockAlerts({ items }: { items: LowStockAlert[] }) {
               placeItems="center"
               flexShrink="0"
             >
-              {item.imageUrls?.[0] || item.imageKeys?.[0] ? (
+              {item.imageUrl || item.imageUrls?.[0] || item.imageKeys?.[0] ? (
                 <img
-                  src={item.imageUrls?.[0] || item.imageKeys[0]}
+                  src={item.imageUrl || item.imageUrls?.[0] || item.imageKeys[0]}
                   alt=""
                   loading="lazy"
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}

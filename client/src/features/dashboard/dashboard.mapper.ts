@@ -38,17 +38,27 @@ export function mapDashboardData(
     productId: item.productId,
     productName: item.productName,
     imageKeys: item.imageKeys,
+    imageUrls: item.imageUrls ?? [],
+    imageUrl: item.imageUrl ?? item.imageUrls?.[0] ?? null,
     unitsSold: item.quantitySold,
     revenue: item.totalSales,
   }))
-  const lowStockAlerts = lowStock.items.map((item) => ({
-    productId: String(item.productId ?? ''),
-    productName: String(item.productName ?? 'Unnamed product'),
-    imageKeys: Array.isArray(item.imageKeys) ? item.imageKeys.map(String) : [],
-    currentStock: Number(item.stockQuantity ?? 0),
-    threshold: Number(item.lowStockThreshold ?? 0),
-    status: Number(item.stockQuantity ?? 0) === 0 ? ('Out of stock' as const) : ('Low stock' as const),
-  }))
+  const lowStockAlerts = lowStock.items.map((item) => {
+    const rawUrls = (item as { imageUrls?: string[] }).imageUrls
+    const rawUrl = (item as { imageUrl?: string | null }).imageUrl
+    const imageUrls = Array.isArray(rawUrls) ? rawUrls.map(String) : []
+    const imageUrl = rawUrl ? String(rawUrl) : (imageUrls[0] ?? null)
+    return {
+      productId: String(item.productId ?? ''),
+      productName: String(item.productName ?? 'Unnamed product'),
+      imageKeys: Array.isArray(item.imageKeys) ? item.imageKeys.map(String) : [],
+      imageUrls,
+      imageUrl,
+      currentStock: Number(item.stockQuantity ?? 0),
+      threshold: Number(item.lowStockThreshold ?? 0),
+      status: Number(item.stockQuantity ?? 0) === 0 ? ('Out of stock' as const) : ('Low stock' as const),
+    }
+  })
   const recentInvoices: RecentInvoice[] = recentTransactions.map((item) => ({
     invoiceNumber: item.id,
     customer: item.customer,
