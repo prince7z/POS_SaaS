@@ -37,10 +37,102 @@ const isConfirmationApproved = (res: unknown): boolean => {
 
 import { estimateTokens, type AgentPerfTracker } from "../utils/perfLogger";
 
+import { createOpenRouterClient } from "../client/openRouterClient";
+import { emailSystemPrompt } from "../prompts/email";
+import type { AgentUser } from "../schemas";
+
+type CachedEmailDraft = {
+	draftId: string;
+	to: string[];
+	subject: string;
+	html: string;
+	createdAt: number;
+};
+
+const emailDraftCache = new Map<string, CachedEmailDraft>();
+
+function cleanExpiredDrafts() {
+	const now = Date.now();
+	for (const [key, draft] of emailDraftCache.entries()) {
+		if (now - draft.createdAt > 3600_000) {
+			emailDraftCache.delete(key);
+		}
+	}
+}
+
+function sanitizeEmailImages(html: string, user: { companyName?: string; companyLogoUrl?: string | null }): string {
+	const companyBrandHeader = `<div style="font-size:22px; font-weight:700; color:#0f172a; margin-bottom:20px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; letter-spacing:-0.5px;">${user.companyName || "POS SaaS"}</div>`;
+
+	return html.replace(/<img[^>]*src=["']([^"']+)["'][^>]*\/?>/gi, (imgTag, srcUrl) => {
+		const srcLower = srcUrl.toLowerCase();
+		if (srcLower.includes(".avif") || srcLower.includes(".webp") || srcLower.includes("salesakart.com")) {
+			if (user.companyLogoUrl && !user.companyLogoUrl.toLowerCase().includes(".avif")) {
+				return imgTag.replace(srcUrl, user.companyLogoUrl);
+			}
+			return companyBrandHeader;
+		}
+		if (user.companyLogoUrl) {
+			return imgTag.replace(srcUrl, user.companyLogoUrl);
+		}
+		return imgTag;
+	});
+}
+
+async function generateEmailHtml(params: {
+	request: string;
+	user: AgentUser;
+	to: string[];
+	subject: string;
+	stepResults: Record<string, unknown>;
+	initialHtml?: string;
+	tracker?: AgentPerfTracker;
+}): Promise<string> {
+	const messages = [
+		{ role: "system" as const, content: emailSystemPrompt },
+		{
+			role: "user" as const,
+			content: JSON.stringify({
+				userRequest: params.request,
+				recipient: params.to,
+				subject: params.subject,
+				userContext: {
+					userName: params.user.userName || "Store Manager",
+					companyName: params.user.companyName || "POS SaaS",
+					companyLogoUrl: params.user.companyLogoUrl || null,
+				},
+				stepResults: params.stepResults,
+				additionalInstructions:
+					params.initialHtml && !params.initialHtml.includes("<div id=")
+						? params.initialHtml
+						: undefined,
+			}),
+		},
+	];
+
+	const raw = await createOpenRouterClient().invoke(
+		messages,
+		params.tracker,
+		undefined,
+		{
+			nodeName: "email_generator",
+			state: {
+				request: params.request,
+				to: params.to,
+				subject: params.subject,
+				stepResultsKeys: Object.keys(params.stepResults),
+				user: { id: params.user.id, companyId: params.user.companyId },
+			},
+		}
+	);
+
+	const stripped = raw.replace(/^\`\`\`(?:html)?\s*/i, "").replace(/\s*\`\`\`$/i, "").trim();
+	return sanitizeEmailImages(stripped, params.user);
+}
+
 export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTracker) => {
 	const plan = state.plan;
 	if (!plan) return { stepResults: {} };
-	const stepResults: Record<string, unknown> = {};
+	const stepResults: Record<string, unknown> = { ...(state.stepResults || {}) };
 
 	for (const step of plan.steps) {
 		if (step.type === "human_input") {
@@ -245,18 +337,56 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 					stepResults[step.id] = { success: true, data: company.getAccesses() };
 					break;
 				case "email_tool:send_custom_email": {
-					const draftId = `email_draft_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+					cleanExpiredDrafts();
+					const draftKey = `${state.user.id}_${state.user.companyId}_${step.id}`;
 					const toRaw = args.to || args.recipient || args.recipients;
 					const to = Array.isArray(toRaw) ? toRaw.map(String) : [String(toRaw || "")];
 					const subject = String(args.subject || "No Subject");
-					const html = String(args.html || args.body || "");
+					const rawHtml = String(args.html || args.body || "");
+
+					let draft = emailDraftCache.get(draftKey);
+					if (!draft) {
+						tracker?.log({
+							layer: "langgraph",
+							module: "executor.ts",
+							operation: "email html reasoning & generation start",
+							todoId: step.id,
+						});
+
+						const generatedHtml = await generateEmailHtml({
+							request: state.request,
+							user: state.user,
+							to,
+							subject,
+							stepResults,
+							initialHtml: rawHtml,
+							tracker,
+						});
+
+						tracker?.log({
+							layer: "langgraph",
+							module: "executor.ts",
+							operation: "email html reasoning & generation complete",
+							todoId: step.id,
+						});
+
+						const draftId = `email_draft_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+						draft = {
+							draftId,
+							to,
+							subject,
+							html: generatedHtml,
+							createdAt: Date.now(),
+						};
+						emailDraftCache.set(draftKey, draft);
+					}
 
 					const approvalResponse = interrupt({
 						type: "email_approval",
-						draftId,
-						to,
-						subject,
-						html,
+						draftId: draft.draftId,
+						to: draft.to,
+						subject: draft.subject,
+						html: draft.html,
 					});
 
 					let action: string | undefined = undefined;
@@ -272,11 +402,12 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 					if (action === "approve" || action === "confirm" || action === "yes") {
 						await queueCustomEmail({
 							companyId: state.user.companyId,
-							to,
-							subject,
-							html,
+							to: draft.to,
+							subject: draft.subject,
+							html: draft.html,
 							triggeredBy: "agent_email_tool",
 						});
+						emailDraftCache.delete(draftKey);
 						stepResults[step.id] = {
 							success: true,
 							status: "queued",
@@ -284,6 +415,7 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 							summary: "Email queued successfully.",
 						};
 					} else if (action === "reject" || action === "cancel" || action === "no") {
+						emailDraftCache.delete(draftKey);
 						stepResults[step.id] = {
 							success: false,
 							errorCode: "EMAIL_REJECTED",
@@ -291,6 +423,7 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 							summary: "Email draft was rejected by user.",
 						};
 					} else if (action === "change") {
+						emailDraftCache.delete(draftKey);
 						stepResults[step.id] = {
 							success: false,
 							errorCode: "EMAIL_CHANGES_REQUESTED",
