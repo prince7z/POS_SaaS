@@ -2,6 +2,7 @@ import { Box, Button, Card, Flex, Text } from '@chakra-ui/react'
 import { Check, Image as ImageIcon, Plus } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
 import type { CatalogProduct } from '@/api/endpoints/catalog'
+import { formatCurrency } from '@/lib/formatters'
 
 const MotionBox = motion.create(Box)
 
@@ -46,7 +47,7 @@ export function ProductCard12({ product, added, onAdd }: ProductCard12Props) {
           </Box>
           <Flex justify="space-between" align="end" gap="2">
             <Box>
-              <Text fontWeight="700">${product.sellingPrice.toFixed(2)}</Text>
+              <Text fontWeight="700">{formatCurrency(product.sellingPrice)}</Text>
               <Text fontSize="xs" color={outOfStock ? 'danger' : lowStock ? 'warning' : 'secondary'}>
                 {outOfStock
                   ? 'Out of stock'

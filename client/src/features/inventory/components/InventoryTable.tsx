@@ -2,6 +2,7 @@ import { Badge, Button, IconButton, Menu, Skeleton, Table } from '@chakra-ui/rea
 import { ArrowDown, ArrowUp, ClipboardPlus, MoreHorizontal, Waypoints } from 'lucide-react'
 import type { InventoryItem } from '@/api/endpoints/inventory'
 import { InventoryProductIdentity } from './InventoryProductIdentity'
+import { formatCurrency } from '@/lib/formatters'
 
 export function InventoryTable({
   items,
@@ -72,8 +73,8 @@ export function InventoryTable({
                       {item.stockQuantity}
                     </Table.Cell>
                     <Table.Cell textAlign="end">{item.lowStockThreshold}</Table.Cell>
-                    <Table.Cell textAlign="end">${item.purchaseCost.toFixed(2)}</Table.Cell>
-                    <Table.Cell textAlign="end">${(item.stockQuantity * item.averageCost).toFixed(2)}</Table.Cell>
+                    <Table.Cell textAlign="end">{formatCurrency(item.purchaseCost)}</Table.Cell>
+                    <Table.Cell textAlign="end">{formatCurrency(item.stockQuantity * item.averageCost)}</Table.Cell>
                     <Table.Cell>
                       <Badge colorPalette={status[1]}>{status[0]}</Badge>
                     </Table.Cell>

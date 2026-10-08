@@ -19,6 +19,7 @@ import { InventoryStats } from './InventoryStats'
 import { InventoryTable } from './InventoryTable'
 import { InventoryToolbar } from './InventoryToolbar'
 import { InventoryProductDetails } from './InventoryProductIdentity'
+import { formatCurrency } from '@/lib/formatters'
 
 function ErrorState({ message, retry }: { message: string; retry: () => void }) {
   return (
@@ -88,7 +89,7 @@ function ProductDrawer({ item, onClose }: { item?: InventoryItem; onClose: () =>
                   {[
                     ['Current stock', product.stockQuantity],
                     ['Reorder level', product.lowStockThreshold],
-                    ['Inventory value', `$${(product.stockQuantity * product.averageCost).toFixed(2)}`],
+                    ['Inventory value', formatCurrency(product.stockQuantity * product.averageCost)],
                   ].map(([label, value]) => (
                     <Box key={String(label)} flex="1" borderWidth="1px" borderColor="border" borderRadius="md" p="3">
                       <Text fontSize="xs" color="secondary">

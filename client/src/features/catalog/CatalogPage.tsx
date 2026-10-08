@@ -1239,7 +1239,7 @@ function LegacyEntitySection({ kind }: { kind: 'category' | 'brand' }) {
           },
           { label: 'Total products', value: String(summary?.totalProducts ?? '—'), icon: Package },
           { label: 'Low stock products', value: String(summary?.lowStockProducts ?? '—'), icon: AlertCircle },
-          { label: 'Inventory value', value: summary ? `$${summary.inventoryValue.toFixed(2)}` : '—', icon: Package },
+          { label: 'Inventory value', value: summary ? formatCurrency(summary.inventoryValue) : '—', icon: Package },
         ]}
       />
       <div className="mb-5 flex flex-wrap items-center gap-2">
@@ -1517,7 +1517,7 @@ function EntitySection({ kind }: { kind: 'category' | 'brand' }) {
           },
           {
             label: 'Inventory value',
-            value: summary ? `$${summary.inventoryValue.toFixed(2)}` : '—',
+            value: summary ? formatCurrency(summary.inventoryValue) : '—',
             detail: 'stock quantity × average cost',
             icon: Package,
           },

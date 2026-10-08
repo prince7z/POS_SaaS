@@ -8,8 +8,6 @@ import { TableBlock } from './TableBlock'
 import { TextBlock } from './TextBlock'
 import { ThinkingBlock } from './ThinkingBlock'
 import { TodoBlock } from './TodoBlock'
-import { ToolCallBlock } from './ToolCallBlock'
-import { ToolResultBlock } from './ToolResultBlock'
 import { UploadRequiredBlock } from './UploadRequiredBlock'
 import { EmailPreviewBlock } from './EmailPreviewBlock'
 

@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import {
   Check,
-  ChevronDown,
-  ChevronUp,
   Edit3,
   Mail,
   Send,

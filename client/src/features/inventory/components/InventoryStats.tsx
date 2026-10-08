@@ -1,6 +1,7 @@
 import { Grid, Skeleton, Stat, Text } from '@chakra-ui/react'
 import { AlertTriangle, Boxes, CircleX, Package, WalletCards } from 'lucide-react'
 import type { InventorySummary } from '@/api/endpoints/inventory'
+import { formatCurrency } from '@/lib/formatters'
 
 const statItems = [
   ['Inventory value', 'inventoryValue', WalletCards, 'stock quantity × average cost'],
@@ -25,7 +26,9 @@ export function InventoryStats({ summary, loading }: { summary?: InventorySummar
             <>
               <Stat.ValueText mt="2">
                 {key === 'inventoryValue'
-                  ? `$${summary?.[key].toFixed(2) ?? '—'}`
+                  ? summary?.[key] !== undefined
+                    ? formatCurrency(summary[key])
+                    : '—'
                   : (summary?.[key].toLocaleString() ?? '—')}
               </Stat.ValueText>
               <Text mt="1" fontSize="xs" color="secondary">

@@ -7,7 +7,6 @@ import {
   Dialog,
   Grid,
   HStack,
-  Icon,
   IconButton,
   Image,
   Spinner,
@@ -16,13 +15,9 @@ import {
 } from '@chakra-ui/react'
 import {
   CheckCircle2,
-  Image as ImageIcon,
-  Plus,
   QrCode,
   RefreshCw,
-  RotateCcw,
   Smartphone,
-  Sparkles,
   Trash2,
   UploadCloud,
   X,

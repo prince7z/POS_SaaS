@@ -316,6 +316,7 @@ function General({ company, onSaved }: { company: Company; onSaved: (company: Co
           setForm((current) => ({ ...current, logoKey: null as any }))
           setPreview('')
           setFile(undefined)
+          void removeLogo()
         }}
         onManualFileSelect={(selected) => {
           const selectedFile = selected[0]

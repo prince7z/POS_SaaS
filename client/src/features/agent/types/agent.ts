@@ -137,6 +137,15 @@ export interface ConfirmationData {
   options?: ConfirmationOption[]
 }
 
+export interface UploadRequiredData {
+  uploadId: string
+  purpose: string
+  uploadUrl?: string
+  contentTypes?: string[]
+  maxSizeBytes?: number
+  instructions?: string
+}
+
 // 10. Email Preview HITL
 export interface EmailPreviewData {
   draftId: string

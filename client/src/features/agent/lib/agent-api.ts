@@ -1,5 +1,6 @@
 import type {
   AgentBlock,
+  AgentEvent,
   AgentMessage,
   ConversationSummary,
   DetailedConversation,
