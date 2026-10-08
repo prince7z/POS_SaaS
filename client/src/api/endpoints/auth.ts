@@ -43,6 +43,7 @@ export interface AuthResponse {
     fullName: string
     roleName: string
     companyId: string
+    accesses?: string[]
   }
   company: {
     id: string
@@ -68,5 +69,13 @@ export function switchCompany(companyId: string) {
     method: 'POST',
     body: JSON.stringify({ companyId }),
   })
+}
+
+export function getMe() {
+  return apiRequest<{
+    user: AuthResponse['user']
+    company: AuthResponse['company']
+    companies: CompanyOption[]
+  }>('/auth/me')
 }
 

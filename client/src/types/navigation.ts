@@ -6,6 +6,7 @@ export interface NavItem {
   path: string
   icon: LucideIcon
   badge?: string | number
+  permissions?: string[]
   children?: NavItem[]
 }
 

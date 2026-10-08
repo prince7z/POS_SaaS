@@ -23,23 +23,37 @@ export const requireAuth: RequestHandler = (request, _response, next) => {
 		}
 
 		const header = request.header("authorization");
-		if (!header?.startsWith("Bearer ")) {
-			throw unauthorized();
+		if (!header || !header.startsWith("Bearer ")) {
+			throw unauthorized("Authorization token is required");
 		}
 
-		const token = header.slice("Bearer ".length);
-		const verified = jwt.verify(token, env.jwtSecret) as TokenPayload;
+		const token = header.slice("Bearer ".length).trim();
+		if (!token) {
+			throw unauthorized("Authorization token is missing");
+		}
+
+		let verified: TokenPayload;
+		try {
+			verified = jwt.verify(token, env.jwtSecret) as TokenPayload;
+		} catch (jwtError: any) {
+			if (jwtError?.name === "TokenExpiredError") {
+				throw unauthorized("Token has expired");
+			}
+			throw unauthorized("Invalid token");
+		}
 
 		if (
 			typeof verified.sub !== "string" ||
-			typeof verified.companyId !== "string"
+			typeof verified.companyId !== "string" ||
+			!verified.sub.trim() ||
+			!verified.companyId.trim()
 		) {
-			throw unauthorized();
+			throw unauthorized("Invalid token payload");
 		}
 
 		request.auth = { userId: verified.sub, companyId: verified.companyId };
 		next();
 	} catch (error) {
-		next(error instanceof AppError ? error : unauthorized("Invalid token"));
+		next(error instanceof AppError ? error : unauthorized("Authentication failed"));
 	}
 };

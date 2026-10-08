@@ -46,7 +46,7 @@ const awsPublicBaseUrl = readOptional("AWS_S3_PUBLIC_BASE_URL") ?? (
 export const env = {
 	port: readPort(),
 	nodeEnv,
-	testAuthBypass: nodeEnv !== "production" && readBoolean("TEST_AUTH_BYPASS", true),
+	testAuthBypass: readBoolean("TEST_AUTH_BYPASS", false),
 	databaseUrl: readRequired("PSQL"),
 	jwtSecret: readRequired("JWT_SECRET"),
 	accessTokenTtl: readOptional("ACCESS_TOKEN_TTL") ?? "15m",

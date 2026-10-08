@@ -3,7 +3,7 @@ import { Drawer, VStack, Box, HStack, Text, CloseButton, Button } from '@chakra-
 import { AnimatePresence, motion } from 'motion/react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { ChevronDown } from 'lucide-react'
-import { navigationConfig } from '@/config/navigation'
+import { useFilteredNavigation } from '@/config/navigation'
 import { Logo } from '@/components/common/Logo'
 import type { NavItem } from '@/types/navigation'
 
@@ -11,15 +11,16 @@ const MotionBox = motion.create(Box)
 
 export function MobileNavigation({ open, onClose }: { open: boolean; onClose: () => void }) {
   const location = useLocation()
+  const filteredGroups = useFilteredNavigation()
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    const activeParentIds = navigationConfig
+    const activeParentIds = filteredGroups
       .flatMap((group) => group.items)
       .filter((item) => item.children?.some((child) => child.path === location.pathname))
       .map((item) => item.id)
     setExpandedItems(new Set(activeParentIds))
-  }, [location.pathname])
+  }, [location.pathname, filteredGroups])
 
   const toggleItem = (id: string) => {
     setExpandedItems((current) => {
@@ -103,7 +104,7 @@ export function MobileNavigation({ open, onClose }: { open: boolean; onClose: ()
             </Drawer.Header>
             <Drawer.Body>
               <VStack align="stretch" gap="5">
-                {navigationConfig.map((group) => (
+                {filteredGroups.map((group) => (
                   <Box key={group.id}>
                     <Text textStyle="label" color="muted" mb="2">
                       {group.label}

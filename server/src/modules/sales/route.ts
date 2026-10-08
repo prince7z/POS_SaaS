@@ -22,7 +22,7 @@ const idFrom = (request: import("express").Request) => {
 };
 
 const saleAccess = [requireAuth, requireAccess(Access.POS)] as const;
-const salesReadAccess = [requireAuth, requireAccess(Access.POS), requireAccess(Access.INVOICES)] as const;
+const salesReadAccess = [requireAuth, requireAccess(Access.POS, Access.INVOICES)] as const;
 const returnsAccess = [requireAuth, requireAccess(Access.RETURNS)] as const;
 
 router.get("/public/invoices/:id", async (request, response) => {

@@ -38,6 +38,7 @@ export const STORAGE_KEYS = {
   THEME: 'pos-theme',
   SIDEBAR_STATE: 'pos-sidebar-collapsed',
   AUTH_TOKEN: 'pos-auth-token',
+  PERMISSIONS: 'pos-permissions',
 } as const
 
 // ─── Status Colors (Tailwind classes) ──────────────────────────────────

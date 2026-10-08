@@ -6,7 +6,7 @@ import { env } from "../config/env";
 import { forbidden, unauthorized } from "../utils/errors";
 import { testAuth } from "./auth";
 
-export const requireAccess = (access: Access): RequestHandler => async (
+export const requireAccess = (...allowedAccesses: Access[]): RequestHandler => async (
 	request,
 	_response,
 	next,
@@ -24,7 +24,7 @@ export const requireAccess = (access: Access): RequestHandler => async (
 		}
 
 		if (!request.auth) {
-			throw unauthorized();
+			throw unauthorized("Authentication required");
 		}
 
 		const companyUser = await prisma.companyUser.findFirst({
@@ -40,8 +40,11 @@ export const requireAccess = (access: Access): RequestHandler => async (
 		if (!companyUser) {
 			throw unauthorized("User is inactive or no longer exists in this company");
 		}
-		if (!companyUser.accesses.includes(access)) {
-			throw forbidden();
+		if (
+			allowedAccesses.length > 0 &&
+			!allowedAccesses.some((access) => companyUser.accesses.includes(access))
+		) {
+			throw forbidden("You do not have permission to perform this action");
 		}
 
 		request.authenticatedUser = {

@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import type { NavItem } from '@/types/navigation'
 import { NavLink, useLocation } from 'react-router-dom'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
-import { navigationConfig } from '@/config/navigation'
+import { useFilteredNavigation } from '@/config/navigation'
 import { Logo } from '@/components/common/Logo'
 import { UserMenu } from '@/components/common/UserMenu'
 
@@ -12,16 +12,17 @@ const MotionBox = motion.create(Box)
 
 export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const location = useLocation()
+  const filteredGroups = useFilteredNavigation()
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    const activeParentIds = navigationConfig
+    const activeParentIds = filteredGroups
       .flatMap((group) => group.items)
       .filter((item) => item.children?.some((child) => child.path === location.pathname))
       .map((item) => item.id)
 
     setExpandedItems(new Set(activeParentIds))
-  }, [location.pathname])
+  }, [location.pathname, filteredGroups])
 
   const toggleItem = (id: string) => {
     setExpandedItems((current) => {
@@ -212,7 +213,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         py="4"
         px={collapsed ? '2' : '3'}
       >
-        {navigationConfig.map((group) => (
+        {filteredGroups.map((group) => (
           <Box key={group.id} w="full">
             {!collapsed && (
               <Text textStyle="label" color="muted" px="3" mb="1.5" fontSize="11px" fontWeight="600" textTransform="uppercase" letterSpacing="0.05em">

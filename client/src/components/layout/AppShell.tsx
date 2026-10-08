@@ -1,19 +1,48 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Box, Flex } from '@chakra-ui/react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Navbar } from './Navbar'
 import { Sidebar } from './Sidebar'
 import { MobileNavigation } from './MobileNavigation'
 import { AgentPanel } from '@/features/agent/components/AgentPanel'
 import { STORAGE_KEYS } from '@/config/constants'
+import { isAuthenticated, setStoredCompany } from '@/lib/auth'
+import { getMe } from '@/api/endpoints/auth'
 
 export function AppShell() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(STORAGE_KEYS.SIDEBAR_STATE) === 'true')
   const [mobileOpen, setMobileOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [aiWidth, setAiWidth] = useState(380)
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      navigate('/auth/login', { replace: true })
+      return
+    }
+
+    getMe()
+      .then((data) => {
+        if (data.user) {
+          localStorage.setItem('pos-user', JSON.stringify(data.user))
+          const accesses = Array.isArray(data.user.accesses) ? data.user.accesses : []
+          localStorage.setItem(STORAGE_KEYS.PERMISSIONS, JSON.stringify(accesses))
+          window.dispatchEvent(new CustomEvent('pos-permissions-updated', { detail: accesses }))
+        }
+        if (data.company) {
+          setStoredCompany(data.company)
+        }
+        if (data.companies) {
+          localStorage.setItem('pos-companies', JSON.stringify(data.companies))
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to refresh user profile:', err)
+      })
+  }, [navigate])
 
   const toggleSidebar = () => {
     setCollapsed((current) => {

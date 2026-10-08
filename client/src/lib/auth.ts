@@ -12,6 +12,9 @@ export function setAuthSession(data: AuthResponse) {
   }
   if (data.user) {
     localStorage.setItem('pos-user', JSON.stringify(data.user))
+    const accesses = Array.isArray(data.user.accesses) ? data.user.accesses : []
+    localStorage.setItem(STORAGE_KEYS.PERMISSIONS, JSON.stringify(accesses))
+    window.dispatchEvent(new CustomEvent('pos-permissions-updated', { detail: accesses }))
   }
   if (data.company) {
     localStorage.setItem('pos-company', JSON.stringify(data.company))
@@ -33,6 +36,37 @@ export function getStoredUser(): AuthResponse['user'] | null {
   } catch {
     return null
   }
+}
+
+export function getStoredPermissions(): string[] {
+  const raw = localStorage.getItem(STORAGE_KEYS.PERMISSIONS)
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed
+    } catch {
+      // ignore
+    }
+  }
+  const user = getStoredUser()
+  if (user?.accesses && Array.isArray(user.accesses)) {
+    try {
+      localStorage.setItem(STORAGE_KEYS.PERMISSIONS, JSON.stringify(user.accesses))
+    } catch {
+      // ignore
+    }
+    return user.accesses
+  }
+  return []
+}
+
+export function hasPermission(required?: string | string[]): boolean {
+  if (!required || (Array.isArray(required) && required.length === 0)) return true
+  const permissions = getStoredPermissions()
+  if (Array.isArray(required)) {
+    return required.some((perm) => permissions.includes(perm))
+  }
+  return permissions.includes(required)
 }
 
 export function getStoredCompany(): AuthResponse['company'] | null {
@@ -68,6 +102,8 @@ export function clearAuthSession() {
   localStorage.removeItem('pos-user')
   localStorage.removeItem('pos-company')
   localStorage.removeItem('pos-companies')
+  localStorage.removeItem(STORAGE_KEYS.PERMISSIONS)
+  window.dispatchEvent(new CustomEvent('pos-permissions-updated', { detail: [] }))
   document.cookie = `${STORAGE_KEYS.AUTH_TOKEN}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`
 }
 
