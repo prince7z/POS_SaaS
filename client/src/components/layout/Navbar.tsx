@@ -17,14 +17,17 @@ export function Navbar({
   return (
     <MotionFlex
       as="header"
-      h="navbar"
+      h="64px"
+      minH="64px"
+      maxH="64px"
       px={{ base: '4', md: '6' }}
-      py={{ base: '1', md: '2' }}
       align="center"
       justify="space-between"
       gap="4"
       bg="surface"
-      borderBottomWidth="2px"
+      borderBottomWidth="1px"
+      borderColor="border"
+      boxSizing="border-box"
       position="sticky"
       top="0"
       zIndex="10"

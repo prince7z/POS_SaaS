@@ -90,6 +90,7 @@ export interface CustomerPayload {
   name: string
   phone?: string | null
   email?: string | null
+  profileImageKey?: string | null
   customerType?: string | null
   addressLine1?: string | null
   addressLine2?: string | null

@@ -8,7 +8,6 @@ import {
   Container,
   Grid,
   HStack,
-  Icon,
   IconButton,
   Image,
   Progress,
@@ -19,15 +18,11 @@ import {
 import {
   Camera,
   CheckCircle2,
-  FileImage,
-  Image as ImageIcon,
   Smartphone,
   Trash2,
   Upload,
-  UploadCloud,
   AlertTriangle,
 } from 'lucide-react'
-import { motion } from 'motion/react'
 
 import {
   completeQrUploadSession,
@@ -35,8 +30,6 @@ import {
   requestQrUploadPresignedUrls,
   type QrUploadPurpose,
 } from '@/api/endpoints/qrUpload'
-
-const MotionBox = motion.create(Box)
 
 interface LocalFile {
   id: string

@@ -23,7 +23,6 @@ import {
   ArrowUp,
   ArrowUpDown,
   CalendarDays,
-  ImagePlus,
   Mail,
   MapPin,
   Pencil,

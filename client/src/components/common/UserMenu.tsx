@@ -41,8 +41,16 @@ export function UserMenu({ collapsed = false, compact = false }: { collapsed?: b
   return (
     <Menu.Root positioning={{ placement: 'bottom-end' }}>
       <Menu.Trigger asChild>
-        <Button variant="ghost" w={collapsed ? 'full' : 'auto'} justifyContent="flex-start" px="2">
-          <Avatar.Root size="sm">
+        <Button
+          variant="ghost"
+          w="full"
+          h="auto"
+          py={collapsed ? '1' : '1.5'}
+          px={collapsed ? '0' : '2'}
+          justifyContent={collapsed ? 'center' : 'flex-start'}
+          alignItems="center"
+        >
+          <Avatar.Root size="sm" flexShrink={0}>
             {Logo ? (
               <Avatar.Image src={Logo} alt={displayName} />
             ) : (
@@ -50,14 +58,16 @@ export function UserMenu({ collapsed = false, compact = false }: { collapsed?: b
             )}
           </Avatar.Root>
           {!collapsed && !compact && (
-            <VStack align="start" gap="0" ml="2">
-              <Text fontSize="sm">{displayName}</Text>
-              <Text fontSize="xs" color="secondary">
+            <VStack align="start" gap="0" ml="2" flex="1" minW="0" overflow="hidden">
+              <Text fontSize="sm" fontWeight="600" truncate maxW="125px" textAlign="left">
+                {displayName}
+              </Text>
+              <Text fontSize="xs" color="secondary" truncate maxW="125px" textAlign="left">
                 {displayRole}
               </Text>
             </VStack>
           )}
-          {!collapsed && !compact && <ChevronDown size={15} />}
+          {!collapsed && !compact && <ChevronDown size={14} style={{ flexShrink: 0 }} color="var(--chakra-colors-secondary)" />}
         </Button>
       </Menu.Trigger>
       <Menu.Positioner>

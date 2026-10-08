@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Image as ImageIcon,
   Layers3,
@@ -15,8 +14,6 @@ import {
   Search,
   Tags,
   Trash2,
-  Upload,
-  X,
 } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { Card as ChakraCard, Grid, HStack, Heading, Text } from '@chakra-ui/react'
@@ -80,15 +77,13 @@ import {
   getBrands,
   getCategoriesPage,
   getProducts,
-  removeProductImage,
-  reorderProductImages,
   requestCatalogMediaUploadUrls,
   updateBrand,
   updateCategory,
   updateProduct,
   uploadMediaFile,
 } from '@/api/endpoints/catalog'
-import type { CatalogBrand, CatalogCategory, CatalogProduct, ProductPayload } from '@/api/endpoints/catalog'
+import type { BrandPayload, CatalogBrand, CatalogCategory, CatalogProduct, CategoryPayload, ProductPayload } from '@/api/endpoints/catalog'
 import { getSuppliers, type SupplierOption } from '@/api/endpoints/purchases'
 import { getInventorySummary, type InventorySummary } from '@/api/endpoints/inventory'
 import { showSuccess, showError } from '@/components/feedback/notifications'
@@ -96,7 +91,6 @@ import { formatCurrency } from '@/lib/formatters'
 
 type Section = 'products' | 'categories' | 'brands'
 const pageSize = 20
-const imageTypes = ['image/jpeg', 'image/png', 'image/webp']
 
 function useDebounced(value: string) {
   const [result, setResult] = useState(value)
@@ -157,136 +151,7 @@ function useCatalogStats() {
   return stats
 }
 
-type UploadState = {
-  file: File
-  preview: string
-  status: 'queued' | 'uploading' | 'uploaded' | 'error'
-  message?: string
-}
 
-function ImageDropzone({
-  multiple,
-  initialImages = [],
-  initialImageKeys = [],
-  onChange,
-  onRemoveExisting,
-  onMoveExisting,
-  statusByIndex = {},
-}: {
-  multiple?: boolean
-  initialImages?: string[]
-  initialImageKeys?: string[]
-  onChange: (files: File[]) => void
-  onRemoveExisting?: (key: string) => void
-  onMoveExisting?: (index: number, direction: 'left' | 'right') => void
-  statusByIndex?: Record<number, 'uploading' | 'uploaded' | 'error'>
-}) {
-  const input = useRef<HTMLInputElement>(null)
-  const [files, setFiles] = useState<UploadState[]>([])
-  const acceptFiles = (incoming: File[]) => {
-    const valid = incoming.filter((file) => imageTypes.includes(file.type))
-    const selected = multiple ? valid.slice(0, 10) : valid.slice(0, 1)
-    setFiles(selected.map((file) => ({ file, preview: URL.createObjectURL(file), status: 'queued' })))
-    onChange(selected)
-  }
-  return (
-    <Field>
-      <FieldLabel>Images</FieldLabel>
-      <div className="space-y-3">
-        <button
-          type="button"
-          className="flex min-h-32 w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 px-6 py-7 text-center text-sm transition-colors hover:border-primary hover:bg-muted/40"
-          onClick={() => input.current?.click()}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => {
-            event.preventDefault()
-            acceptFiles(Array.from(event.dataTransfer.files))
-          }}
-        >
-          <Upload className="size-5 text-muted-foreground" />
-          <span className="font-medium">Drop {multiple ? 'images' : 'an image'} here or browse</span>
-          <span className="text-xs text-muted-foreground">JPEG, PNG or WebP{multiple ? ' · Up to 10 images' : ''}</span>
-        </button>
-        <input
-          ref={input}
-          hidden
-          type="file"
-          accept={imageTypes.join(',')}
-          multiple={multiple}
-          onChange={(event) => acceptFiles(Array.from(event.target.files ?? []))}
-        />
-        {(files.length > 0 || initialImages.length > 0) && (
-          <div className="mt-2 grid grid-cols-2 gap-4 p-1 sm:grid-cols-4">
-            {initialImages.map((src, index) => (
-              <div key={src} className="relative m-1 aspect-square overflow-hidden rounded-lg border bg-muted p-1">
-                <img src={src} alt="" className="size-full rounded-md object-cover" />
-                {onRemoveExisting && (
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon-xs"
-                    className="absolute right-1 top-1"
-                    aria-label="Remove image"
-                    onClick={() => onRemoveExisting(initialImageKeys[index] ?? src)}
-                  >
-                    <X />
-                  </Button>
-                )}
-                {onMoveExisting && (
-                  <div className="absolute inset-x-1 bottom-1 flex justify-between">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="icon-xs"
-                      disabled={index === 0}
-                      aria-label="Move image left"
-                      onClick={() => onMoveExisting(index, 'left')}
-                    >
-                      <ChevronLeft />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="icon-xs"
-                      disabled={index === initialImages.length - 1}
-                      aria-label="Move image right"
-                      onClick={() => onMoveExisting(index, 'right')}
-                    >
-                      <ChevronRight />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))}
-            {files.map((item, index) => {
-              const status = statusByIndex[index] ?? item.status
-              return (
-                <div key={item.preview} className="relative aspect-square overflow-hidden rounded-lg border bg-muted">
-                  <img src={item.preview} alt="" className="size-full object-cover" />
-                  {status === 'uploading' && (
-                    <div className="absolute inset-0 grid place-items-center bg-background/70">
-                      <Skeleton className="size-6 rounded-full" />
-                    </div>
-                  )}
-                  {status === 'error' && (
-                    <div className="absolute inset-x-0 bottom-0 bg-destructive/90 px-1 py-0.5 text-center text-[10px] text-destructive-foreground">
-                      Upload failed
-                    </div>
-                  )}
-                  {status === 'uploaded' && (
-                    <div className="absolute inset-x-0 bottom-0 bg-emerald-600/90 px-1 py-0.5 text-center text-[10px] text-white">
-                      Uploaded
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    </Field>
-  )
-}
 
 async function stageFiles(
   resource: 'PRODUCT_IMAGE' | 'BRAND_LOGO' | 'CATEGORY_LOGO',
@@ -347,7 +212,6 @@ function ProductDialog({
   const [stagedKeys, setStagedKeys] = useState<string[]>([])
   const [existingImages, setExistingImages] = useState<string[]>(initial?.imageKeys ?? [])
   const [imageUrls, setImageUrls] = useState<string[]>(initial?.imageUrls ?? initial?.imageKeys ?? [])
-  const [uploadStatus, setUploadStatus] = useState<Record<number, 'uploading' | 'uploaded' | 'error'>>({})
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -370,7 +234,6 @@ function ProductDialog({
     setExistingImages(initial?.imageKeys ?? [])
     setImageUrls(initial?.imageUrls ?? initial?.imageKeys ?? [])
     setStagedKeys([])
-    setUploadStatus({})
     setUploading(false)
     setError('')
   }, [initial, open])
@@ -428,25 +291,11 @@ function ProductDialog({
       setSaving(false)
     }
   }
-  const moveExisting = async (index: number, direction: 'left' | 'right') => {
-    if (!initial) return
-    const next = [...existingImages]
-    const target = direction === 'left' ? index - 1 : index + 1
-    ;[next[index], next[target]] = [next[target], next[index]]
-    try {
-      await reorderProductImages(initial.id, next)
-      setExistingImages(next)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Image order could not be saved.')
-    }
-  }
   const handleFiles = async (selected: File[]) => {
     setUploading(Boolean(selected.length))
     setError('')
     try {
-      const keys = await stageFiles('PRODUCT_IMAGE', selected, (index, status) =>
-        setUploadStatus((current) => ({ ...current, [index]: status })),
-      )
+      const keys = await stageFiles('PRODUCT_IMAGE', selected, () => {})
       setStagedKeys((prev) => [...prev, ...keys])
       setImageUrls((prev) => [...prev, ...selected.map((f) => URL.createObjectURL(f))])
     } catch (cause) {
@@ -658,7 +507,6 @@ function EntityDialog({
   const [parentId, setParentId] = useState<string | null>(null)
   const [logoKey, setLogoKey] = useState<string | null | undefined>()
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string>('')
-  const [uploadStatus, setUploadStatus] = useState<Record<number, 'uploading' | 'uploaded' | 'error'>>({})
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -668,7 +516,6 @@ function EntityDialog({
     setParentId(kind === 'category' ? ((initial as CatalogCategory | undefined)?.parentId ?? null) : null)
     setLogoKey(initial?.logoKey ?? undefined)
     setLogoPreviewUrl(initial?.logoUrl ?? '')
-    setUploadStatus({})
     setUploading(false)
     setError('')
   }, [initial, open, kind])
@@ -679,7 +526,7 @@ function EntityDialog({
       const keys = await stageFiles(
         kind === 'category' ? 'CATEGORY_LOGO' : 'BRAND_LOGO',
         selected.slice(0, 1),
-        (index, status) => setUploadStatus((current) => ({ ...current, [index]: status })),
+        () => {},
       )
       setLogoKey(keys[0])
       setLogoPreviewUrl(selected[0] ? URL.createObjectURL(selected[0]) : '')

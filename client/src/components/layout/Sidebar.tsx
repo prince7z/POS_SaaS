@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Box, Button, Flex, HStack, Separator, Text, VStack } from '@chakra-ui/react'
+import { Box, Button, Flex, HStack, Text, VStack } from '@chakra-ui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { NavItem } from '@/types/navigation'
 import { NavLink, useLocation } from 'react-router-dom'
@@ -38,14 +38,15 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
     const expanded = expandedItems.has(item.id)
 
     return (
-      <Box key={item.id}>
+      <Box key={item.id} w="full">
         <HStack
           as={hasChildren ? 'button' : 'div'}
           onClick={hasChildren ? () => toggleItem(item.id) : undefined}
           aria-expanded={hasChildren ? expanded : undefined}
-          px={collapsed ? '0' : depth ? '6' : '3'}
+          px={collapsed ? '0' : depth ? '4' : '3'}
           py="2"
           justify={collapsed ? 'center' : 'flex-start'}
+          align="center"
           gap="3"
           borderRadius="md"
           color={active ? 'primary' : 'secondary'}
@@ -53,22 +54,35 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           position="relative"
           _hover={{ bg: 'background', color: 'foreground' }}
           transition="background 140ms ease, color 140ms ease"
+          h={collapsed ? '40px' : 'auto'}
+          w="full"
         >
           {hasChildren ? (
-            <HStack gap="3" flex="1">
-              <item.icon size={17} />
+            <HStack gap="3" flex="1" justify={collapsed ? 'center' : 'flex-start'}>
+              <item.icon size={18} style={{ flexShrink: 0 }} />
               {!collapsed && (
-                <Text fontSize="sm" fontWeight={active ? '600' : '500'}>
+                <Text fontSize="sm" fontWeight={active ? '600' : '500'} truncate flex="1" textAlign="left">
                   {item.label}
                 </Text>
               )}
             </HStack>
           ) : (
-            <NavLink to={item.path} title={collapsed ? item.label : undefined} style={{ flex: 1 }}>
-              <HStack gap="3">
-                <item.icon size={17} />
+            <NavLink
+              to={item.path}
+              title={collapsed ? item.label : undefined}
+              style={{
+                flex: 1,
+                display: 'flex',
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                alignItems: 'center',
+                width: '100%',
+                overflow: 'hidden',
+              }}
+            >
+              <HStack gap="3" justify={collapsed ? 'center' : 'flex-start'} align="center" w="full">
+                <item.icon size={18} style={{ flexShrink: 0 }} />
                 {!collapsed && (
-                  <Text fontSize="sm" fontWeight={active ? '600' : '500'}>
+                  <Text fontSize="sm" fontWeight={active ? '600' : '500'} truncate textAlign="left">
                     {item.label}
                   </Text>
                 )}
@@ -117,37 +131,91 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       as="aside"
       display={{ base: 'none', md: 'flex' }}
       flexDirection="column"
-      animate={{ width: collapsed ? '68px' : '232px' }}
+      animate={{ width: collapsed ? '68px' : '240px' }}
       transition={{ duration: 0.22, ease: 'easeInOut' }}
-      flexShrink="0"
+      flexShrink={0}
       minH="100vh"
+      maxH="100vh"
+      h="100vh"
       bg="surface"
       borderRightWidth="1px"
+      borderColor="border"
       position="sticky"
       top="0"
-      h="100vh"
-      overflow="hidden"
+      zIndex={20}
+      boxSizing="border-box"
     >
-      <Flex h="navbar" px="4" align="center" justify="space-between">
+      {/* Top Header - exactly 64px matching Navbar height & 1px border */}
+      <Flex
+        h="64px"
+        minH="64px"
+        maxH="64px"
+        boxSizing="border-box"
+        borderBottomWidth="1px"
+        borderColor="border"
+        align="center"
+        justify={collapsed ? 'center' : 'space-between'}
+        px={collapsed ? '0' : '3.5'}
+        position="relative"
+        flexShrink={0}
+      >
         <Logo collapsed={collapsed} />
+        {!collapsed && (
+          <Button
+            aria-label="Collapse sidebar"
+            variant="ghost"
+            size="xs"
+            onClick={onToggle}
+            p="1.5"
+            minW="auto"
+            color="secondary"
+            _hover={{ color: 'foreground', bg: 'bg.muted' }}
+          >
+            <ChevronLeft size={16} />
+          </Button>
+        )}
+
+        {/* Floating toggle button on the right edge of sidebar when collapsed */}
         <Button
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          variant="ghost"
-          size="sm"
+          variant="outline"
+          size="2xs"
           onClick={onToggle}
-          px="2"
+          position="absolute"
+          top="21px"
+          right="-11px"
+          zIndex={30}
+          borderRadius="full"
+          bg="surface"
+          borderColor="border"
+          boxShadow="sm"
+          p="0"
+          boxSize="22px"
+          display={collapsed ? 'grid' : 'none'}
+          placeItems="center"
+          cursor="pointer"
+          _hover={{ bg: 'blue.50', color: 'primary', borderColor: 'primary' }}
         >
-          <motion.span animate={{ rotate: collapsed ? 180 : 0 }} transition={{ duration: 0.18 }}>
-            {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          </motion.span>
+          <ChevronRight size={13} strokeWidth={2.4} />
         </Button>
       </Flex>
-      <Separator />
-      <VStack as="nav" align="stretch" gap="5" flex="1" overflowY="auto" py="5" px="3">
+
+      {/* Navigation List - with minH=0 so flexbox scrolls cleanly and bottom user card never gets pushed off */}
+      <VStack
+        as="nav"
+        align="stretch"
+        gap="4"
+        flex="1"
+        minH="0"
+        overflowY="auto"
+        overflowX="hidden"
+        py="4"
+        px={collapsed ? '2' : '3'}
+      >
         {navigationConfig.map((group) => (
-          <Box key={group.id}>
+          <Box key={group.id} w="full">
             {!collapsed && (
-              <Text textStyle="label" color="muted" px="3" mb="2">
+              <Text textStyle="label" color="muted" px="3" mb="1.5" fontSize="11px" fontWeight="600" textTransform="uppercase" letterSpacing="0.05em">
                 {group.label}
               </Text>
             )}
@@ -157,8 +225,17 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           </Box>
         ))}
       </VStack>
-      <Separator />
-      <Box p="3">
+
+      {/* Bottom User Profile Section - firmly anchored, zero shrink, always fully visible */}
+      <Box
+        p={collapsed ? '2' : '3'}
+        flexShrink={0}
+        borderTopWidth="1px"
+        borderColor="border"
+        bg="surface"
+        mt="auto"
+        boxSizing="border-box"
+      >
         <UserMenu collapsed={collapsed} />
       </Box>
     </MotionBox>

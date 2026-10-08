@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   Dialog,
+  Flex,
   Grid,
   HStack,
   IconButton,
@@ -18,6 +19,7 @@ import {
   QrCode,
   RefreshCw,
   Smartphone,
+  Store,
   Trash2,
   UploadCloud,
   X,
@@ -277,109 +279,222 @@ export function QrImageUploader({
         </HStack>
       )}
 
-      {/* Upload Buttons & Drop Area */}
-      <Card.Root variant="outline" p="4" borderRadius="lg" bg="gray.50/50">
-        <VStack align="stretch" gap="3">
-          {/* Previews Grid */}
-          {value.length > 0 && (
-            <Grid
-              templateColumns={
-                multiple ? { base: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' } : '1fr'
-              }
-              gap="3"
-            >
-              <AnimatePresence>
-                {value.map((img, idx) => (
-                  <MotionBox
-                    key={img.key || idx}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    position="relative"
-                    borderRadius="md"
-                    overflow="hidden"
-                    borderWidth="1px"
-                    borderColor="gray.200"
-                    bg="white"
-                    maxH={multiple ? '100px' : '160px'}
-                  >
-                    <Image
-                      src={img.previewUrl}
-                      alt={`Image ${idx + 1}`}
-                      objectFit="cover"
-                      w="full"
-                      h={multiple ? '100px' : '160px'}
-                    />
-                    <IconButton
-                      aria-label="Remove image"
-                      size="xs"
-                      colorPalette="red"
-                      variant="solid"
-                      position="absolute"
-                      top="1.5"
-                      right="1.5"
-                      onClick={() => handleRemoveImage(idx)}
-                      borderRadius="full"
-                    >
-                      <Trash2 size={13} />
-                    </IconButton>
-                  </MotionBox>
-                ))}
-              </AnimatePresence>
-            </Grid>
-          )}
-
-          {/* Action Buttons */}
-          {(!multiple && value.length === 0) || (multiple && value.length < maxFiles) ? (
-            <HStack gap="3" flexWrap="wrap">
-              {onManualFileSelect && (
-                <>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    multiple={multiple}
-                    style={{ display: 'none' }}
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files.length > 0) {
-                        onManualFileSelect(e.target.files)
-                        e.target.value = ''
-                      }
-                    }}
+      {/* Upload UI: Single Image (e.g. Logo/Avatar) vs Multiple Images (e.g. Products) */}
+      {!multiple ? (
+        <Card.Root variant="outline" p="4" borderRadius="lg" bg="bg.subtle/30">
+          <Flex
+            direction={{ base: 'column', sm: 'row' }}
+            align={{ base: 'start', sm: 'center' }}
+            gap="5"
+            w="full"
+          >
+            {/* Logo Preview Tile / Placeholder */}
+            <Box position="relative" flexShrink={0}>
+              {value.length > 0 ? (
+                <Box
+                  boxSize={{ base: '90px', sm: '104px' }}
+                  borderRadius="xl"
+                  overflow="hidden"
+                  borderWidth="1px"
+                  borderColor="border"
+                  bg="white"
+                  p="2"
+                  shadow="xs"
+                  display="grid"
+                  placeItems="center"
+                >
+                  <Image
+                    src={value[0].previewUrl}
+                    alt="Logo preview"
+                    w="full"
+                    h="full"
+                    objectFit="contain"
                   />
+                </Box>
+              ) : (
+                <Box
+                  boxSize={{ base: '90px', sm: '104px' }}
+                  borderRadius="xl"
+                  borderWidth="2px"
+                  borderStyle="dashed"
+                  borderColor="border"
+                  bg="bg.muted"
+                  display="grid"
+                  placeItems="center"
+                  color="secondary"
+                >
+                  <Store size={36} strokeWidth={1.5} />
+                </Box>
+              )}
+            </Box>
+
+            {/* Info & Action Controls */}
+            <VStack align="start" gap="2.5" flex="1" minW="0">
+              <Box>
+                <Text fontSize="sm" fontWeight="600">
+                  {value.length > 0 ? 'Current Logo' : 'Upload Store Logo'}
+                </Text>
+                <Text fontSize="xs" color="secondary" mt="0.5">
+                  {description || 'PNG, JPG, or WebP. Recommended square logo, max 5MB.'}
+                </Text>
+              </Box>
+
+              <HStack gap="2.5" flexWrap="wrap">
+                {onManualFileSelect && (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      multiple={false}
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          onManualFileSelect(e.target.files)
+                          e.target.value = ''
+                        }
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      loading={isUploadingManual}
+                    >
+                      <UploadCloud size={15} />
+                      <span>{value.length > 0 ? 'Change File' : 'Choose File'}</span>
+                    </Button>
+                  </>
+                )}
+
+                <Button
+                  size="sm"
+                  colorPalette="blue"
+                  variant="subtle"
+                  onClick={handleOpenDialog}
+                >
+                  <QrCode size={15} />
+                  <span>Upload via QR Code</span>
+                </Button>
+
+                {value.length > 0 && (
                   <Button
                     size="sm"
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    loading={isUploadingManual}
-                    flex="1"
+                    variant="ghost"
+                    colorPalette="red"
+                    onClick={() => handleRemoveImage(0)}
                   >
-                    <UploadCloud size={16} />
-                    <span>Choose File</span>
+                    <Trash2 size={15} />
+                    <span>Remove</span>
                   </Button>
-                </>
-              )}
-
-              <Button
-                size="sm"
-                colorPalette="blue"
-                variant="subtle"
-                onClick={handleOpenDialog}
-                flex="1"
+                )}
+              </HStack>
+            </VStack>
+          </Flex>
+        </Card.Root>
+      ) : (
+        <Card.Root variant="outline" p="4" borderRadius="lg" bg="bg.subtle/30">
+          <VStack align="stretch" gap="3">
+            {/* Previews Grid */}
+            {value.length > 0 && (
+              <Grid
+                templateColumns={{ base: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' }}
+                gap="3"
               >
-                <QrCode size={16} />
-                <span>Upload via QR Code</span>
-              </Button>
-            </HStack>
-          ) : null}
+                <AnimatePresence>
+                  {value.map((img, idx) => (
+                    <MotionBox
+                      key={img.key || idx}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      position="relative"
+                      borderRadius="md"
+                      overflow="hidden"
+                      borderWidth="1px"
+                      borderColor="border"
+                      bg="white"
+                      aspectRatio="1/1"
+                      p="1.5"
+                    >
+                      <Image
+                        src={img.previewUrl}
+                        alt={`Image ${idx + 1}`}
+                        objectFit="contain"
+                        w="full"
+                        h="full"
+                      />
+                      <IconButton
+                        aria-label="Remove image"
+                        size="xs"
+                        colorPalette="red"
+                        variant="solid"
+                        position="absolute"
+                        top="1.5"
+                        right="1.5"
+                        onClick={() => handleRemoveImage(idx)}
+                        borderRadius="full"
+                      >
+                        <Trash2 size={13} />
+                      </IconButton>
+                    </MotionBox>
+                  ))}
+                </AnimatePresence>
+              </Grid>
+            )}
 
-          {description && (
-            <Text fontSize="xs" color="gray.500">
-              {description}
-            </Text>
-          )}
-        </VStack>
-      </Card.Root>
+            {/* Action Buttons for Multiple */}
+            {value.length < maxFiles && (
+              <HStack gap="3" flexWrap="wrap">
+                {onManualFileSelect && (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      multiple={multiple}
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          onManualFileSelect(e.target.files)
+                          e.target.value = ''
+                        }
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      loading={isUploadingManual}
+                      flex="1"
+                    >
+                      <UploadCloud size={16} />
+                      <span>Choose File</span>
+                    </Button>
+                  </>
+                )}
+
+                <Button
+                  size="sm"
+                  colorPalette="blue"
+                  variant="subtle"
+                  onClick={handleOpenDialog}
+                  flex="1"
+                >
+                  <QrCode size={16} />
+                  <span>Upload via QR Code</span>
+                </Button>
+              </HStack>
+            )}
+
+            {description && (
+              <Text fontSize="xs" color="secondary">
+                {description}
+              </Text>
+            )}
+          </VStack>
+        </Card.Root>
+      )}
 
       {/* QR Upload Modal */}
       <Dialog.Root open={isOpen} onOpenChange={(e) => !e.open && handleClose()} size="md">

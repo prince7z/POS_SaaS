@@ -30,14 +30,14 @@ export function Logo({ collapsed = false }: { collapsed?: boolean }) {
   const logoUrl = company?.logoUrl
 
   const content = (
-    <HStack gap="2" cursor={companies.length > 1 ? 'pointer' : 'default'}>
+    <HStack gap="2" cursor={companies.length > 1 ? 'pointer' : 'default'} justify={collapsed ? 'center' : 'flex-start'}>
       {logoUrl ? (
-        <Box boxSize="32px" p="0.5" borderRadius="md" overflow="hidden" flexShrink={0} bg="white" border="1px solid" borderColor="border">
+        <Box boxSize="34px" p="0.5" borderRadius="md" overflow="hidden" flexShrink={0} bg="white" border="1px solid" borderColor="border" display="grid" placeItems="center">
           <img src={logoUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </Box>
       ) : (
-        <Box bg="primary" color="white" p="2" borderRadius="md" flexShrink={0}>
-          <Store size={16} />
+        <Box bg="primary" color="white" boxSize="34px" borderRadius="md" flexShrink={0} display="grid" placeItems="center">
+          <Store size={18} />
         </Box>
       )}
       {!collapsed && (
@@ -63,7 +63,7 @@ export function Logo({ collapsed = false }: { collapsed?: boolean }) {
   return (
     <Menu.Root positioning={{ placement: 'bottom-start' }}>
       <Menu.Trigger asChild>
-        <Button variant="ghost" p="1" h="auto" minW="auto">
+        <Button variant="ghost" p={collapsed ? '0' : '1'} h="auto" minW="auto" display="flex" justifyContent={collapsed ? 'center' : 'flex-start'}>
           {content}
         </Button>
       </Menu.Trigger>
