@@ -28,7 +28,7 @@ export const getConversationHistory = async (conversationId: string, limit = 10)
 		orderBy: { createdAt: "desc" },
 		take: limit,
 	});
-	return messages.reverse().map((m) => ({
+	return messages.reverse().map((m: { role: string; content: string }) => ({
 		role: m.role,
 		content: m.content,
 	}));

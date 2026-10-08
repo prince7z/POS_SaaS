@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
+    "postinstall": "prisma generate",
+    "build": "prisma generate && tsc",
     "typecheck": "tsc --noEmit",
     "start": "node dist/server.js",
     "dev": "tsx watch --ignore node_modules --ignore dist --ignore .git --ignore .vscode --ignore scripts --ignore prisma --ignore .env src/server.ts",

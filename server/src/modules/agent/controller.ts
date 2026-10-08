@@ -320,11 +320,13 @@ export const stream: RequestHandler = async (request, response, next) => {
 		const content = (bodyObj.message || bodyObj.content || "").trim();
 		if (!content) throw validationError("Message content is required");
 
-		let conversationId = bodyObj.conversationId || (request.params.conversationId ? routeParam(request.params.conversationId) : undefined);
+		const rawConvId = bodyObj.conversationId || (request.params.conversationId ? routeParam(request.params.conversationId) : undefined);
+		let conversationId: string;
 		const convDbStart = performance.now();
 		tracker.log({ layer: "backend", module: "controller.ts", operation: "before conversation DB lookup" });
-		if (conversationId) {
-			await getConversation(conversationId, user.id, user.companyId);
+		if (rawConvId) {
+			await getConversation(rawConvId, user.id, user.companyId);
+			conversationId = rawConvId;
 		} else {
 			const newConv = await createConversation(user.id, user.companyId, content.slice(0, 40));
 			conversationId = newConv.id;
