@@ -13,7 +13,7 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { motion } from 'motion/react'
-import { Building2, Eye, EyeOff, Lock, LogIn, Mail } from 'lucide-react'
+import { Eye, EyeOff, Lock, LogIn, Mail } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { login } from '@/api/endpoints/auth'
 import { setAuthSession } from '@/lib/auth'
@@ -22,7 +22,6 @@ const MotionCard = motion.create(Card.Root)
 const MotionBox = motion.create(Box)
 
 export function LoginPage() {
-  const [companyId, setCompanyId] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -32,7 +31,7 @@ export function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!companyId.trim() || !email.trim() || !password) {
+    if (!email.trim() || !password) {
       setError('Please fill in all required login fields.')
       return
     }
@@ -42,7 +41,6 @@ export function LoginPage() {
 
     try {
       const response = await login({
-        companyId: companyId.trim(),
         email: email.trim().toLowerCase(),
         password,
       })
@@ -53,7 +51,7 @@ export function LoginPage() {
       // Redirect to main POS app
       navigate('/')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid company ID, email, or password.')
+      setError(err instanceof Error ? err.message : 'Invalid email or password.')
     } finally {
       setLoading(false)
     }
@@ -89,7 +87,7 @@ export function LoginPage() {
             Sign in to POS SaaS
           </Heading>
           <Text color="secondary" fontSize="sm" mt="1">
-            Enter your company ID and user credentials to access your store workspace.
+            Enter your user credentials to access your store workspace.
           </Text>
         </Card.Header>
 
@@ -104,37 +102,6 @@ export function LoginPage() {
                   </Alert.Content>
                 </Alert.Root>
               )}
-
-              <Box>
-                <HStack justify="space-between" mb="1.5">
-                  <Text fontSize="sm" fontWeight="600">
-                    Company ID
-                  </Text>
-                </HStack>
-                <HStack
-                  gap="2"
-                  border="1px solid"
-                  borderColor="border"
-                  borderRadius="md"
-                  px="3"
-                  py="1"
-                  _focusWithin={{ borderColor: 'blue.solid' }}
-                >
-                  <Building2 size={16} color="var(--chakra-colors-secondary)" />
-                  <Input
-                    type="text"
-                    required
-                    placeholder="e.g. 123e4567-e89b-12d3-a456-426614174000"
-                    value={companyId}
-                    onChange={(e) => setCompanyId(e.target.value)}
-                    border="none"
-                    outline="none"
-                    focusRing="none"
-                    fontSize="sm"
-                    py="1.5"
-                  />
-                </HStack>
-              </Box>
 
               <Box>
                 <Text fontSize="sm" fontWeight="600" mb="1.5">

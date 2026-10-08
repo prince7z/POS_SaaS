@@ -26,13 +26,17 @@ const trustedUser = async (request: Parameters<RequestHandler>[0], tracker?: Age
 	const dbStart = performance.now();
 	tracker?.log({ layer: "backend", module: "controller.ts", operation: "before prisma.user.findFirst()" });
 
-	const user = await prisma.user.findFirst({
-		where: { id: request.auth.userId, companyId: request.auth.companyId, isActive: true, deletedAt: null },
+	const membership = await prisma.companyUser.findFirst({
+		where: { userId: request.auth.userId, companyId: request.auth.companyId, isActive: true, deletedAt: null },
 		select: {
-			id: true,
+			userId: true,
 			companyId: true,
 			accesses: true,
-			fullName: true,
+			user: {
+				select: {
+					fullName: true,
+				},
+			},
 			company: {
 				select: {
 					name: true,
@@ -46,19 +50,19 @@ const trustedUser = async (request: Parameters<RequestHandler>[0], tracker?: Age
 	tracker?.log({
 		layer: "backend",
 		module: "controller.ts",
-		operation: `after prisma.user.findFirst() (${dbDurationMs}ms)`,
+		operation: `after prisma.companyUser.findFirst() (${dbDurationMs}ms)`,
 	});
 
-	if (!user) throw unauthorized();
+	if (!membership) throw unauthorized();
 	tracker?.log({ layer: "backend", module: "controller.ts", operation: "auth completed" });
 	tracker?.log({ layer: "backend", module: "controller.ts", operation: "authorization completed" });
 	return {
-		id: user.id,
-		companyId: user.companyId,
-		permissions: user.accesses.map(String),
-		userName: user.fullName || undefined,
-		companyName: user.company?.name || undefined,
-		companyLogoUrl: user.company?.logoKey ? toPublicMediaUrl(user.company.logoKey) : null,
+		id: membership.userId,
+		companyId: membership.companyId,
+		permissions: membership.accesses.map(String),
+		userName: membership.user?.fullName || undefined,
+		companyName: membership.company?.name || undefined,
+		companyLogoUrl: membership.company?.logoKey ? toPublicMediaUrl(membership.company.logoKey) : null,
 	};
 };
 

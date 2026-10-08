@@ -126,11 +126,11 @@ export const updateCompany = async (companyId: string, actorUserId: string, inpu
 	const before = await repository.findCompany(prisma, companyId);
 	if (!before) throw new AppError("Company not found", 404, "COMPANY_NOT_FOUND");
 	if (input.invoiceTerms !== undefined || input.businessHours !== undefined) {
-		const actor = await prisma.user.findFirst({
-			where: { id: actorUserId, companyId, isActive: true, deletedAt: null },
+		const actorMembership = await prisma.companyUser.findFirst({
+			where: { userId: actorUserId, companyId, isActive: true, deletedAt: null },
 			select: { roleName: true },
 		});
-		if (actor?.roleName !== "Admin") throw forbidden("Only an Admin can update invoice terms and opening hours");
+		if (actorMembership?.roleName !== "Admin") throw forbidden("Only an Admin can update invoice terms and opening hours");
 	}
 	const updated = await prisma.$transaction(async (tx) => {
 		const company = await repository.updateCompany(tx, companyId, input as Prisma.CompanyUpdateInput);
@@ -153,51 +153,81 @@ export const updateCompany = async (companyId: string, actorUserId: string, inpu
 
 export const getUsers = async (companyId: string, page: number, limit: number) => {
 	const [items, total] = await Promise.all([
-		repository.listUsers(prisma, companyId, (page - 1) * limit, limit),
-		repository.countUsers(prisma, companyId),
+		repository.listCompanyUsers(prisma, companyId, (page - 1) * limit, limit),
+		repository.countCompanyUsers(prisma, companyId),
 	]);
-	return { items: items.map(sanitizeUser), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+	return { items: items.map((item) => sanitizeUser(item.user, item)), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 };
 
 export const createUser = async (companyId: string, actorUserId: string, input: z.infer<typeof createUserSchema>) => {
-	if (await repository.findUserByEmail(prisma, companyId, input.email)) throw new AppError("Email already exists", 409, "EMAIL_ALREADY_EXISTS");
+	if (await repository.findCompanyUserByEmail(prisma, companyId, input.email)) {
+		throw new AppError("Email already exists in this company", 409, "EMAIL_ALREADY_EXISTS");
+	}
 	const passwordHash = await bcrypt.hash(input.password, 12);
-	const user = await prisma.$transaction(async (tx) => {
-		const created = await repository.createUser(tx, {
+	const { user, companyUser } = await prisma.$transaction(async (tx) => {
+		let user = await repository.findGlobalUserByEmail(tx, input.email);
+		if (!user) {
+			user = await repository.createGlobalUser(tx, {
+				email: input.email,
+				passwordHash,
+				fullName: input.fullName,
+				phone: input.phone,
+			});
+		}
+		const companyUser = await repository.createCompanyUser(tx, {
 			companyId,
-			email: input.email,
-			passwordHash,
-			fullName: input.fullName,
-			phone: input.phone,
+			userId: user.id,
 			roleName: input.roleName,
 			accesses: input.accesses,
+			isActive: true,
 		});
-		await repository.createAuditLog(tx, { companyId, actorUserId, action: "USER_CREATED", entityType: "User", entityId: created.id });
-		return created;
+		await repository.createAuditLog(tx, { companyId, actorUserId, action: "USER_CREATED", entityType: "User", entityId: user.id });
+		return { user, companyUser };
 	});
-	return sanitizeUser(user);
+	return sanitizeUser(user, companyUser);
 };
 
 export const updateUser = async (companyId: string, actorUserId: string, userId: string, input: z.infer<typeof updateUserSchema>) => {
-	const before = await repository.findUser(prisma, companyId, userId);
+	const before = await repository.findCompanyUser(prisma, companyId, userId);
 	if (!before) throw new AppError("User not found", 404, "USER_NOT_FOUND");
 	if (input.isActive === false && before.roleName === "Admin" && before.isActive && (await repository.countActiveAdmins(prisma, companyId)) <= 1) {
 		throw forbidden("The final active Admin cannot be deactivated");
 	}
-	const updated = await prisma.$transaction(async (tx) => {
-		const user = await repository.updateUser(tx, userId, input);
-		await repository.createAuditLog(tx, { companyId, actorUserId, action: input.accesses ? "ACCESS_CHANGED" : "USER_UPDATED", entityType: "User", entityId: userId, beforeData: safeAudit({ roleName: before.roleName, accesses: before.accesses, isActive: before.isActive }), afterData: safeAudit({ roleName: user.roleName, accesses: user.accesses, isActive: user.isActive }) });
-		return user;
+	const { user, companyUser } = await prisma.$transaction(async (tx) => {
+		let updatedUser = before.user;
+		if (input.fullName !== undefined || input.phone !== undefined) {
+			updatedUser = await repository.updateGlobalUser(tx, userId, {
+				...(input.fullName !== undefined && { fullName: input.fullName }),
+				...(input.phone !== undefined && { phone: input.phone }),
+			});
+		}
+		const updatedMembership = await repository.updateCompanyUser(tx, companyId, userId, {
+			...(input.roleName !== undefined && { roleName: input.roleName }),
+			...(input.accesses !== undefined && { accesses: input.accesses }),
+			...(input.isActive !== undefined && { isActive: input.isActive }),
+		});
+		await repository.createAuditLog(tx, {
+			companyId,
+			actorUserId,
+			action: input.accesses ? "ACCESS_CHANGED" : "USER_UPDATED",
+			entityType: "User",
+			entityId: userId,
+			beforeData: safeAudit({ roleName: before.roleName, accesses: before.accesses, isActive: before.isActive }),
+			afterData: safeAudit({ roleName: updatedMembership.roleName, accesses: updatedMembership.accesses, isActive: updatedMembership.isActive }),
+		});
+		return { user: updatedUser, companyUser: updatedMembership };
 	});
-	return sanitizeUser(updated);
+	return sanitizeUser(user, companyUser);
 };
 
 export const deactivateUser = async (companyId: string, actorUserId: string, userId: string) => {
-	const user = await repository.findUser(prisma, companyId, userId);
-	if (!user) throw new AppError("User not found", 404, "USER_NOT_FOUND");
-	if (user.roleName === "Admin" && user.isActive && (await repository.countActiveAdmins(prisma, companyId)) <= 1) throw forbidden("The final active Admin cannot be deactivated");
+	const membership = await repository.findCompanyUser(prisma, companyId, userId);
+	if (!membership) throw new AppError("User not found", 404, "USER_NOT_FOUND");
+	if (membership.roleName === "Admin" && membership.isActive && (await repository.countActiveAdmins(prisma, companyId)) <= 1) {
+		throw forbidden("The final active Admin cannot be deactivated");
+	}
 	await prisma.$transaction(async (tx) => {
-		await repository.updateUser(tx, userId, { isActive: false, deletedAt: new Date() });
+		await repository.updateCompanyUser(tx, companyId, userId, { isActive: false, deletedAt: new Date() });
 		await repository.createAuditLog(tx, { companyId, actorUserId, action: "USER_DEACTIVATED", entityType: "User", entityId: userId });
 	});
 };

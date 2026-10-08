@@ -1,5 +1,5 @@
 import { STORAGE_KEYS } from '@/config/constants'
-import type { AuthResponse } from '@/api/endpoints/auth'
+import type { AuthResponse, CompanyOption } from '@/api/endpoints/auth'
 
 export function setAuthSession(data: AuthResponse) {
   if (data.accessToken) {
@@ -15,6 +15,9 @@ export function setAuthSession(data: AuthResponse) {
   }
   if (data.company) {
     localStorage.setItem('pos-company', JSON.stringify(data.company))
+  }
+  if (data.companies) {
+    localStorage.setItem('pos-companies', JSON.stringify(data.companies))
   }
 }
 
@@ -42,11 +45,22 @@ export function getStoredCompany(): AuthResponse['company'] | null {
   }
 }
 
+export function getStoredCompanies(): CompanyOption[] {
+  const raw = localStorage.getItem('pos-companies')
+  if (!raw) return []
+  try {
+    return JSON.parse(raw) as CompanyOption[]
+  } catch {
+    return []
+  }
+}
+
 export function clearAuthSession() {
   localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN)
   localStorage.removeItem('pos-refresh-token')
   localStorage.removeItem('pos-user')
   localStorage.removeItem('pos-company')
+  localStorage.removeItem('pos-companies')
   document.cookie = `${STORAGE_KEYS.AUTH_TOKEN}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`
 }
 

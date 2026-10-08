@@ -21,8 +21,17 @@ export function resetPassword(payload: { token: string; newPassword: string; con
   })
 }
 
+export interface CompanyOption {
+  id: string
+  name: string
+  logoUrl?: string | null
+  currencyCode?: string
+  countryCode?: string
+  roleName?: string
+}
+
 export interface LoginPayload {
-  companyId: string
+  companyId?: string
   email: string
   password: string
 }
@@ -38,9 +47,11 @@ export interface AuthResponse {
   company: {
     id: string
     name: string
+    logoUrl?: string | null
     currencyCode: string
     countryCode: string
   }
+  companies?: CompanyOption[]
   accessToken: string
   refreshToken: string
 }
@@ -49,6 +60,13 @@ export function login(payload: LoginPayload) {
   return apiRequest<AuthResponse>('/auth/login', {
     method: 'POST',
     body: JSON.stringify(payload),
+  })
+}
+
+export function switchCompany(companyId: string) {
+  return apiRequest<AuthResponse>('/auth/switch-company', {
+    method: 'POST',
+    body: JSON.stringify({ companyId }),
   })
 }
 

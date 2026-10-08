@@ -137,7 +137,7 @@ model Company {
   updatedAt                 DateTime  @updatedAt
   deletedAt                 DateTime?
 
-  users              User[]
+  companyUsers       CompanyUser[]
   categories         Category[]
   brands             Brand[]
   products           Product[]
@@ -160,20 +160,16 @@ model Company {
 
 model User {
   id              String    @id @default(uuid())
-  companyId       String
-  email           String
+  email           String    @unique
   passwordHash    String
   fullName        String
   phone           String?
   profileImageKey String?
-  roleName        String
-  accesses        Access[]
-  isActive        Boolean   @default(true)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  company                 Company             @relation(fields: [companyId], references: [id])
+  companyUsers            CompanyUser[]
   sessions                Session[]
   cashierSales            Sale[]              @relation("SaleCashier")
   createdPurchaseOrders   PurchaseOrder[]     @relation("PurchaseOrderCreator")
@@ -185,8 +181,26 @@ model User {
   auditLogs               AuditLog[]          @relation("AuditActor")
   agentConversations      AgentConversation[]
 
-  @@unique([companyId, email])
+  @@index([deletedAt])
+}
+
+model CompanyUser {
+  id        String    @id @default(uuid())
+  companyId String
+  userId    String
+  roleName  String
+  accesses  Access[]
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
   @@index([companyId, isActive])
+  @@index([userId])
   @@index([deletedAt])
 }
 

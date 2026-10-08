@@ -4,7 +4,11 @@ type Db = PrismaClient | Prisma.TransactionClient;
 
 export const createCompany = (db: Db, data: Prisma.CompanyCreateInput) => db.company.create({ data });
 
-export const createUser = (db: Db, data: Prisma.UserUncheckedCreateInput) => db.user.create({ data });
+export const createUser = (db: Db, data: Prisma.UserCreateInput | Prisma.UserUncheckedCreateInput) =>
+	db.user.create({ data });
+
+export const createCompanyUser = (db: Db, data: Prisma.CompanyUserUncheckedCreateInput) =>
+	db.companyUser.create({ data });
 
 export const createWalkInCustomer = (db: Db, companyId: string) =>
 	db.customer.create({
@@ -21,19 +25,49 @@ export const createWalkInCustomer = (db: Db, companyId: string) =>
 		},
 	});
 
-export const findUserForLogin = (db: Db, companyId: string, email: string) =>
-	db.user.findFirst({ where: { companyId, email, deletedAt: null }, include: { company: true } });
+export const findUserForLogin = (db: Db, email: string) =>
+	db.user.findFirst({
+		where: { email, deletedAt: null },
+		include: {
+			companyUsers: {
+				where: { isActive: true, deletedAt: null, company: { deletedAt: null } },
+				include: { company: true },
+				orderBy: { updatedAt: "desc" },
+			},
+		},
+	});
 
 export const findActiveUserByEmail = (db: Db, email: string) =>
-	db.user.findFirst({ where: { email, isActive: true, deletedAt: null }, select: { id: true, email: true, fullName: true } });
+	db.user.findFirst({ where: { email, deletedAt: null }, select: { id: true, email: true, fullName: true } });
 
 export const findUserById = (db: Db, userId: string, companyId: string) =>
-	db.user.findFirst({ where: { id: userId, companyId, deletedAt: null }, include: { company: true } });
+	db.user.findFirst({
+		where: { id: userId, deletedAt: null },
+		include: {
+			companyUsers: {
+				where: { companyId, deletedAt: null },
+				include: { company: true },
+			},
+		},
+	});
 
 export const createSession = (db: Db, data: Prisma.SessionUncheckedCreateInput) => db.session.create({ data });
 
 export const findSessionByHash = (db: Db, refreshTokenHash: string) =>
-	db.session.findFirst({ where: { refreshTokenHash }, include: { user: { include: { company: true } } } });
+	db.session.findFirst({
+		where: { refreshTokenHash },
+		include: {
+			user: {
+				include: {
+					companyUsers: {
+						where: { isActive: true, deletedAt: null, company: { deletedAt: null } },
+						include: { company: true },
+						orderBy: { updatedAt: "desc" },
+					},
+				},
+			},
+		},
+	});
 
 export const revokeSession = (db: Db, sessionId: string) =>
 	db.session.updateMany({ where: { id: sessionId, revokedAt: null }, data: { revokedAt: new Date() } });

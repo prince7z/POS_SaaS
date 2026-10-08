@@ -1,19 +1,39 @@
-import type { Company, User } from "@prisma/client";
+import type { Company, CompanyUser, User } from "@prisma/client";
 import { toPublicMediaUrl } from "../integrations/aws/media";
 
-export const sanitizeUser = (user: User) => ({
-	id: user.id,
-	companyId: user.companyId,
-	fullName: user.fullName,
-	email: user.email,
-	phone: user.phone,
-	profileImageKey: user.profileImageKey,
-	profileImageUrl: user.profileImageKey ? toPublicMediaUrl(user.profileImageKey) : null,
-	roleName: user.roleName,
-	accesses: user.accesses,
-	isActive: user.isActive,
-	createdAt: user.createdAt,
-});
+export type SanitizableUser = Partial<User> & {
+	id: string;
+	fullName: string;
+	email: string;
+	phone?: string | null;
+	profileImageKey?: string | null;
+	createdAt?: Date;
+	companyId?: string;
+	roleName?: string;
+	accesses?: any[];
+	isActive?: boolean;
+	companyUser?: Partial<CompanyUser> | null;
+};
+
+export const sanitizeUser = (
+	user: SanitizableUser,
+	membership?: Partial<CompanyUser> | null,
+) => {
+	const m = membership ?? user.companyUser ?? user;
+	return {
+		id: user.id,
+		companyId: m.companyId ?? "",
+		fullName: user.fullName,
+		email: user.email,
+		phone: user.phone ?? null,
+		profileImageKey: user.profileImageKey ?? null,
+		profileImageUrl: user.profileImageKey ? toPublicMediaUrl(user.profileImageKey) : null,
+		roleName: m.roleName ?? "Staff",
+		accesses: m.accesses ?? [],
+		isActive: m.isActive ?? true,
+		createdAt: user.createdAt ?? new Date(),
+	};
+};
 
 export const sanitizeCompany = (company: Company) => ({
 	id: company.id,

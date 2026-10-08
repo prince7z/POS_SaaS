@@ -43,6 +43,12 @@ router.get("/me", requireAuth, async (request, response) => {
 	return sendSuccess(response, await service.getMe(request.auth.userId, request.auth.companyId));
 });
 
+router.post("/switch-company", requireAuth, async (request, response) => {
+	if (!request.auth) throw unauthorized();
+	const input = service.parse(service.switchCompanySchema, request.body);
+	return sendSuccess(response, await service.switchCompany(request.auth.userId, request.auth.companyId, input.companyId));
+});
+
 router.patch("/change-password", requireAuth, async (request, response) => {
 	if (!request.auth) throw unauthorized();
 	const input = service.parse(service.changePasswordSchema, request.body);

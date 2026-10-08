@@ -27,24 +27,28 @@ export const requireAccess = (access: Access): RequestHandler => async (
 			throw unauthorized();
 		}
 
-		const user = await prisma.user.findFirst({
+		const companyUser = await prisma.companyUser.findFirst({
 			where: {
-				id: request.auth.userId,
+				userId: request.auth.userId,
 				companyId: request.auth.companyId,
 				isActive: true,
 				deletedAt: null,
 			},
-			select: { id: true, companyId: true, accesses: true },
+			select: { userId: true, companyId: true, accesses: true },
 		});
 
-		if (!user) {
-			throw unauthorized("User is inactive or no longer exists");
+		if (!companyUser) {
+			throw unauthorized("User is inactive or no longer exists in this company");
 		}
-		if (!user.accesses.includes(access)) {
+		if (!companyUser.accesses.includes(access)) {
 			throw forbidden();
 		}
 
-		request.authenticatedUser = user;
+		request.authenticatedUser = {
+			id: companyUser.userId,
+			companyId: companyUser.companyId,
+			accesses: companyUser.accesses,
+		};
 		next();
 	} catch (error) {
 		next(error);
