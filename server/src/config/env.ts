@@ -46,6 +46,7 @@ const awsPublicBaseUrl = readOptional("AWS_S3_PUBLIC_BASE_URL") ?? (
 export const env = {
 	port: readPort(),
 	nodeEnv,
+	origin: readOptional("CLIENT_URL") ?? "http://localhost:5173",
 	testAuthBypass: readBoolean("TEST_AUTH_BYPASS", false),
 	databaseUrl: readRequired("PSQL"),
 	jwtSecret: readRequired("JWT_SECRET"),
