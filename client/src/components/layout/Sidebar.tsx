@@ -50,19 +50,19 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           align="center"
           gap="3"
           borderRadius="md"
-          color={active ? 'primary' : 'secondary'}
-          bg={active ? 'blue.50' : 'transparent'}
+          color={active ? 'blue.600' : 'gray.600'}
+          bg={active ? 'blue.50/70' : 'transparent'}
           position="relative"
-          _hover={{ bg: 'background', color: 'foreground' }}
+          _hover={{ bg: active ? 'blue.50/70' : 'gray.50', color: active ? 'blue.600' : 'gray.900' }}
           transition="background 140ms ease, color 140ms ease"
           h={collapsed ? '40px' : 'auto'}
           w="full"
         >
           {hasChildren ? (
             <HStack gap="3" flex="1" justify={collapsed ? 'center' : 'flex-start'}>
-              <item.icon size={18} style={{ flexShrink: 0 }} />
+              <item.icon size={18} style={{ flexShrink: 0, opacity: active ? 1 : 0.75 }} />
               {!collapsed && (
-                <Text fontSize="sm" fontWeight={active ? '600' : '500'} truncate flex="1" textAlign="left">
+                <Text fontSize="13px" fontWeight="400" truncate flex="1" textAlign="left">
                   {item.label}
                 </Text>
               )}
@@ -81,9 +81,9 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
               }}
             >
               <HStack gap="3" justify={collapsed ? 'center' : 'flex-start'} align="center" w="full">
-                <item.icon size={18} style={{ flexShrink: 0 }} />
+                <item.icon size={18} style={{ flexShrink: 0, opacity: active ? 1 : 0.75 }} />
                 {!collapsed && (
-                  <Text fontSize="sm" fontWeight={active ? '600' : '500'} truncate textAlign="left">
+                  <Text fontSize="13px" fontWeight="400" truncate textAlign="left">
                     {item.label}
                   </Text>
                 )}
@@ -216,7 +216,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         {filteredGroups.map((group) => (
           <Box key={group.id} w="full">
             {!collapsed && (
-              <Text textStyle="label" color="muted" px="3" mb="1.5" fontSize="11px" fontWeight="600" textTransform="uppercase" letterSpacing="0.05em">
+              <Text color="gray.400" px="3" mb="1.5" fontSize="10.5px" fontWeight="400" textTransform="uppercase" letterSpacing="0.05em">
                 {group.label}
               </Text>
             )}

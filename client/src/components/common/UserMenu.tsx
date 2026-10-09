@@ -35,8 +35,8 @@ export function UserMenu({ collapsed = false, compact = false }: { collapsed?: b
   }
 
   const displayName = user?.fullName || 'John Doe'
-  const Logo = currentCompany?.logoUrl 
-  const displayRole = user?.roleName || 'Store Manager'
+  const userAvatar = user?.avatarUrl
+  const displayRole = user?.roleName ? `${user.roleName} Account` : user?.email || 'Admin Account'
 
   return (
     <Menu.Root positioning={{ placement: 'bottom-end' }}>
@@ -49,25 +49,26 @@ export function UserMenu({ collapsed = false, compact = false }: { collapsed?: b
           px={collapsed ? '0' : '2'}
           justifyContent={collapsed ? 'center' : 'flex-start'}
           alignItems="center"
+          _hover={{ bg: 'gray.50' }}
         >
           <Avatar.Root size="sm" flexShrink={0}>
-            {Logo ? (
-              <Avatar.Image src={Logo} alt={displayName} />
+            {userAvatar ? (
+              <Avatar.Image src={userAvatar} alt={displayName} />
             ) : (
-              <Avatar.Fallback name={displayName} />
+              <Avatar.Fallback name={displayName} color="gray.700" bg="gray.100" fontWeight="400" />
             )}
           </Avatar.Root>
           {!collapsed && !compact && (
-            <VStack align="start" gap="0" ml="2" flex="1" minW="0" overflow="hidden">
-              <Text fontSize="sm" fontWeight="600" truncate maxW="125px" textAlign="left">
+            <VStack align="start" gap="0" ml="2.5" flex="1" minW="0" overflow="hidden">
+              <Text fontSize="13px" fontWeight="400" color="foreground" truncate maxW="125px" textAlign="left">
                 {displayName}
               </Text>
-              <Text fontSize="xs" color="secondary" truncate maxW="125px" textAlign="left">
+              <Text fontSize="11px" color="secondary" fontWeight="400" truncate maxW="125px" textAlign="left">
                 {displayRole}
               </Text>
             </VStack>
           )}
-          {!collapsed && !compact && <ChevronDown size={14} style={{ flexShrink: 0 }} color="var(--chakra-colors-secondary)" />}
+          {!collapsed && !compact && <ChevronDown size={13} style={{ flexShrink: 0, opacity: 0.5 }} />}
         </Button>
       </Menu.Trigger>
       <Menu.Positioner>

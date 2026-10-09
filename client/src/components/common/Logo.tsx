@@ -30,25 +30,25 @@ export function Logo({ collapsed = false }: { collapsed?: boolean }) {
   const logoUrl = company?.logoUrl
 
   const content = (
-    <HStack gap="2" cursor={companies.length > 1 ? 'pointer' : 'default'} justify={collapsed ? 'center' : 'flex-start'}>
+    <HStack gap="2.5" cursor={companies.length > 1 ? 'pointer' : 'default'} justify={collapsed ? 'center' : 'flex-start'}>
       {logoUrl ? (
-        <Box boxSize="34px" p="0.5" borderRadius="md" overflow="hidden" flexShrink={0} bg="white" border="1px solid" borderColor="border" display="grid" placeItems="center">
+        <Box boxSize="32px" p="0.5" borderRadius="md" overflow="hidden" flexShrink={0} bg="white" border="1px solid" borderColor="border" display="grid" placeItems="center">
           <img src={logoUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </Box>
       ) : (
-        <Box bg="white" color="black" border="1px solid" borderColor="border" boxSize="34px" borderRadius="md" flexShrink={0} display="grid" placeItems="center" fontWeight="800" fontSize="xs" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-          Jcom
+        <Box bg="blue.600" color="white" boxSize="32px" borderRadius="md" flexShrink={0} display="grid" placeItems="center" fontWeight="400" fontSize="xs">
+          {name.slice(0, 2).toUpperCase()}
         </Box>
       )}
       {!collapsed && (
         <Box minW="0" overflow="hidden" textAlign="left">
-          <HStack gap="1">
-            <Text fontWeight="800" lineHeight="1.2" truncate maxW="120px" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+          <HStack gap="1" align="center">
+            <Text fontWeight="400" fontSize="13px" lineHeight="1.2" color="foreground" truncate maxW="125px">
               {name}
             </Text>
-            {companies.length > 1 && <ChevronDown size={13} color="var(--chakra-colors-secondary)" />}
+            {companies.length > 1 && <ChevronDown size={13} style={{ flexShrink: 0, opacity: 0.6 }} />}
           </HStack>
-          <Text fontSize="xs" color="secondary" mt="0.5" truncate>
+          <Text fontSize="11px" color="secondary" mt="0.5" fontWeight="400" truncate>
             {company?.currencyCode ? `${company.currencyCode} Store` : 'Point of Sale Suite'}
           </Text>
         </Box>
