@@ -3,6 +3,7 @@ import { planSchema, type AgentUser, type Plan } from "../schemas";
 import { plannerSystemPrompt } from "../prompts/planner";
 import { agentToolRegistry } from "../registry";
 import { logger } from "../../../lib/logger";
+import { logDetailedAgentError } from "../utils/errorPrinter";
 
 const plannerToolCatalog = (permissions: string[]) =>
 	agentToolRegistry
@@ -140,8 +141,10 @@ Date filters must use YYYY-MM-DD. Always include a final step.`,
 
 		return planSchema.parse(candidate);
 	} catch (err: unknown) {
-		const errMsg = err instanceof Error ? err.stack || err.message : JSON.stringify(err);
-		logger.error("Planner validation failed", { error: errMsg, rawOutput: normalized });
-		throw new Error(`Planner returned an invalid plan: ${normalized.slice(0, 500)}`);
+		const formatted = logDetailedAgentError("Planner Validation Failed", err, {
+			rawOutput: normalized.slice(0, 1000),
+			userRequest: request,
+		}, tracker);
+		throw new Error(`Planner returned an invalid plan: ${formatted.summary}`);
 	}
 };

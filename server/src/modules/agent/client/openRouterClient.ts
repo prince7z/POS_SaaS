@@ -1,5 +1,6 @@
 import { env } from "../../../config/env";
 import { AgentPerfTracker, estimateTokens } from "../utils/perfLogger";
+import { logDetailedAgentError } from "../utils/errorPrinter";
 
 const OPEN_ROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -242,11 +243,14 @@ const request = async (
 					return content;
 				}
 				lastFailure = `Model ${modelToTry} returned no text content (finish reason: ${choice?.finish_reason ?? "unknown"})`;
+				logDetailedAgentError(`OpenRouter Model Call Empty Response [${node}]`, lastFailure, { modelToTry, attempt }, tracker);
 			} catch (err) {
-				lastFailure = err instanceof Error ? err.message : String(err);
+				const formatted = logDetailedAgentError(`OpenRouter Model Call Failed [${node}]`, err, { modelToTry, attempt }, tracker);
+				lastFailure = formatted.summary;
 			}
 		}
 	}
+	logDetailedAgentError(`All OpenRouter Candidate Models Exhausted [${node}]`, lastFailure, { candidateModels, node }, tracker);
 	throw new Error(lastFailure);
 };
 

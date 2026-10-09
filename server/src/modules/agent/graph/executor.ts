@@ -11,6 +11,8 @@ import { logger } from "../../../lib/logger";
 import { findAgentTool } from "../registry";
 import type { AgentGraphState } from "./state";
 import { interrupt, isGraphInterrupt } from "@langchain/langgraph";
+import { z } from "zod";
+import { logDetailedAgentError } from "../utils/errorPrinter";
 
 const safeFailure = (safeMessage: string) => ({
 	success: false as const,
@@ -459,9 +461,34 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 			if (isGraphInterrupt(err)) {
 				throw err;
 			}
-			logger.error("Agent tool execution failed", { stepId: step.id, tool: step.tool, operation: step.operation, error: err });
-			stepResults[step.id] = safeFailure("The requested business operation could not be completed.");
-			tracker?.log({ layer: "langgraph", module: "executor.ts", operation: "tool end (failed)", toolCallId: step.id });
+			const formatted = logDetailedAgentError(
+				`Tool Execution Failed [${step.tool}:${step.operation}]`,
+				err,
+				{
+					stepId: step.id,
+					tool: step.tool,
+					operation: step.operation,
+					args: step.args,
+				},
+				tracker
+			);
+
+			stepResults[step.id] = {
+				success: false as const,
+				errorCode: err instanceof z.ZodError ? "INVALID_TOOL_ARGUMENTS" : "AGENT_OPERATION_FAILED",
+				safeMessage: `Operation ${step.tool}:${step.operation} failed: ${formatted.summary}`,
+				errorDetails: formatted.details,
+				issues: formatted.issues,
+				retryable: false,
+			};
+
+			tracker?.log({
+				layer: "langgraph",
+				module: "executor.ts",
+				operation: "tool end (failed)",
+				toolCallId: step.id,
+				extra: { errorSummary: formatted.summary },
+			});
 		}
 	}
 	return { stepResults };

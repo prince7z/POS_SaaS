@@ -11,6 +11,7 @@ import { getAgentCheckpointer } from "./checkpoint";
 import { Command, isGraphInterrupt } from "@langchain/langgraph";
 import { logger } from "../../lib/logger";
 import { toPublicMediaUrl } from "../../integrations/aws/media";
+import { logDetailedAgentError, formatAgentError } from "./utils/errorPrinter";
 
 const routeParam = (value: string | string[] | undefined) => {
 	if (typeof value !== "string" || !value) throw validationError("Invalid conversation identifier");
@@ -265,8 +266,8 @@ function emitFinalResponse(
 						tracker
 					);
 				}
-			} catch {
-				// ignore parse error
+			} catch (chartErr) {
+				logDetailedAgentError("Chart Block JSON Parsing Failed", chartErr, { rawSnippet: m[1].slice(0, 300) }, tracker);
 			}
 		}
 	}
@@ -507,13 +508,19 @@ export const stream: RequestHandler = async (request, response, next) => {
 			tracker.printTimeline();
 			return;
 		}
+		const formatted = logDetailedAgentError("Agent Stream Execution Failed", error, { runId, requestId }, tracker);
 		if (!response.headersSent) return next(error);
-		logger.error("Agent run failed", error);
 		writeAgentEvent(
 			response,
 			{
 				type: "error",
-				data: { code: "AGENT_ERROR", message: "The assistant could not complete this request." },
+				data: {
+					code: "AGENT_ERROR",
+					message: formatted.summary || "The assistant could not complete this request.",
+					errorType: formatted.errorType,
+					issues: formatted.issues,
+					details: formatted.details,
+				},
 			},
 			tracker
 		);
@@ -661,13 +668,19 @@ export const respond: RequestHandler = async (request, response, next) => {
 			tracker.printTimeline();
 			return;
 		}
+		const formatted = logDetailedAgentError("Agent Respond Execution Failed", error, { runId, requestId }, tracker);
 		if (!response.headersSent) return next(error);
-		logger.error("Agent resume failed", error);
 		writeAgentEvent(
 			response,
 			{
 				type: "error",
-				data: { code: "AGENT_RESUME_ERROR", message: "The assistant could not resume this request." },
+				data: {
+					code: "AGENT_RESUME_ERROR",
+					message: formatted.summary || "The assistant could not resume this request.",
+					errorType: formatted.errorType,
+					issues: formatted.issues,
+					details: formatted.details,
+				},
 			},
 			tracker
 		);
