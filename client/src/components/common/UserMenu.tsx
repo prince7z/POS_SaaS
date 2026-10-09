@@ -35,7 +35,7 @@ export function UserMenu({ collapsed = false, compact = false }: { collapsed?: b
   }
 
   const displayName = user?.fullName || 'John Doe'
-  const userAvatar = user?.avatarUrl
+  const userAvatar = currentCompany?.logoUrl
   const displayRole = user?.roleName ? `${user.roleName} Account` : user?.email || 'Admin Account'
 
   return (
