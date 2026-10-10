@@ -144,8 +144,8 @@ export function getTakealotOfferSuggestions(type: TakealotLookupType, query: str
   const params = new URLSearchParams({ type, query })
   return apiRequest<TakealotOfferSuggestion | null>(`/catalog/takealot/offers?${params}`)
 }
-export function downloadTakealotOfferImage(type: TakealotLookupType, query: string) {
-  const params = new URLSearchParams({ type, query })
+export function downloadTakealotOfferImage(imageUrl: string) {
+  const params = new URLSearchParams({ imageUrl })
   return apiBlob(`/catalog/takealot/offers/image?${params}`, 'image/*')
 }
 export function getCategoriesPage(filters: CategoryFilters) {

@@ -101,10 +101,9 @@ router.delete("/brands/:id/logo", ...brandAccess, async (request, response) => {
 router.get("/products", ...productAccess, async (request, response) => {
 	return sendSuccess(response, await service.listProducts(authContext(request).companyId, service.parse(service.productListSchema, request.query)));
 });
-router.get("/takealot/offers/image", ...productAccess, requireTakealotApiKey, async (request, response) => {
-	const input = service.parse(service.takealotOfferLookupSchema, request.query);
-	if (!request.takealotApiKey) throw validationError("Takealot API key is required for offer lookup");
-	const image = await service.downloadTakealotOfferImage(request.takealotApiKey, input);
+router.get("/takealot/offers/image", ...productAccess, async (request, response) => {
+	const input = service.parse(service.takealotImageDownloadSchema, request.query);
+	const image = await service.downloadTakealotOfferImage(input.imageUrl);
 	response.setHeader("Content-Type", image.contentType);
 	response.setHeader("Cache-Control", "no-store");
 	return response.send(image.body);

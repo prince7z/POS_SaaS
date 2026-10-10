@@ -83,6 +83,9 @@ export const takealotOfferLookupSchema = z.object({
 	type: z.enum(["BARCODE", "SKU", "OFFER_ID"]),
 	query: z.string().trim().min(3).max(150),
 });
+export const takealotImageDownloadSchema = z.object({
+	imageUrl: z.string().url().max(2048),
+});
 const imageContentType = z.enum(["image/jpeg", "image/png", "image/webp"]);
 export const uploadImageSchema = z.object({ contentTypes: z.array(imageContentType).min(1).max(10) });
 export const imageKeysSchema = z.object({ imageKeys: z.array(z.string().min(1)).min(1).max(10) });
@@ -463,16 +466,24 @@ const normalizeTakealotOffer = (payload: unknown): TakealotOfferSuggestion | nul
 	};
 };
 
-export const downloadTakealotOfferImage = async (apiKey: string, input: z.infer<typeof takealotOfferLookupSchema>) => {
-	const offer = normalizeTakealotOffer(await takealotClient.findOffer(apiKey, input.type, input.query));
-	if (!offer?.imageUrl) throw catalogError("TAKEALOT_IMAGE_NOT_FOUND", "Takealot offer image is unavailable", 404);
+const detectTakealotImageContentType = (image: Buffer): "image/jpeg" | "image/png" | "image/webp" | null => {
+	if (image.length >= 3 && image[0] === 0xff && image[1] === 0xd8 && image[2] === 0xff) return "image/jpeg";
+	if (image.length >= 8 && image.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+	if (image.length >= 12 && image.toString("ascii", 0, 4) === "RIFF" && image.toString("ascii", 8, 12) === "WEBP") return "image/webp";
+	return null;
+};
 
-	const response = await fetch(offer.imageUrl, { signal: AbortSignal.timeout(10_000) });
-	if (!response.ok) throw catalogError("TAKEALOT_IMAGE_DOWNLOAD_FAILED", "Takealot offer image could not be downloaded", 502);
-	const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
-	if (!contentType || !["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
-		throw catalogError("TAKEALOT_IMAGE_INVALID", "Takealot returned an unsupported image type", 502);
+export const downloadTakealotOfferImage = async (imageUrl: string) => {
+	const safeImageUrl = safeTakealotImageUrl(imageUrl);
+	if (!safeImageUrl) throw catalogError("TAKEALOT_IMAGE_URL_INVALID", "Only Takealot product image URLs can be imported");
+
+	let response: Response;
+	try {
+		response = await fetch(safeImageUrl, { signal: AbortSignal.timeout(10_000), redirect: "error" });
+	} catch {
+		throw catalogError("TAKEALOT_IMAGE_DOWNLOAD_FAILED", "Takealot offer image could not be downloaded", 502);
 	}
+	if (!response.ok) throw catalogError("TAKEALOT_IMAGE_DOWNLOAD_FAILED", "Takealot offer image could not be downloaded", 502);
 	const contentLength = Number(response.headers.get("content-length"));
 	const maxImageSize = 5 * 1024 * 1024;
 	if (Number.isFinite(contentLength) && contentLength > maxImageSize) {
@@ -493,7 +504,10 @@ export const downloadTakealotOfferImage = async (apiKey: string, input: z.infer<
 		}
 		chunks.push(Buffer.from(value));
 	}
-	return { body: Buffer.concat(chunks), contentType };
+	const body = Buffer.concat(chunks);
+	const contentType = detectTakealotImageContentType(body);
+	if (!contentType) throw catalogError("TAKEALOT_IMAGE_INVALID", "Takealot did not return a supported image", 502);
+	return { body, contentType };
 };
 
 const validateProductRelations = async (companyId: string, input: { categoryId: string; brandId?: string | null; supplierId?: string | null }) => {

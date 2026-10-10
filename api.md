@@ -385,7 +385,7 @@ Required: `name`, `sku`, `categoryId`, `rrp`, `sellingPrice`, `purchaseCost`. Pr
 | Method | Path | Success | Request/query | Response |
 |---|---|---:|---|---|
 | `GET` | `/catalog/takealot/offers` | 200 | `type=BARCODE|SKU|OFFER_ID`, `query` (minimum 3 characters) | Matching offer's title, barcode, SKU, offer ID, price, RRP, image preview URL, Takealot URL, and merchant stock; `null` if not found |
-| `GET` | `/catalog/takealot/offers/image` | 200 | `type=BARCODE|SKU|OFFER_ID`, `query` | Offer image binary (`image/jpeg`, `image/png`, or `image/webp`); 404 if unavailable |
+| `GET` | `/catalog/takealot/offers/image` | 200 | `imageUrl` (URL returned by the offer lookup) | Offer image binary (`image/jpeg`, `image/png`, or `image/webp`); image bytes are validated before import |
 
 ### Product image endpoints
 

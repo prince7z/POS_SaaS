@@ -223,6 +223,7 @@ function ProductDialog({
   const [takealotConfigured, setTakealotConfigured] = useState(() => localStorage.getItem('takealotapiexist') === 'true')
   const [fillByTakealot, setFillByTakealot] = useState(false)
   const [takealotImageLoading, setTakealotImageLoading] = useState(false)
+  const [takealotImagePreview, setTakealotImagePreview] = useState('')
   const [lookupType, setLookupType] = useState<TakealotLookupType>('BARCODE')
   const [lookupValue, setLookupValue] = useState('')
   const [suggestions, setSuggestions] = useState<TakealotOfferSuggestion[]>([])
@@ -264,6 +265,7 @@ function ProductDialog({
     setStagedKeys([])
     setUploading(false)
     setTakealotImageLoading(false)
+    setTakealotImagePreview('')
     setError('')
   }, [initial, open])
   const set = <K extends keyof ProductPayload>(key: K, value: ProductPayload[K]) =>
@@ -301,6 +303,10 @@ function ProductDialog({
   }, [lookupType, lookupValue, takealotConfigured, fillByTakealot, open])
 
   const submit = async () => {
+    if (takealotImageLoading) {
+      setError('Wait for the Takealot image import to finish before saving.')
+      return
+    }
     if (!form.name.trim() || !form.sku.trim() || !form.categoryId) {
       setError('Product name, SKU, and category are required.')
       return
@@ -393,7 +399,8 @@ function ProductDialog({
 
     setTakealotImageLoading(true)
     try {
-      const image = await downloadTakealotOfferImage('OFFER_ID', suggestion.offerId)
+      setTakealotImagePreview(suggestion.imageUrl)
+      const image = await downloadTakealotOfferImage(suggestion.imageUrl)
       const contentType = image.type.toLowerCase()
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(contentType)) {
         throw new Error('Takealot returned an unsupported image type.')
@@ -406,6 +413,7 @@ function ProductDialog({
       setError(imageError.message)
     } finally {
       setTakealotImageLoading(false)
+      setTakealotImagePreview('')
     }
   }
   return (
@@ -646,9 +654,18 @@ function ProductDialog({
             </div>
           </div>
           <Separator />
+          {takealotImageLoading && (
+            <Box display="flex" alignItems="center" gap="3" rounded="lg" borderWidth="1px" p="3">
+              <Image src={takealotImagePreview} alt="" boxSize="16" objectFit="contain" rounded="md" bg="bg.muted" />
+              <Stack gap="1">
+                <Text fontSize="sm" fontWeight="medium">Importing Takealot image</Text>
+                <Text fontSize="xs" color="fg.muted">The image is being prepared for your product. You can continue editing the form.</Text>
+              </Stack>
+            </Box>
+          )}
           <QrImageUploader
             label="Product images"
-            description={takealotImageLoading ? 'Importing the selected Takealot product image…' : 'Upload product photos directly or scan the QR code to upload from phone.'}
+            description="Upload product photos directly or scan the QR code to upload from phone."
             purpose="PRODUCT_IMAGE"
             multiple
             isNewEntity={!initial}
@@ -672,7 +689,7 @@ function ProductDialog({
             onManualFileSelect={(selected) => {
               void handleFiles(Array.from(selected))
             }}
-            isUploadingManual={uploading || takealotImageLoading}
+            isUploadingManual={uploading}
           />
           {error && <FieldError>{error}</FieldError>}
         </FieldSet>
