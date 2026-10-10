@@ -490,45 +490,129 @@ function ProductDialog({
                         autoComplete="off"
                       />
                       {takealotConfigured && lookupValue.trim().length >= 3 && (suggestionsLoading || suggestions.length > 0 || suggestionsError) && (
-                        <Box position="absolute" top="calc(100% + 4px)" insetInline="0" zIndex="popover" bg="bg" borderWidth="1px" borderRadius="md" shadow="md" maxH="96" overflowY="auto" p="2">
+                        <Box
+                          position="absolute"
+                          top="calc(100% + 8px)"
+                          right="0"
+                          zIndex="popover"
+                          w="min(480px, calc(100vw - 2rem))"
+                          maxH="96"
+                          overflowY="auto"
+                          p="2"
+                          bg="bg"
+                          borderWidth="1px"
+                          borderColor="border"
+                          borderRadius="xl"
+                          shadow="xl"
+                        >
                           {suggestionsLoading && <Text px="3" py="2" fontSize="sm" color="fg.muted">Searching Takealot…</Text>}
                           {suggestionsError && <Text px="3" py="2" fontSize="sm" color="fg.error">{suggestionsError}</Text>}
                           {!suggestionsLoading && !suggestionsError && suggestions.length === 0 && <Text px="3" py="2" fontSize="sm" color="fg.muted">No matching offer found.</Text>}
                           {suggestions.map((suggestion) => (
-                            <Box key={suggestion.offerId || suggestion.barcode || suggestion.sku} borderWidth="1px" borderRadius="md" overflow="hidden" mb="2" _last={{ mb: 0 }}>
+                            <Box
+                              key={suggestion.offerId || suggestion.barcode || suggestion.sku}
+                              overflow="hidden"
+                              borderWidth="1px"
+                              borderColor="border"
+                              borderRadius="lg"
+                              bg="bg"
+                            >
                               <Button
                                 type="button"
                                 variant="ghost"
                                 w="full"
                                 h="auto"
-                                py="3"
-                                px="3"
-                                justifyContent="start"
+                                p="3"
+                                display="flex"
+                                alignItems="stretch"
+                                justifyContent="flex-start"
                                 whiteSpace="normal"
+                                textAlign="left"
+                                _hover={{ bg: 'bg.muted' }}
                                 onClick={() => void selectTakealotSuggestion(suggestion)}
                               >
-                                <HStack align="start" gap="3" w="full">
-                                  {suggestion.imageUrl
-                                    ? <Image src={suggestion.imageUrl} alt="" boxSize="16" objectFit="contain" borderRadius="sm" flexShrink="0" />
-                                    : <Box boxSize="16" display="grid" placeItems="center" bg="bg.muted" borderRadius="sm" flexShrink="0"><ImageIcon size={20} /></Box>}
-                                  <Stack align="start" gap="1" flex="1" minW="0">
-                                    <Text fontSize="sm" fontWeight="semibold" textAlign="left" lineClamp={2}>{suggestion.title || 'Takealot offer'}</Text>
-                                    <Text fontSize="xs" color="fg.muted">Barcode: {suggestion.barcode || 'Unavailable'}</Text>
-                                    <Text fontSize="xs" color="fg.muted">SKU: {suggestion.sku || 'Unavailable'} · Offer: {suggestion.offerId || 'Unavailable'}</Text>
-                                    <Text fontSize="xs" color="fg.muted">
-                                      Price: {suggestion.price === null ? 'Unavailable' : formatCurrency(suggestion.price)}
-                                      {' · '}Stock: {suggestion.stock === null ? 'Unavailable' : suggestion.stock}
+                                <Box
+                                  display="grid"
+                                  w="full"
+                                  minW="0"
+                                  gridTemplateColumns="80px minmax(0, 1fr)"
+                                  alignItems="start"
+                                  gap="3"
+                                >
+                                  <Box
+                                    boxSize="20"
+                                    display="grid"
+                                    flexShrink="0"
+                                    placeItems="center"
+                                    overflow="hidden"
+                                    borderWidth="1px"
+                                    borderColor="border"
+                                    borderRadius="md"
+                                    bg="white"
+                                  >
+                                    {suggestion.imageUrl
+                                      ? <Image src={suggestion.imageUrl} alt="" w="full" h="full" p="1" objectFit="contain" />
+                                      : <ImageIcon size={22} />}
+                                  </Box>
+                                  <Stack align="stretch" gap="2" minW="0">
+                                    <Text fontSize="sm" fontWeight="semibold" lineClamp={2} whiteSpace="normal">
+                                      {suggestion.title || 'Takealot offer'}
                                     </Text>
+                                    <Stack gap="1" minW="0">
+                                      <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                                        <Box as="span" fontWeight="medium" color="fg">Barcode</Box>
+                                        {': '}{suggestion.barcode || 'Unavailable'}
+                                      </Text>
+                                      <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                                        <Box as="span" fontWeight="medium" color="fg">SKU</Box>
+                                        {': '}{suggestion.sku || 'Unavailable'}
+                                      </Text>
+                                      <Text fontSize="xs" color="fg.muted">
+                                        <Box as="span" fontWeight="medium" color="fg">Offer</Box>
+                                        {': '}{suggestion.offerId || 'Unavailable'}
+                                      </Text>
+                                    </Stack>
+                                    <HStack justify="space-between" gap="2" flexWrap="wrap">
+                                      <Text fontSize="sm" fontWeight="bold" color="fg">
+                                        {suggestion.price === null ? 'Price unavailable' : formatCurrency(suggestion.price)}
+                                      </Text>
+                                      <Box
+                                        px="2"
+                                        py="0.5"
+                                        borderRadius="full"
+                                        bg={suggestion.stock === null ? 'bg.muted' : suggestion.stock > 0 ? 'green.subtle' : 'orange.subtle'}
+                                        color={suggestion.stock === null ? 'fg.muted' : suggestion.stock > 0 ? 'green.fg' : 'orange.fg'}
+                                        fontSize="xs"
+                                        fontWeight="medium"
+                                        whiteSpace="nowrap"
+                                      >
+                                        {suggestion.stock === null ? 'Stock unavailable' : `${suggestion.stock} in stock`}
+                                      </Box>
+                                    </HStack>
                                   </Stack>
-                                </HStack>
-                              </Button>
-                              {suggestion.offerUrl && (
-                                <Box px="3" pb="2" textAlign="right">
-                                  <a href={suggestion.offerUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                                    View on Takealot <ExternalLink size={12} />
-                                  </a>
                                 </Box>
-                              )}
+                              </Button>
+                              <HStack
+                                justify="space-between"
+                                px="3"
+                                py="2"
+                                borderTopWidth="1px"
+                                borderColor="border"
+                                bg="bg.subtle"
+                              >
+                                <Text fontSize="xs" color="fg.muted">Click card to fill product details</Text>
+                                {suggestion.offerUrl && (
+                                  <a
+                                    href={suggestion.offerUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={(event) => event.stopPropagation()}
+                                    className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                  >
+                                    View offer <ExternalLink size={12} />
+                                  </a>
+                                )}
+                              </HStack>
                             </Box>
                           ))}
                         </Box>
