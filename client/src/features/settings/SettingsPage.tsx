@@ -853,6 +853,7 @@ function SimpleCompanySection({
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [removeTakealotApiKey, setRemoveTakealotApiKey] = useState(false)
   const save = async () => {
     setSaving(true)
     setError('')
@@ -871,7 +872,11 @@ function SimpleCompanySection({
               }
             : {
                 takealotSellerId: form.takealotSellerId,
-                ...(form.takealotApiKey ? { takealotApiKey: form.takealotApiKey } : {}),
+                ...(removeTakealotApiKey
+                  ? { takealotApiKey: null }
+                  : form.takealotApiKey
+                    ? { takealotApiKey: form.takealotApiKey }
+                    : {}),
               }
       const updated = await updateCompany(payload)
       showSuccess(
@@ -879,6 +884,8 @@ function SimpleCompanySection({
         `${section === 'tax' ? 'Tax' : section === 'invoice' ? 'Invoice' : 'Integration'} preferences saved successfully.`
       )
       onSaved(updated)
+      setRemoveTakealotApiKey(false)
+      setForm((current) => ({ ...current, takealotApiKey: '' }))
     } catch (cause) {
       showError('Failed to save settings', cause)
       setError(cause instanceof Error ? cause.message : 'Settings could not be saved.')
@@ -1027,12 +1034,33 @@ function SimpleCompanySection({
             <Label icon={KeyRound}>API key</Label>
             <Input
               type="password"
-              placeholder={company.takealotConfigured ? 'Saved API key' : 'Enter API key'}
+              placeholder={company.takealotConfigured ? `Saved key · ${company.takealotApiKeyPrefix ?? '•••••'}…` : 'Enter API key'}
               value={form.takealotApiKey}
-              onChange={(e) => setForm({ ...form, takealotApiKey: e.target.value })}
+              onChange={(e) => {
+                setRemoveTakealotApiKey(false)
+                setForm({ ...form, takealotApiKey: e.target.value })
+              }}
             />
           </Box>
         </Grid>
+        {company.takealotConfigured && (
+          <HStack justify="space-between">
+            <Text fontSize="sm" color="secondary">
+              Connected key prefix: {company.takealotApiKeyPrefix ?? '•••••'}…
+            </Text>
+            <Button
+              size="xs"
+              variant={removeTakealotApiKey ? 'solid' : 'outline'}
+              colorPalette={removeTakealotApiKey ? 'red' : undefined}
+              onClick={() => {
+                setRemoveTakealotApiKey((current) => !current)
+                setForm((current) => ({ ...current, takealotApiKey: '' }))
+              }}
+            >
+              {removeTakealotApiKey ? 'Key will be removed' : 'Remove API key'}
+            </Button>
+          </HStack>
+        )}
         <ErrorText message={error} />
         <HStack justify="flex-end">
           <SaveButton saving={saving} onClick={save} />

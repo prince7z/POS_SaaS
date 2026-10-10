@@ -1,4 +1,4 @@
-import { apiRequest } from '../client'
+import { apiBlob, apiRequest } from '../client'
 
 export interface CatalogCategory {
   id: string
@@ -45,6 +45,8 @@ export interface CatalogProduct {
   imageKeys: string[]
   imageUrls?: string[]
   categoryId: string
+  takealotProductId?: string | null
+  takealotSync?: boolean
 }
 export interface ProductFilters {
   page: number
@@ -125,6 +127,26 @@ export function getProducts(filters: ProductFilters) {
   return apiRequest<CatalogPage<CatalogProduct>>(
     `/catalog/products?${params({ page, limit, includeInactive: filters.includeInactive ?? false, ...rest })}`,
   )
+}
+export type TakealotLookupType = 'BARCODE' | 'SKU' | 'OFFER_ID'
+export interface TakealotOfferSuggestion {
+  title: string
+  barcode: string | null
+  sku: string | null
+  offerId: string
+  price: number | null
+  rrp: number | null
+  imageUrl: string | null
+  offerUrl: string | null
+  stock: number | null
+}
+export function getTakealotOfferSuggestions(type: TakealotLookupType, query: string) {
+  const params = new URLSearchParams({ type, query })
+  return apiRequest<TakealotOfferSuggestion | null>(`/catalog/takealot/offers?${params}`)
+}
+export function downloadTakealotOfferImage(type: TakealotLookupType, query: string) {
+  const params = new URLSearchParams({ type, query })
+  return apiBlob(`/catalog/takealot/offers/image?${params}`, 'image/*')
 }
 export function getCategoriesPage(filters: CategoryFilters) {
   return apiRequest<CatalogPage<CatalogCategory>>(

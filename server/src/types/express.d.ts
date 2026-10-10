@@ -11,7 +11,9 @@ declare global {
 				id: string;
 				companyId: string;
 				accesses: Access[];
-			};
+					takealotApiKey?: string;
+				};
+				takealotApiKey?: string;
 		}
 	}
 }

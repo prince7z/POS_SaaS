@@ -7,6 +7,7 @@ import { prisma } from "../../lib/prisma";
 import { AppError, validationError } from "../../utils/errors";
 import { createMediaUploadUrl } from "../../integrations/aws/media";
 import * as repository from "./repository";
+import { takealotClient } from "../../integrations/takealot/client";
 
 const uuid = z.string().uuid();
 const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
@@ -78,6 +79,10 @@ export const productSchema = baseProductSchema.extend({
 	imageKeys: z.array(stagedImageKeySchema).max(10).default([]),
 });
 export const productUpdateSchema = baseProductSchema.partial();
+export const takealotOfferLookupSchema = z.object({
+	type: z.enum(["BARCODE", "SKU", "OFFER_ID"]),
+	query: z.string().trim().min(3).max(150),
+});
 const imageContentType = z.enum(["image/jpeg", "image/png", "image/webp"]);
 export const uploadImageSchema = z.object({ contentTypes: z.array(imageContentType).min(1).max(10) });
 export const imageKeysSchema = z.object({ imageKeys: z.array(z.string().min(1)).min(1).max(10) });
@@ -376,6 +381,121 @@ export const getProduct = async (companyId: string, id: string) => {
 	return productView(product);
 };
 
+export const findTakealotOffers = (apiKey: string, input: z.infer<typeof takealotOfferLookupSchema>) =>
+	takealotClient.findOffer(apiKey, input.type, input.query).then(normalizeTakealotOffer);
+
+type TakealotOfferSuggestion = {
+	title: string;
+	barcode: string | null;
+	sku: string | null;
+	offerId: string;
+	price: number | null;
+	rrp: number | null;
+	imageUrl: string | null;
+	offerUrl: string | null;
+	stock: number | null;
+};
+
+const takealotRecord = (value: unknown): Record<string, unknown> | undefined =>
+	value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+
+const takealotString = (value: unknown): string | null =>
+	typeof value === "string" && value.trim() ? value.trim() : typeof value === "number" ? String(value) : null;
+
+const takealotNumber = (value: unknown): number | null => {
+	const number = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : Number.NaN;
+	return Number.isFinite(number) ? number : null;
+};
+
+const safeTakealotImageUrl = (value: unknown): string | null => {
+	if (typeof value !== "string") return null;
+	try {
+		const url = new URL(value);
+		if (
+			url.hostname.toLowerCase() !== "takealot.s3.amazonaws.com" ||
+			url.username ||
+			url.password ||
+			(url.port && url.port !== "443")
+		) return null;
+		url.protocol = "https:";
+		url.port = "";
+		return url.toString();
+	} catch {
+		return null;
+	}
+};
+
+const safeTakealotOfferUrl = (value: unknown): string | null => {
+	if (typeof value !== "string") return null;
+	try {
+		const url = new URL(value);
+		if (
+			(url.hostname.toLowerCase() !== "takealot.com" && !url.hostname.toLowerCase().endsWith(".takealot.com")) ||
+			url.username ||
+			url.password
+		) return null;
+		url.protocol = "https:";
+		return url.toString();
+	} catch {
+		return null;
+	}
+};
+
+const normalizeTakealotOffer = (payload: unknown): TakealotOfferSuggestion | null => {
+	const root = Array.isArray(payload) ? takealotRecord(payload[0]) : takealotRecord(payload);
+	const data = takealotRecord(root?.data);
+	const offer = takealotRecord(root?.offer) ?? takealotRecord(data?.offer) ?? data ?? root;
+	if (!offer) return null;
+	const stockRows = Array.isArray(offer.leadtime_stock) ? offer.leadtime_stock : [];
+	const stockValues = stockRows
+		.map((row) => takealotNumber(takealotRecord(row)?.quantity_available))
+		.filter((value): value is number => value !== null);
+	return {
+		title: takealotString(offer.title ?? offer.product_title) ?? "",
+		barcode: takealotString(offer.barcode),
+		sku: takealotString(offer.sku),
+		offerId: takealotString(offer.offer_id ?? offer.offerId) ?? "",
+		price: takealotNumber(offer.selling_price ?? offer.sellingPrice),
+		rrp: takealotNumber(offer.rrp),
+		imageUrl: safeTakealotImageUrl(offer.image_url ?? offer.imageUrl),
+		offerUrl: safeTakealotOfferUrl(offer.offer_url ?? offer.offerUrl),
+		stock: stockValues.length ? stockValues.reduce((total, value) => total + value, 0) : null,
+	};
+};
+
+export const downloadTakealotOfferImage = async (apiKey: string, input: z.infer<typeof takealotOfferLookupSchema>) => {
+	const offer = normalizeTakealotOffer(await takealotClient.findOffer(apiKey, input.type, input.query));
+	if (!offer?.imageUrl) throw catalogError("TAKEALOT_IMAGE_NOT_FOUND", "Takealot offer image is unavailable", 404);
+
+	const response = await fetch(offer.imageUrl, { signal: AbortSignal.timeout(10_000) });
+	if (!response.ok) throw catalogError("TAKEALOT_IMAGE_DOWNLOAD_FAILED", "Takealot offer image could not be downloaded", 502);
+	const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+	if (!contentType || !["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
+		throw catalogError("TAKEALOT_IMAGE_INVALID", "Takealot returned an unsupported image type", 502);
+	}
+	const contentLength = Number(response.headers.get("content-length"));
+	const maxImageSize = 5 * 1024 * 1024;
+	if (Number.isFinite(contentLength) && contentLength > maxImageSize) {
+		throw catalogError("TAKEALOT_IMAGE_TOO_LARGE", "Takealot offer image is larger than 5 MB", 413);
+	}
+	if (!response.body) throw catalogError("TAKEALOT_IMAGE_INVALID", "Takealot returned an empty image", 502);
+
+	const reader = response.body.getReader();
+	const chunks: Buffer[] = [];
+	let totalSize = 0;
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		totalSize += value.byteLength;
+		if (totalSize > maxImageSize) {
+			await reader.cancel();
+			throw catalogError("TAKEALOT_IMAGE_TOO_LARGE", "Takealot offer image is larger than 5 MB", 413);
+		}
+		chunks.push(Buffer.from(value));
+	}
+	return { body: Buffer.concat(chunks), contentType };
+};
+
 const validateProductRelations = async (companyId: string, input: { categoryId: string; brandId?: string | null; supplierId?: string | null }) => {
 	if (!await repository.findActiveRelatedCategory(prisma, companyId, input.categoryId)) throw catalogError("INVALID_PRODUCT_CATEGORY", "Category is invalid");
 	if (input.brandId && !await repository.findActiveRelatedBrand(prisma, companyId, input.brandId)) throw catalogError("INVALID_PRODUCT_BRAND", "Brand is invalid");
@@ -384,6 +504,7 @@ const validateProductRelations = async (companyId: string, input: { categoryId: 
 
 export const createProduct = async (companyId: string, userId: string, input: z.infer<typeof productSchema>) => {
 	if (input.takealotSync && !input.takealotProductId) throw catalogError("INVALID_TAKEALOT_CONFIGURATION", "Takealot product ID is required when sync is enabled");
+	if (input.takealotProductId && input.takealotProductId !== input.barcode) throw catalogError("INVALID_TAKEALOT_CONFIGURATION", "Takealot product ID must match the product barcode");
 	await validateProductRelations(companyId, input);
 	if (await repository.findProductBySku(prisma, companyId, input.sku)) throw catalogError("PRODUCT_SKU_EXISTS", "SKU already exists", 409);
 	if (input.barcode && await repository.findProductByBarcode(prisma, companyId, input.barcode)) throw catalogError("PRODUCT_BARCODE_EXISTS", "Barcode already exists", 409);
@@ -405,6 +526,12 @@ export const updateProduct = async (companyId: string, userId: string, id: strin
 	if (input.imageKeys) input.imageKeys.forEach((key) => validateProductImageKey(key, companyId, id));
 	const resultingTakealotId = input.takealotProductId === undefined ? before.takealotProductId : input.takealotProductId;
 	const resultingSync = input.takealotProductId === null ? false : input.takealotSync === undefined ? before.takealotSync : input.takealotSync;
+	const resultingBarcode = input.barcode === undefined ? before.barcode : input.barcode;
+	if (
+		resultingTakealotId &&
+		resultingTakealotId !== resultingBarcode &&
+		(input.takealotProductId !== undefined || input.barcode !== undefined)
+	) throw catalogError("INVALID_TAKEALOT_CONFIGURATION", "Takealot product ID must match the product barcode");
 	if (resultingSync && !resultingTakealotId) throw catalogError("INVALID_TAKEALOT_CONFIGURATION", "Takealot product ID is required when sync is enabled");
 	const product = await prisma.$transaction(async (tx) => {
 		const updated = await repository.updateProduct(tx, id, { ...input, takealotProductId: resultingTakealotId, takealotSync: resultingSync });

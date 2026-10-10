@@ -374,12 +374,18 @@ Product create payload:
   "lowStockThreshold": 5,
   "warrantyMonths": 12,
   "productCode": "CHG-001",
-  "takealotProductId": "optional",
+  "takealotProductId": "6001234567890",
   "takealotSync": false
 }
 ```
 
 Required: `name`, `sku`, `categoryId`, `rrp`, `sellingPrice`, `purchaseCost`. Prices are non-negative. `warrantyMonths` is `0-1200`.
+`takealotProductId` stores the selected Takealot offer's barcode, even when the offer was found by SKU or offer ID.
+
+| Method | Path | Success | Request/query | Response |
+|---|---|---:|---|---|
+| `GET` | `/catalog/takealot/offers` | 200 | `type=BARCODE|SKU|OFFER_ID`, `query` (minimum 3 characters) | Matching offer's title, barcode, SKU, offer ID, price, RRP, image preview URL, Takealot URL, and merchant stock; `null` if not found |
+| `GET` | `/catalog/takealot/offers/image` | 200 | `type=BARCODE|SKU|OFFER_ID`, `query` | Offer image binary (`image/jpeg`, `image/png`, or `image/webp`); 404 if unavailable |
 
 ### Product image endpoints
 

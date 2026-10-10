@@ -51,6 +51,8 @@ export interface AuthResponse {
     logoUrl?: string | null
     currencyCode: string
     countryCode: string
+    takealotConfigured?: boolean
+    takealotApiKeyPrefix?: string | null
   }
   companies?: CompanyOption[]
   accessToken: string
@@ -78,4 +80,3 @@ export function getMe() {
     companies: CompanyOption[]
   }>('/auth/me')
 }
-

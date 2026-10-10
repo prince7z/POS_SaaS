@@ -25,10 +25,10 @@ export class ApiError extends Error {
 
 const baseUrl = `${apiBaseUrl}`
 
-export async function apiBlob(path: string): Promise<Blob> {
+export async function apiBlob(path: string, accept = 'text/csv'): Promise<Blob> {
   const token = localStorage.getItem('pos-auth-token')
   const response = await fetch(`${baseUrl}${path}`, {
-    headers: { Accept: 'text/csv', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { Accept: accept, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
   })
   if (!response.ok) {
     if (response.status === 401) {
@@ -37,7 +37,12 @@ export async function apiBlob(path: string): Promise<Blob> {
         window.location.href = '/auth/login'
       }
     }
-    throw new ApiError('The report export could not be downloaded.', 'EXPORT_FAILED', response.status)
+    const body = await response.json().catch(() => undefined) as ApiFailure | undefined
+    throw new ApiError(
+      body?.error?.message ?? 'The requested file could not be downloaded.',
+      body?.error?.code ?? 'DOWNLOAD_FAILED',
+      response.status,
+    )
   }
   return response.blob()
 }

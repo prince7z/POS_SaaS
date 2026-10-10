@@ -17,7 +17,7 @@ export function setAuthSession(data: AuthResponse) {
     window.dispatchEvent(new CustomEvent('pos-permissions-updated', { detail: accesses }))
   }
   if (data.company) {
-    localStorage.setItem('pos-company', JSON.stringify(data.company))
+    setStoredCompany(data.company)
   }
   if (data.companies) {
     localStorage.setItem('pos-companies', JSON.stringify(data.companies))
@@ -82,6 +82,9 @@ export function getStoredCompany(): AuthResponse['company'] | null {
 export function setStoredCompany(company: AuthResponse['company']) {
   if (company) {
     localStorage.setItem('pos-company', JSON.stringify(company))
+    localStorage.setItem('takealotapiexist', String(Boolean(company.takealotConfigured)))
+    if (company.takealotApiKeyPrefix) localStorage.setItem('takealotapi', company.takealotApiKeyPrefix.slice(0, 5))
+    else localStorage.removeItem('takealotapi')
     window.dispatchEvent(new CustomEvent('pos-company-updated', { detail: company }))
   }
 }
@@ -101,6 +104,8 @@ export function clearAuthSession() {
   localStorage.removeItem('pos-refresh-token')
   localStorage.removeItem('pos-user')
   localStorage.removeItem('pos-company')
+  localStorage.removeItem('takealotapiexist')
+  localStorage.removeItem('takealotapi')
   localStorage.removeItem('pos-companies')
   localStorage.removeItem(STORAGE_KEYS.PERMISSIONS)
   window.dispatchEvent(new CustomEvent('pos-permissions-updated', { detail: [] }))

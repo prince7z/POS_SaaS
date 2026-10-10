@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowDown,
@@ -6,6 +6,7 @@ import {
   ArrowUpDown,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   Image as ImageIcon,
   Layers3,
   Package,
@@ -16,7 +17,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
-import { Card as ChakraCard, Grid, HStack, Heading, Text } from '@chakra-ui/react'
+import { Box, Card as ChakraCard, Checkbox, Grid, HStack, Heading, Image, NativeSelect, Stack, Text } from '@chakra-ui/react'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 import { QrImageUploader } from '@/components/common/QrImageUploader'
@@ -71,19 +72,21 @@ import {
   createBrand,
   createCategory,
   createProduct,
+  downloadTakealotOfferImage,
   deleteBrand,
   deleteCategory,
   deleteProduct,
   getBrands,
   getCategoriesPage,
   getProducts,
+  getTakealotOfferSuggestions,
   requestCatalogMediaUploadUrls,
   updateBrand,
   updateCategory,
   updateProduct,
   uploadMediaFile,
 } from '@/api/endpoints/catalog'
-import type { BrandPayload, CatalogBrand, CatalogCategory, CatalogProduct, CategoryPayload, ProductPayload } from '@/api/endpoints/catalog'
+import type { BrandPayload, CatalogBrand, CatalogCategory, CatalogProduct, CategoryPayload, ProductPayload, TakealotLookupType, TakealotOfferSuggestion } from '@/api/endpoints/catalog'
 import { getSuppliers, type SupplierOption } from '@/api/endpoints/purchases'
 import { getInventorySummary, type InventorySummary } from '@/api/endpoints/inventory'
 import { showSuccess, showError } from '@/components/feedback/notifications'
@@ -208,6 +211,8 @@ function ProductDialog({
     purchaseCost: 0,
     stockQuantity: 0,
     lowStockThreshold: 0,
+    takealotProductId: '',
+    takealotSync: false,
   })
   const [stagedKeys, setStagedKeys] = useState<string[]>([])
   const [existingImages, setExistingImages] = useState<string[]>(initial?.imageKeys ?? [])
@@ -215,6 +220,22 @@ function ProductDialog({
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [takealotConfigured, setTakealotConfigured] = useState(() => localStorage.getItem('takealotapiexist') === 'true')
+  const [fillByTakealot, setFillByTakealot] = useState(false)
+  const [takealotImageLoading, setTakealotImageLoading] = useState(false)
+  const [lookupType, setLookupType] = useState<TakealotLookupType>('BARCODE')
+  const [lookupValue, setLookupValue] = useState('')
+  const [suggestions, setSuggestions] = useState<TakealotOfferSuggestion[]>([])
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+  const [suggestionsError, setSuggestionsError] = useState('')
+  const lookupRequest = useRef(0)
+
+  useEffect(() => {
+    const onCompanyUpdated = () => setTakealotConfigured(localStorage.getItem('takealotapiexist') === 'true')
+    window.addEventListener('pos-company-updated', onCompanyUpdated)
+    return () => window.removeEventListener('pos-company-updated', onCompanyUpdated)
+  }, [])
+
   useEffect(() => {
     setForm({
       name: initial?.name ?? '',
@@ -230,18 +251,62 @@ function ProductDialog({
       stockQuantity: initial?.stockQuantity ?? 0,
       lowStockThreshold: initial?.lowStockThreshold ?? 0,
       imageKeys: initial?.imageKeys ?? [],
+      takealotProductId: initial?.takealotProductId ?? '',
+      takealotSync: initial?.takealotSync ?? false,
     })
+    setLookupValue(initial?.takealotProductId ?? '')
+    setLookupType('BARCODE')
+    setFillByTakealot(Boolean(initial?.takealotProductId))
+    setSuggestions([])
+    setSuggestionsError('')
     setExistingImages(initial?.imageKeys ?? [])
     setImageUrls(initial?.imageUrls ?? initial?.imageKeys ?? [])
     setStagedKeys([])
     setUploading(false)
+    setTakealotImageLoading(false)
     setError('')
   }, [initial, open])
   const set = <K extends keyof ProductPayload>(key: K, value: ProductPayload[K]) =>
     setForm((current) => ({ ...current, [key]: value }))
+
+  useEffect(() => {
+    const requestId = ++lookupRequest.current
+    const normalizedQuery = lookupValue.trim()
+    if (!open || !fillByTakealot || !takealotConfigured || normalizedQuery.length < 3) {
+      setSuggestions([])
+      setSuggestionsLoading(false)
+      setSuggestionsError('')
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setSuggestionsLoading(true)
+      setSuggestionsError('')
+      getTakealotOfferSuggestions(lookupType, normalizedQuery)
+        .then((result) => {
+          if (requestId === lookupRequest.current) setSuggestions(result ? [result] : [])
+        })
+        .catch((cause) => {
+          if (requestId === lookupRequest.current) {
+            setSuggestions([])
+            setSuggestionsError(cause instanceof Error ? cause.message : 'Takealot offers could not be loaded.')
+          }
+        })
+        .finally(() => {
+          if (requestId === lookupRequest.current) setSuggestionsLoading(false)
+        })
+    }, 1000)
+
+    return () => window.clearTimeout(timer)
+  }, [lookupType, lookupValue, takealotConfigured, fillByTakealot, open])
+
   const submit = async () => {
     if (!form.name.trim() || !form.sku.trim() || !form.categoryId) {
       setError('Product name, SKU, and category are required.')
+      return
+    }
+    if (form.takealotSync && !form.takealotProductId?.trim()) {
+      setError('Select a Takealot offer before enabling stock sync.')
       return
     }
     setSaving(true)
@@ -266,6 +331,8 @@ function ProductDialog({
         if (form.purchaseCost !== initial.purchaseCost) diff.purchaseCost = form.purchaseCost
         if (form.stockQuantity !== initial.stockQuantity) diff.stockQuantity = form.stockQuantity
         if (form.lowStockThreshold !== initial.lowStockThreshold) diff.lowStockThreshold = form.lowStockThreshold
+        if ((form.takealotProductId ?? '') !== (initial.takealotProductId ?? '')) diff.takealotProductId = form.takealotProductId || null
+        if (Boolean(form.takealotSync) !== Boolean(initial.takealotSync)) diff.takealotSync = Boolean(form.takealotSync)
 
         const initialKeysJson = JSON.stringify(initial.imageKeys ?? [])
         const currentKeysJson = JSON.stringify(currentImageKeys)
@@ -304,6 +371,43 @@ function ProductDialog({
       setUploading(false)
     }
   }
+  const selectTakealotSuggestion = async (suggestion: TakealotOfferSuggestion) => {
+    const barcode = suggestion.barcode?.trim() || null
+    if (suggestion.title) set('name', suggestion.title)
+    if (suggestion.sku) set('sku', suggestion.sku)
+    if (barcode) set('barcode', barcode)
+    set('takealotProductId', barcode)
+    if (!barcode) set('takealotSync', false)
+    if (suggestion.price !== null) set('sellingPrice', suggestion.price)
+    if (suggestion.rrp !== null) set('rrp', suggestion.rrp)
+    if (suggestion.stock !== null) set('stockQuantity', suggestion.stock)
+    setLookupValue('')
+    setSuggestions([])
+    setError(barcode ? '' : 'This offer has no barcode, so Takealot stock sync cannot be enabled.')
+
+    if (!suggestion.imageUrl) return
+    if (existingImages.length + stagedKeys.length >= 10) {
+      setError('Remove an image before importing the Takealot product image.')
+      return
+    }
+
+    setTakealotImageLoading(true)
+    try {
+      const image = await downloadTakealotOfferImage('OFFER_ID', suggestion.offerId)
+      const contentType = image.type.toLowerCase()
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(contentType)) {
+        throw new Error('Takealot returned an unsupported image type.')
+      }
+      const extension = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg'
+      await handleFiles([new File([image], `takealot-${suggestion.offerId}.${extension}`, { type: contentType })])
+    } catch (cause) {
+      const imageError = cause instanceof Error ? cause : new Error('Takealot product image could not be downloaded.')
+      showError('Unable to import Takealot image', imageError)
+      setError(imageError.message)
+    } finally {
+      setTakealotImageLoading(false)
+    }
+  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {' '}
@@ -328,7 +432,114 @@ function ProductDialog({
             </Field>
             <Field>
               <FieldLabel>Barcode</FieldLabel>
-              <Input value={form.barcode ?? ''} onChange={(e) => set('barcode', e.target.value)} />
+              <Input
+                value={form.barcode ?? ''}
+                onChange={(e) => {
+                  const nextBarcode = e.target.value
+                  set('barcode', nextBarcode)
+                  if (form.takealotProductId && nextBarcode.trim() !== form.takealotProductId) {
+                    set('takealotProductId', null)
+                    set('takealotSync', false)
+                  }
+                }}
+              />
+            </Field>
+            <Field>
+              <Checkbox.Root
+                checked={fillByTakealot}
+                disabled={!takealotConfigured}
+                onCheckedChange={(details) => setFillByTakealot(details.checked === true)}
+              >
+                <Checkbox.HiddenInput />
+                <Checkbox.Control />
+                <Checkbox.Label>Fill product details from Takealot</Checkbox.Label>
+              </Checkbox.Root>
+              {!takealotConfigured && <FieldDescription>Configure Takealot API credentials in Settings to search offers.</FieldDescription>}
+              {fillByTakealot && (
+                <>
+                  <FieldLabel mt="3">Find Takealot offer</FieldLabel>
+                  <div className="grid grid-cols-[130px_minmax(0,1fr)] gap-2">
+                    <NativeSelect.Root size="sm" disabled={!takealotConfigured}>
+                      <NativeSelect.Field value={lookupType} onChange={(event) => setLookupType(event.target.value as TakealotLookupType)}>
+                        <option value="BARCODE">Barcode</option>
+                        <option value="SKU">SKU</option>
+                        <option value="OFFER_ID">Offer ID</option>
+                      </NativeSelect.Field>
+                    </NativeSelect.Root>
+                    <Box position="relative">
+                      <Input
+                        disabled={!takealotConfigured}
+                        value={lookupValue}
+                        onChange={(event) => {
+                          const nextValue = event.target.value
+                          setLookupValue(nextValue)
+                          if (nextValue.trim() !== form.takealotProductId) {
+                            set('takealotProductId', null)
+                            set('takealotSync', false)
+                          }
+                        }}
+                        placeholder="Enter barcode, SKU, or offer ID"
+                        autoComplete="off"
+                      />
+                      {takealotConfigured && lookupValue.trim().length >= 3 && (suggestionsLoading || suggestions.length > 0 || suggestionsError) && (
+                        <Box position="absolute" top="calc(100% + 4px)" insetInline="0" zIndex="popover" bg="bg" borderWidth="1px" borderRadius="md" shadow="md" maxH="96" overflowY="auto" p="2">
+                          {suggestionsLoading && <Text px="3" py="2" fontSize="sm" color="fg.muted">Searching Takealot…</Text>}
+                          {suggestionsError && <Text px="3" py="2" fontSize="sm" color="fg.error">{suggestionsError}</Text>}
+                          {!suggestionsLoading && !suggestionsError && suggestions.length === 0 && <Text px="3" py="2" fontSize="sm" color="fg.muted">No matching offer found.</Text>}
+                          {suggestions.map((suggestion) => (
+                            <Box key={suggestion.offerId || suggestion.barcode || suggestion.sku} borderWidth="1px" borderRadius="md" overflow="hidden" mb="2" _last={{ mb: 0 }}>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                w="full"
+                                h="auto"
+                                py="3"
+                                px="3"
+                                justifyContent="start"
+                                whiteSpace="normal"
+                                onClick={() => void selectTakealotSuggestion(suggestion)}
+                              >
+                                <HStack align="start" gap="3" w="full">
+                                  {suggestion.imageUrl
+                                    ? <Image src={suggestion.imageUrl} alt="" boxSize="16" objectFit="contain" borderRadius="sm" flexShrink="0" />
+                                    : <Box boxSize="16" display="grid" placeItems="center" bg="bg.muted" borderRadius="sm" flexShrink="0"><ImageIcon size={20} /></Box>}
+                                  <Stack align="start" gap="1" flex="1" minW="0">
+                                    <Text fontSize="sm" fontWeight="semibold" textAlign="left" lineClamp={2}>{suggestion.title || 'Takealot offer'}</Text>
+                                    <Text fontSize="xs" color="fg.muted">Barcode: {suggestion.barcode || 'Unavailable'}</Text>
+                                    <Text fontSize="xs" color="fg.muted">SKU: {suggestion.sku || 'Unavailable'} · Offer: {suggestion.offerId || 'Unavailable'}</Text>
+                                    <Text fontSize="xs" color="fg.muted">
+                                      Price: {suggestion.price === null ? 'Unavailable' : formatCurrency(suggestion.price)}
+                                      {' · '}Stock: {suggestion.stock === null ? 'Unavailable' : suggestion.stock}
+                                    </Text>
+                                  </Stack>
+                                </HStack>
+                              </Button>
+                              {suggestion.offerUrl && (
+                                <Box px="3" pb="2" textAlign="right">
+                                  <a href={suggestion.offerUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                                    View on Takealot <ExternalLink size={12} />
+                                  </a>
+                                </Box>
+                              )}
+                            </Box>
+                          ))}
+                        </Box>
+                      )}
+                    </Box>
+                  </div>
+                  {form.takealotProductId && <FieldDescription>Takealot barcode saved: {form.takealotProductId}</FieldDescription>}
+                </>
+              )}
+              <Checkbox.Root
+                mt="2"
+                checked={Boolean(form.takealotSync)}
+                disabled={!takealotConfigured}
+                onCheckedChange={(details) => set('takealotSync', details.checked === true)}
+              >
+                <Checkbox.HiddenInput />
+                <Checkbox.Control />
+                <Checkbox.Label>Sync stock levels with Takealot</Checkbox.Label>
+              </Checkbox.Root>
             </Field>
             <Field>
               <FieldLabel>Category</FieldLabel>
@@ -437,7 +648,7 @@ function ProductDialog({
           <Separator />
           <QrImageUploader
             label="Product images"
-            description="Upload product photos directly or scan the QR code to upload from phone."
+            description={takealotImageLoading ? 'Importing the selected Takealot product image…' : 'Upload product photos directly or scan the QR code to upload from phone.'}
             purpose="PRODUCT_IMAGE"
             multiple
             isNewEntity={!initial}
@@ -461,7 +672,7 @@ function ProductDialog({
             onManualFileSelect={(selected) => {
               void handleFiles(Array.from(selected))
             }}
-            isUploadingManual={uploading}
+            isUploadingManual={uploading || takealotImageLoading}
           />
           {error && <FieldError>{error}</FieldError>}
         </FieldSet>
