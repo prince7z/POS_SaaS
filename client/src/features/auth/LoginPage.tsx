@@ -25,8 +25,8 @@ export function LoginPage() {
   const [searchParams] = useSearchParams()
   const isDemoQuery = searchParams.get('demo') === '1' || searchParams.get('demo') === 'true'
 
-  const [email, setEmail] = useState(isDemoQuery ? 'Demo@pcodes.tech' : '')
-  const [password, setPassword] = useState(isDemoQuery ? 'Demo@123' : '')
+  const [email, setEmail] = useState(isDemoQuery ? 'admin@demomart.example.test' : '')
+  const [password, setPassword] = useState(isDemoQuery ? 'DemoMart@2025!' : '')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -34,14 +34,14 @@ export function LoginPage() {
 
   useEffect(() => {
     if (isDemoQuery) {
-      setEmail('Demo@pcodes.tech')
-      setPassword('Demo@123')
+      setEmail('admin@demomart.example.test')
+      setPassword('DemoMart@2025!')
     }
   }, [isDemoQuery])
 
   const fillDemoCredentials = () => {
-    setEmail('Demo@pcodes.tech')
-    setPassword('Demo@123')
+    setEmail('admin@demomart.example.test')
+    setPassword('DemoMart@2025!')
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -228,7 +228,7 @@ export function LoginPage() {
                     </Button>
                   </HStack>
                   <Text color="zinc.600" mt="1" fontSize="xs">
-                    Email: <strong>Demo@pcodes.tech</strong> &bull; Password: <strong>Demo@123</strong>
+                    Email: <strong>admin@demomart.example.test</strong> &bull; Password: <strong>DemoMart@2025!</strong>
                   </Text>
                 </Box>
               )}
