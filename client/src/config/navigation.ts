@@ -14,6 +14,7 @@ import {
   ArrowDownUp,
   SlidersHorizontal,
   Tags,
+  ChartNoAxesCombined,
 } from 'lucide-react'
 import { ROUTES } from './constants'
 import type { NavGroup, NavItem } from '@/types/navigation'
@@ -36,6 +37,13 @@ export const navigationConfig: NavGroup[] = [
         path: ROUTES.POS,
         icon: ShoppingCart,
         permissions: ['POS'],
+      },
+      {
+        id: 'takealot-dashboard',
+        label: 'Takealot Dashboard',
+        path: ROUTES.TAKEALOT,
+        icon: ChartNoAxesCombined,
+        permissions: ['TAKEALOT'],
       },
     ],
   },

@@ -24,6 +24,7 @@ const main = async (): Promise<void> => {
 	const { env } = await import("../src/config/env");
 	const { prisma } = await import("../src/lib/prisma");
 	const { takealotClient } = await import("../src/integrations/takealot/client");
+	const jwt = (await import("jsonwebtoken")).default;
 	const app = express();
 	app.use("/takealot", takealotRouter);
 	app.use(errorHandler);
@@ -44,6 +45,10 @@ const main = async (): Promise<void> => {
 	}).takealotInventorySnapshot;
 	const originalCreate = snapshotModel.create;
 	const originalFindMany = snapshotModel.findMany;
+	const companyUserModel = prisma.companyUser as unknown as {
+		findFirst: (input: unknown) => Promise<{ userId: string; companyId: string; accesses: never[] } | null>;
+	};
+	const originalCompanyUserFindFirst = companyUserModel.findFirst;
 	snapshotModel.create = async ({ data }) => {
 		snapshotRows.push(data);
 		return { ...data, id: `snapshot-${snapshotRows.length}` };
@@ -53,6 +58,11 @@ const main = async (): Promise<void> => {
 			row.capturedAt >= where.capturedAt.gte &&
 			row.capturedAt <= where.capturedAt.lte)
 		.sort((left, right) => left.capturedAt.getTime() - right.capturedAt.getTime());
+	companyUserModel.findFirst = async () => ({
+		userId: "permission-test-user",
+		companyId: "permission-test-company",
+		accesses: [],
+	});
 
 	const originalFetch = globalThis.fetch;
 	const originalConsoleError = console.error;
@@ -60,7 +70,7 @@ const main = async (): Promise<void> => {
 		const candidate = args[0];
 		if (
 			candidate instanceof Error &&
-			["UNAUTHORIZED", "VALIDATION_ERROR", "TAKEALOT_INCOMPLETE_RESPONSE"].includes(
+			["UNAUTHORIZED", "FORBIDDEN", "VALIDATION_ERROR", "TAKEALOT_INCOMPLETE_RESPONSE", "TAKEALOT_INVALID_RESPONSE"].includes(
 				(candidate as Error & { code?: string }).code ?? "",
 			)
 		) return;
@@ -73,7 +83,7 @@ const main = async (): Promise<void> => {
 			shipment_id: 1, shipment_state_id: 1, po_number: 101, shipment_name: "Shipment 1",
 			offer_id: 55, product_title: "Alpha item", takealot_url_mobi: "https://example.test/a",
 			sku: "SKU-A", tsin: 100, order_id: 10, order_item_id: 1, quantity: 2, selling_price: 10,
-			dc: "JHB", customer_dc: "CPT", order_date: "2026-10-01T10:00:00Z",
+			dc: "JHB", customer_dc: "CPT", order_date: "01 Oct 2026 10:00:00",
 			sale_status: true, promotion: false, customer: "Must not be returned", stock_source_region: "ZA",
 		},
 		{
@@ -137,6 +147,15 @@ const main = async (): Promise<void> => {
 			const pageNumber = Number(url.searchParams.get("page_number") ?? 1);
 			const pageSize = Number(url.searchParams.get("page_size") ?? 100);
 			const filters = url.searchParams.getAll("filters");
+			if (filters.includes("sku:INVALID_DATE") || filters.includes("sku:OFFSET_DATE")) {
+				const orderDate = filters.includes("sku:INVALID_DATE")
+					? "not-a-date"
+					: "2026-10-02T00:30:00+02:00";
+				return Response.json({
+					page_summary: { page_size: pageSize, page_number: pageNumber, total: 1 },
+					sales: [{ ...sales[0], order_date: orderDate }],
+				});
+			}
 			if (url.pathname === "/v1/sales" && (filters.includes("sku:PAGEFAIL") || filters.includes("sku:PAGEOK"))) {
 				const completePagination = filters.includes("sku:PAGEOK");
 				const pageRows = pageNumber === 1
@@ -161,8 +180,8 @@ const main = async (): Promise<void> => {
 		throw new Error(`Unexpected Takealot test URL: ${url.pathname}`);
 	};
 
-	const request = async (path: string): Promise<HttpResult> => new Promise((resolve, reject) => {
-		http.get(`${baseUrl}${path}`, (response) => {
+	const request = async (path: string, headers?: http.OutgoingHttpHeaders): Promise<HttpResult> => new Promise((resolve, reject) => {
+		http.get(`${baseUrl}${path}`, { headers }, (response) => {
 			let rawBody = "";
 			response.setEncoding("utf8");
 			response.on("data", (chunk: string) => { rawBody += chunk; });
@@ -189,6 +208,17 @@ const main = async (): Promise<void> => {
 		assert.equal(unauthenticated.status, 401);
 		(env as { testAuthBypass: boolean }).testAuthBypass = true;
 		logPass("dashboard routes require authentication");
+		(env as { testAuthBypass: boolean }).testAuthBypass = false;
+		const permissionToken = jwt.sign(
+			{ sub: "permission-test-user", companyId: "permission-test-company" },
+			env.jwtSecret,
+		);
+		const deniedWithoutTakealotAccess = await request("/takealot/overview", {
+			Authorization: `Bearer ${permissionToken}`,
+		});
+		assert.equal(deniedWithoutTakealotAccess.status, 403);
+		(env as { testAuthBypass: boolean }).testAuthBypass = true;
+		logPass("every Takealot route rejects authenticated users without TAKEALOT permission");
 
 		const invalidTrend = await request("/takealot/sales/trends?from=2026-10-01&to=2026-10-02&interval=year");
 		assert.equal(invalidTrend.status, 400);
@@ -234,7 +264,15 @@ const main = async (): Promise<void> => {
 		assert.equal(trendSeries.length, 2);
 		assert.deepEqual(trendSeries[0], { date: "2026-10-01", revenue: 40, units: 3, orders: 1 });
 		assert.deepEqual(trendSeries[1], { date: "2026-10-02", revenue: 15, units: 3, orders: 1 });
-		logPass("trends aggregate line value, units, and distinct orders by UTC day");
+		logPass("trends aggregate ISO and Takealot-formatted dates by UTC day");
+		const invalidOrderDate = await request("/takealot/sales/trends?from=2026-10-01&to=2026-10-02&sku=INVALID_DATE");
+		assert.equal(invalidOrderDate.status, 502);
+		assert.equal((invalidOrderDate.body.error as Record<string, unknown>).code, "TAKEALOT_INVALID_RESPONSE");
+		logPass("trends explicitly reject malformed upstream order dates");
+		const timezoneTrend = await request("/takealot/sales/trends?from=2026-10-01&to=2026-10-02&sku=OFFSET_DATE");
+		assert.equal(timezoneTrend.status, 200);
+		assert.equal((dataOf(timezoneTrend).series as Array<Record<string, unknown>>)[0].date, "2026-10-01");
+		logPass("ISO timezone offsets are applied before assigning trend buckets");
 
 		const callsBeforeCoalescing = upstreamCalls.filter((call) => call.url.pathname === "/v1/sales").length;
 		const concurrentTrends = await Promise.all([
@@ -318,6 +356,7 @@ const main = async (): Promise<void> => {
 		console.error = originalConsoleError;
 		snapshotModel.create = originalCreate;
 		snapshotModel.findMany = originalFindMany;
+		companyUserModel.findFirst = originalCompanyUserFindFirst;
 		await new Promise<void>((resolve, reject) => {
 			server.close((error) => error ? reject(error) : resolve());
 		});

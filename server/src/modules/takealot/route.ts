@@ -9,7 +9,7 @@ import { AppError, unauthorized } from "../../utils/errors";
 import * as service from "./service";
 
 const router = Router();
-const dashboardAccess = [requireAuth, requireAccess(Access.TAKEALOT)] as const;
+router.use(requireAuth, requireAccess(Access.TAKEALOT));
 
 const authFrom = (request: Request) => {
 	if (!request.auth) throw unauthorized();
@@ -26,12 +26,12 @@ const apiKeyFrom = (request: Request) => {
 const sendPaginatedSuccess = (response: Response, data: unknown, pagination: unknown) =>
 	response.status(200).json({ success: true, data, pagination });
 
-router.get("/overview", ...dashboardAccess, requireTakealotApiKey, async (request, response) => {
+router.get("/overview", requireTakealotApiKey, async (request, response) => {
 	const input = service.parse(service.overviewSchema, request.query);
 	return sendSuccess(response, await service.overview(apiKeyFrom(request), input));
 });
 
-router.get("/sales", ...dashboardAccess, requireTakealotApiKey, async (request, response) => {
+router.get("/sales", requireTakealotApiKey, async (request, response) => {
 	const result = await service.listSales(
 		apiKeyFrom(request),
 		service.parse(service.salesListSchema, request.query),
@@ -39,7 +39,7 @@ router.get("/sales", ...dashboardAccess, requireTakealotApiKey, async (request, 
 	return sendPaginatedSuccess(response, { sales: result.sales }, result.pagination);
 });
 
-router.get("/sales/trends", ...dashboardAccess, requireTakealotApiKey, async (request, response) => {
+router.get("/sales/trends", requireTakealotApiKey, async (request, response) => {
 	const companyId = authFrom(request).companyId;
 	return sendSuccess(response, await service.salesTrends(
 		companyId,
@@ -48,7 +48,7 @@ router.get("/sales/trends", ...dashboardAccess, requireTakealotApiKey, async (re
 	));
 });
 
-router.get("/sales/breakdown", ...dashboardAccess, requireTakealotApiKey, async (request, response) => {
+router.get("/sales/breakdown", requireTakealotApiKey, async (request, response) => {
 	const companyId = authFrom(request).companyId;
 	return sendSuccess(response, await service.salesBreakdown(
 		companyId,
@@ -57,7 +57,7 @@ router.get("/sales/breakdown", ...dashboardAccess, requireTakealotApiKey, async 
 	));
 });
 
-router.get("/products/performance", ...dashboardAccess, requireTakealotApiKey, async (request, response) => {
+router.get("/products/performance", requireTakealotApiKey, async (request, response) => {
 	const companyId = authFrom(request).companyId;
 	const result = await service.productPerformance(
 		companyId,
@@ -68,7 +68,7 @@ router.get("/products/performance", ...dashboardAccess, requireTakealotApiKey, a
 	return sendPaginatedSuccess(response, data, pagination);
 });
 
-router.get("/orders", ...dashboardAccess, requireTakealotApiKey, async (request, response) => {
+router.get("/orders", requireTakealotApiKey, async (request, response) => {
 	const result = await service.listOrders(
 		apiKeyFrom(request),
 		service.parse(service.ordersSchema, request.query),
@@ -76,11 +76,11 @@ router.get("/orders", ...dashboardAccess, requireTakealotApiKey, async (request,
 	return sendPaginatedSuccess(response, { orders: result.orders }, result.pagination);
 });
 
-router.get("/inventory/summary", ...dashboardAccess, requireTakealotApiKey, async (request, response) => {
+router.get("/inventory/summary", requireTakealotApiKey, async (request, response) => {
 	return sendSuccess(response, await service.inventorySummary(authFrom(request).companyId, apiKeyFrom(request)));
 });
 
-router.get("/inventory/snapshots", ...dashboardAccess, async (request, response) => {
+router.get("/inventory/snapshots", async (request, response) => {
 	return sendSuccess(response, await service.inventorySnapshots(
 		authFrom(request).companyId,
 		service.parse(service.inventorySnapshotsSchema, request.query),

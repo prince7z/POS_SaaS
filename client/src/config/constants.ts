@@ -18,6 +18,7 @@ export const ROUTES = {
   SUPPLIERS: '/purchases/suppliers',
   INVOICES: '/invoices',
   REPORTS: '/reports',
+  TAKEALOT: '/takealot',
   SALES_REPORT: '/reports/sales',
   INVENTORY_CUSTOMERS_REPORT: '/reports/inventory-customers',
   PROFIT_LOSS_REPORT: '/reports/profit-loss',

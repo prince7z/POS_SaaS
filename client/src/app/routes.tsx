@@ -14,6 +14,9 @@ import { CustomersPage } from '@/features/customers/CustomersPage'
 const ReportsPage = lazy(() =>
   import('@/features/reports/ReportsPage').then((module) => ({ default: module.ReportsPage })),
 )
+const TakealotDashboardPage = lazy(() =>
+  import('@/features/takealot/TakealotDashboardPage').then((module) => ({ default: module.TakealotDashboardPage })),
+)
 const SuppliersPage = lazy(() => import('@/features/purchases/SuppliersPage'))
 const PurchaseOrdersPage = lazy(() => import('@/features/purchases/PurchaseOrdersPage'))
 const ExpensesPage = lazy(() => import('@/features/expenses/ExpensesPage'))
@@ -72,6 +75,20 @@ export function AppRoutes() {
       />
       <Route element={<AppShell />}>
         <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+        <Route
+          path={ROUTES.TAKEALOT}
+          element={
+            <Suspense
+              fallback={
+                <PageContainer>
+                  <SkeletonPage />
+                </PageContainer>
+              }
+            >
+              <TakealotDashboardPage />
+            </Suspense>
+          }
+        />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path={ROUTES.CATALOG} element={<CatalogPage />} />
         <Route path={ROUTES.POS} element={<POSPage />} />

@@ -215,15 +215,39 @@ const assertSaleMetrics = (sale: TakealotSale) => {
 	}
 };
 
+const invalidOrderDate = (): never => {
+	throw new AppError("Takealot returned an invalid order date.", 502, "TAKEALOT_INVALID_RESPONSE");
+};
+
 const bucketDate = (orderDate: string, interval: "day" | "week" | "month"): string => {
-	const dateValue = orderDate.includes("T") ? orderDate : orderDate.replace(" ", "T");
-	const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(dateValue);
-	const normalizedDate = /^\d{4}-\d{2}-\d{2}$/.test(dateValue)
-		? `${dateValue}T00:00:00.000Z`
-		: hasTimezone ? dateValue : `${dateValue}Z`;
-	const date = new Date(normalizedDate);
-	if (!Number.isFinite(date.getTime())) {
-		throw new AppError("Takealot returned an invalid order date.", 502, "TAKEALOT_INVALID_RESPONSE");
+	const takealotDate = /^(\d{1,2}) ([A-Za-z]{3}) (\d{4})(?: (\d{2}):(\d{2}):(\d{2}))?$/.exec(orderDate);
+	let date: Date;
+	if (takealotDate) {
+		const [, dayText, monthText, yearText, hourText = "00", minuteText = "00", secondText = "00"] = takealotDate;
+		const months: Record<string, string> = {
+			jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+			jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+		};
+		const month = months[monthText.toLowerCase()];
+		if (!month) invalidOrderDate();
+		const isoDate = `${yearText}-${month}-${dayText.padStart(2, "0")}T${hourText}:${minuteText}:${secondText}.000Z`;
+		date = new Date(isoDate);
+		if (
+			!Number.isFinite(date.getTime()) ||
+			date.toISOString() !== isoDate
+		) {
+			invalidOrderDate();
+		}
+	} else {
+		const dateValue = orderDate.includes("T") ? orderDate : orderDate.replace(" ", "T");
+		const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(dateValue);
+		const normalizedDate = /^\d{4}-\d{2}-\d{2}$/.test(dateValue)
+			? `${dateValue}T00:00:00.000Z`
+			: hasTimezone ? dateValue : `${dateValue}Z`;
+		date = new Date(normalizedDate);
+		if (!Number.isFinite(date.getTime())) {
+			invalidOrderDate();
+		}
 	}
 	const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 	if (interval === "month") {

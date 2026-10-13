@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   Avatar,
   Badge,
@@ -1178,7 +1179,10 @@ function Security() {
 }
 
 export function SettingsPage() {
-  const [section, setSection] = useState<Section>('general')
+  const location = useLocation()
+  const [section, setSection] = useState<Section>(() =>
+    new URLSearchParams(location.search).get('section') === 'integrations' ? 'integrations' : 'general',
+  )
   const [company, setCompany] = useState<Company>()
   const [users, setUsers] = useState<CompanyUser[]>([])
   const [accesses, setAccesses] = useState<string[]>([])

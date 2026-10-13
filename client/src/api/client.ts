@@ -4,6 +4,15 @@ import { apiBaseUrl } from '@/config/app'
 export interface ApiSuccess<T> {
   success: true
   data: T
+  pagination?: ApiPagination
+}
+
+export interface ApiPagination {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+  hasMore?: boolean
 }
 
 export interface ApiFailure {
@@ -47,7 +56,10 @@ export async function apiBlob(path: string, accept = 'text/csv'): Promise<Blob> 
   return response.blob()
 }
 
-export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiRequestWithMeta<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<{ data: T; pagination?: ApiPagination }> {
   const token = localStorage.getItem('pos-auth-token')
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
@@ -78,5 +90,10 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
       : { code: 'HTTP_ERROR', message: response.statusText || 'An unknown error occurred.' }
     throw new ApiError(error.message, error.code, response.status)
   }
-  return body.data
+  return { data: body.data, pagination: body.pagination }
+}
+
+export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const result = await apiRequestWithMeta<T>(path, init)
+  return result.data
 }
