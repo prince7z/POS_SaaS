@@ -56,6 +56,7 @@ import { PageContainer } from '@/components/layout/PageContainer'
 import { QrImageUploader } from '@/components/common/QrImageUploader'
 import { PageHeader } from '@/components/common/PageHeader'
 import { EmptyState } from '@/components/common/EmptyState'
+import { PageSizeControl } from '@/components/common/PageSizeControl'
 
 function getInitials(name: string) {
   return (
@@ -573,6 +574,7 @@ export function CustomersPage() {
   const [balance, setBalance] = useState('')
   const [customerType, setCustomerType] = useState('')
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
   const [pages, setPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -593,7 +595,7 @@ export function CustomersPage() {
     Promise.all([
       getCustomers({
         page,
-        limit: 20,
+        limit,
         search: debouncedSearch || undefined,
         includeInactive: status !== 'active',
         isActive: status === 'inactive' ? false : status === 'active' ? true : undefined,
@@ -615,7 +617,7 @@ export function CustomersPage() {
   }
   useEffect(() => {
     load()
-  }, [page, debouncedSearch, status, balance, customerType, refresh, sort.field, sort.order])
+  }, [page, limit, debouncedSearch, status, balance, customerType, refresh, sort.field, sort.order])
   const handleSort = (field: CustomerSort) => {
     setPage(1)
     setSort((current) =>
@@ -863,11 +865,13 @@ export function CustomersPage() {
                 </Table.Body>
               </Table.Root>
             </Table.ScrollArea>
-            <HStack justify="space-between" p="3">
+            <HStack justify="space-between" p="3" flexWrap="wrap" gap="3">
               <Text fontSize="sm" color="secondary">
                 Page {page} of {pages}
               </Text>
-              <HStack>
+              <HStack flexWrap="wrap" gap="3">
+                <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+                <HStack>
                 <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
                   Previous
                 </Button>
@@ -879,6 +883,7 @@ export function CustomersPage() {
                 >
                   Next
                 </Button>
+                </HStack>
               </HStack>
             </HStack>
           </Card.Root>

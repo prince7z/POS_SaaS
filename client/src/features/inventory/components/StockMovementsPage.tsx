@@ -24,6 +24,7 @@ import {
 } from '@/api/endpoints/inventory'
 import { EChart } from '@/components/charts/EChart'
 import { PageContainer } from '@/components/layout/PageContainer'
+import { PageSizeControl } from '@/components/common/PageSizeControl'
 import { PageHeader } from '@/components/common/PageHeader'
 import { InventoryProductDetails, InventoryProductIdentity } from './InventoryProductIdentity'
 
@@ -63,6 +64,7 @@ export function StockMovementsPage() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
   const [pages, setPages] = useState(1)
   const [loadingProducts, setLoadingProducts] = useState(false)
   const [loadingMovements, setLoadingMovements] = useState(false)
@@ -111,7 +113,7 @@ export function StockMovementsPage() {
     setError('')
     getProductMovements(product.productId, {
       page,
-      limit: 20,
+      limit,
       movementType: movementType ? (movementType as InventoryMovement['movementType']) : undefined,
       from: from ? new Date(`${from}T00:00:00`).toISOString() : undefined,
       to: to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined,
@@ -131,7 +133,7 @@ export function StockMovementsPage() {
     return () => {
       active = false
     }
-  }, [product, page, movementType, from, to])
+  }, [product, page, limit, movementType, from, to])
 
   const chartOption = useMemo<EChartsOption>(() => {
     const chronologicalMovements = [...movements].sort(
@@ -301,11 +303,13 @@ export function StockMovementsPage() {
                     </Table.Root>
                   </Table.ScrollArea>
                 )}
-                <HStack justify="space-between" mt="4">
+                <HStack justify="space-between" mt="4" flexWrap="wrap" gap="3">
                   <Text fontSize="sm" color="secondary">
                     Page {page} of {pages}
                   </Text>
-                  <HStack>
+                  <HStack flexWrap="wrap" gap="3">
+                    <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+                    <HStack>
                     <Button
                       size="sm"
                       variant="outline"
@@ -322,6 +326,7 @@ export function StockMovementsPage() {
                     >
                       Next
                     </Button>
+                    </HStack>
                   </HStack>
                 </HStack>
               </Card.Body>

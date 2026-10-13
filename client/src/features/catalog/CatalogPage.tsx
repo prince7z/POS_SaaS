@@ -19,6 +19,7 @@ import {
 import { useLocation } from 'react-router-dom'
 import { Box, Card as ChakraCard, Checkbox, Grid, HStack, Heading, Image, NativeSelect, Stack, Text } from '@chakra-ui/react'
 import { PageContainer } from '@/components/layout/PageContainer'
+import { PageSizeControl } from '@/components/common/PageSizeControl'
 import { PageHeader } from '@/components/common/PageHeader'
 import { QrImageUploader } from '@/components/common/QrImageUploader'
 import { SearchableSelect } from '@/components/common/SearchableSelect'
@@ -89,7 +90,6 @@ import { showSuccess, showError } from '@/components/feedback/notifications'
 import { formatCurrency } from '@/lib/formatters'
 
 type Section = 'products' | 'categories' | 'brands'
-const pageSize = 20
 
 function useDebounced(value: string) {
   const [result, setResult] = useState(value)
@@ -1070,6 +1070,7 @@ function ProductsSection() {
   const [categoryId, setCategoryId] = useState('')
   const [brandId, setBrandId] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [totalPages, setTotalPages] = useState(1)
   const [totalProducts, setTotalProducts] = useState(0)
   const [sortBy, setSortBy] = useState<'name' | 'sellingPrice' | 'stockQuantity' | 'createdAt'>('createdAt')
@@ -1116,7 +1117,7 @@ function ProductsSection() {
   useEffect(() => {
     setPage(1)
   }, [query, categoryId, brandId])
-  useEffect(load, [page, query, categoryId, brandId, sortBy, sortOrder])
+  useEffect(load, [page, pageSize, query, categoryId, brandId, sortBy, sortOrder])
   const deleteItem = async () => {
     if (!remove) return
     try {
@@ -1251,7 +1252,9 @@ function ProductsSection() {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4 text-xs text-muted-foreground">
             Showing {items.length} of {totalProducts} products
-            <span className="flex gap-2">
+            <span className="flex flex-wrap items-center gap-3">
+              <PageSizeControl value={pageSize} onChange={(value) => { setPageSize(value); setPage(1) }} />
+              <span className="flex gap-2">
               <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
                 Previous
               </Button>
@@ -1263,6 +1266,7 @@ function ProductsSection() {
               >
                 Next
               </Button>
+              </span>
             </span>
           </div>
         </Card>

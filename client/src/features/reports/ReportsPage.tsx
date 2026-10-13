@@ -42,6 +42,7 @@ import {
 } from '@chakra-ui/react'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
+import { PageSizeControl } from '@/components/common/PageSizeControl'
 import { EChart } from '@/components/charts/EChart'
 import {
   exportInventoryReport,
@@ -362,13 +363,14 @@ function SalesReport({ filters }: { filters: ReportFilters }) {
   const [data, setData] = useState<Awaited<ReturnType<typeof getSalesReport>>>()
   const [transactions, setTransactions] = useState<Awaited<ReturnType<typeof getSalesTransactions>>>()
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(8)
   const [sort, setSort] = useState<'total' | 'date'>('date')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const load = () => {
     setLoading(true)
     setError('')
-    Promise.all([getSalesReport(filters), getSalesTransactions({ ...filters, page, limit: 8 })])
+    Promise.all([getSalesReport(filters), getSalesTransactions({ ...filters, page, limit })])
       .then(([sales, rows]) => {
         setData(sales)
         setTransactions(rows)
@@ -376,7 +378,7 @@ function SalesReport({ filters }: { filters: ReportFilters }) {
       .catch((cause) => setError(cause instanceof Error ? cause.message : 'Sales report could not be loaded.'))
       .finally(() => setLoading(false))
   }
-  useEffect(load, [filters.from, filters.to, filters.granularity, page])
+  useEffect(load, [filters.from, filters.to, filters.granularity, page, limit])
   const trend: EChartsOption = useMemo(
     () => ({
       legend: { data: ['Sales', 'Orders', 'AOV'] },
@@ -635,11 +637,13 @@ function SalesReport({ filters }: { filters: ReportFilters }) {
             ))}
           </Table.Body>
         </Table.Root>
-        <Flex justify="space-between" align="center" p="3">
+        <Flex justify="space-between" align="center" p="3" wrap="wrap" gap="3">
           <Text fontSize="sm" color="fg.muted">
             Page {transactions?.pagination.page ?? page} of {transactions?.pagination.totalPages ?? 1}
           </Text>
-          <Flex gap="2">
+          <Flex align="center" gap="3" wrap="wrap">
+            <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+            <Flex gap="2">
             <Button size="xs" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
               Previous
             </Button>
@@ -651,6 +655,7 @@ function SalesReport({ filters }: { filters: ReportFilters }) {
             >
               Next
             </Button>
+            </Flex>
           </Flex>
         </Flex>
       </Card.Root>
@@ -943,6 +948,7 @@ function InventoryCustomerReport({ filters }: { filters: ReportFilters }) {
   const [topCustomers, setTopCustomers] = useState<Awaited<ReturnType<typeof getTopCustomers>>>()
   const [recentCustomers, setRecentCustomers] = useState<Awaited<ReturnType<typeof getRecentCustomers>>>()
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(8)
   const [search, setSearch] = useState('')
   const [sortLowStock, setSortLowStock] = useState<'stock' | 'name'>('stock')
   const [loading, setLoading] = useState(true)
@@ -952,7 +958,7 @@ function InventoryCustomerReport({ filters }: { filters: ReportFilters }) {
     setError('')
     Promise.all([
       getInventoryCustomerReport(filters),
-      getLowStockItems({ ...filters, page, limit: 8, search }),
+      getLowStockItems({ ...filters, page, limit, search }),
       getTopCustomers(filters),
       getRecentCustomers(filters),
     ])
@@ -965,7 +971,7 @@ function InventoryCustomerReport({ filters }: { filters: ReportFilters }) {
       .catch((cause) => setError(cause instanceof Error ? cause.message : 'Inventory report could not be loaded.'))
       .finally(() => setLoading(false))
   }
-  useEffect(load, [filters.from, filters.to, filters.granularity, page, search])
+  useEffect(load, [filters.from, filters.to, filters.granularity, page, limit, search])
   const stock: EChartsOption = useMemo(
     () => ({
       tooltip: { trigger: 'item' },
@@ -1272,11 +1278,13 @@ function InventoryCustomerReport({ filters }: { filters: ReportFilters }) {
             ))}
           </Table.Body>
         </Table.Root>
-        <Flex justify="space-between" align="center" p="3">
+        <Flex justify="space-between" align="center" p="3" wrap="wrap" gap="3">
           <Text fontSize="sm" color="fg.muted">
             Page {lowStock?.pagination.page ?? page} of {lowStock?.pagination.totalPages ?? 1}
           </Text>
-          <Flex gap="2">
+          <Flex align="center" gap="3" wrap="wrap">
+            <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+            <Flex gap="2">
             <Button size="xs" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
               Previous
             </Button>
@@ -1288,6 +1296,7 @@ function InventoryCustomerReport({ filters }: { filters: ReportFilters }) {
             >
               Next
             </Button>
+            </Flex>
           </Flex>
         </Flex>{' '}
       </Card.Root>

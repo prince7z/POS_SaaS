@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowDown, ArrowUp, X } from 'lucide-react'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
+import { PageSizeControl } from '@/components/common/PageSizeControl'
 import { getBrands, getCategoriesPage, type CatalogBrand, type CatalogCategory } from '@/api/endpoints/catalog'
 import {
   getInventory,
@@ -169,6 +170,7 @@ export function InventoryDashboard() {
   const [brandId, setBrandId] = useState('')
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
   const [pages, setPages] = useState(1)
   const [sortBy, setSortBy] = useState<'name' | 'stockQuantity' | 'createdAt'>('createdAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -198,7 +200,7 @@ export function InventoryDashboard() {
     setInventoryError('')
     const filters = {
       page,
-      limit: 20,
+      limit,
       search: debouncedSearch || undefined,
       categoryId: categoryId || undefined,
       brandId: brandId || undefined,
@@ -240,7 +242,7 @@ export function InventoryDashboard() {
   }, [])
   useEffect(() => {
     loadInventory()
-  }, [page, debouncedSearch, categoryId, brandId, status, sortBy, sortOrder])
+  }, [page, limit, debouncedSearch, categoryId, brandId, status, sortBy, sortOrder])
   const sort = (key: 'name' | 'stockQuantity' | 'createdAt') => {
     setPage(1)
     if (sortBy === key) setSortOrder((value) => (value === 'asc' ? 'desc' : 'asc'))
@@ -304,11 +306,13 @@ export function InventoryDashboard() {
               </Text>
             </Box>
           )}
-          <HStack justify="space-between" p="3" borderTopWidth="1px" borderColor="border">
+          <HStack justify="space-between" p="3" borderTopWidth="1px" borderColor="border" flexWrap="wrap" gap="3">
             <Text fontSize="sm" color="secondary">
               Page {page} of {pages}
             </Text>
-            <HStack>
+            <HStack flexWrap="wrap" gap="3">
+              <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+              <HStack>
               <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
                 Previous
               </Button>
@@ -320,6 +324,7 @@ export function InventoryDashboard() {
               >
                 Next
               </Button>
+              </HStack>
             </HStack>
           </HStack>
         </Box>

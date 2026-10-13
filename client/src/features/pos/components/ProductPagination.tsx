@@ -53,7 +53,7 @@ export function ProductPagination({
             </Menu.Trigger>
             <Menu.Positioner>
               <Menu.Content minW="80px">
-                {[20, 40, 60].map((size) => (
+                {[20, 40, 60, 100].map((size) => (
                   <Menu.Item
                     key={size}
                     value={String(size)}

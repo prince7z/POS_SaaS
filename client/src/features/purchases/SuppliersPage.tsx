@@ -53,6 +53,7 @@ import { formatCurrency } from '@/lib/formatters'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
+import { PageSizeControl } from '@/components/common/PageSizeControl'
 
 const money = (value = 0) => formatCurrency(value)
 const date = (value: string) =>
@@ -428,6 +429,7 @@ export function SuppliersPage() {
   const [search, setSearch] = useState('')
   const [includeInactive, setIncludeInactive] = useState(false)
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 })
   const [selectedId, setSelectedId] = useState<string>()
   const [editing, setEditing] = useState<Supplier>()
@@ -439,7 +441,7 @@ export function SuppliersPage() {
   })
   const load = () => {
     setLoading(true)
-    Promise.all([getSuppliers({ page, limit: 10, search, includeInactive, includeStats: true }), getSupplierSummary()])
+    Promise.all([getSuppliers({ page, limit, search, includeInactive, includeStats: true }), getSupplierSummary()])
       .then(([result, totals]) => {
         setItems(result.items)
         setPagination(result.pagination)
@@ -449,7 +451,7 @@ export function SuppliersPage() {
   }
   useEffect(() => {
     load()
-  }, [page, search, includeInactive])
+  }, [page, limit, search, includeInactive])
   const sortedItems = useMemo(
     () =>
       [...items].sort((a, b) => {
@@ -680,7 +682,9 @@ export function SuppliersPage() {
           <Text fontSize="sm" color="secondary">
             {pagination.total} suppliers
           </Text>
-          <HStack>
+          <HStack flexWrap="wrap" gap="3">
+            <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+            <HStack>
             <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
               Previous
             </Button>
@@ -695,6 +699,7 @@ export function SuppliersPage() {
             >
               Next
             </Button>
+            </HStack>
           </HStack>
         </Card.Footer>
       </Card.Root>

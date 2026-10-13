@@ -44,6 +44,7 @@ import QRCode from 'qrcode'
 const MotionBox = motion.create(Box)
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
+import { PageSizeControl } from '@/components/common/PageSizeControl'
 import { getCompany, type Company } from '@/api/endpoints/company'
 import type { Customer } from '@/api/endpoints/customers'
 import type { CatalogProduct } from '@/api/endpoints/catalog'
@@ -1236,11 +1237,16 @@ export function InvoicePage() {
                 No invoices match the selected filters.
               </Text>
             )}
-            <HStack justify="space-between" mt="4">
+            <HStack justify="space-between" mt="4" flexWrap="wrap" gap="3">
               <Text fontSize="sm" color="secondary">
                 {pagination.total} invoices
               </Text>
-              <HStack>
+              <HStack flexWrap="wrap" gap="3">
+                <PageSizeControl
+                  value={filters.limit}
+                  onChange={(limit) => setFilters((current) => ({ ...current, limit, page: 1 }))}
+                />
+                <HStack>
                 <Button
                   size="sm"
                   variant="outline"
@@ -1257,6 +1263,7 @@ export function InvoicePage() {
                 >
                   Next
                 </Button>
+                </HStack>
               </HStack>
             </HStack>
           </Card.Body>

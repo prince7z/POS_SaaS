@@ -54,6 +54,7 @@ import { formatCurrency } from '@/lib/formatters'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
+import { PageSizeControl } from '@/components/common/PageSizeControl'
 import { SearchableSelect } from '@/components/common/SearchableSelect'
 
 const money = (value = 0) => formatCurrency(value)
@@ -490,6 +491,8 @@ export function PurchaseOrdersPage() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 })
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<string>()
   const [formOpen, setFormOpen] = useState(false)
@@ -497,11 +500,12 @@ export function PurchaseOrdersPage() {
   const load = () => {
     setLoading(true)
     Promise.all([
-      getPurchaseOrders({ page, limit: 10, search, status, sortBy: sort.field, sortOrder: sort.order }),
+      getPurchaseOrders({ page, limit, search, status, sortBy: sort.field, sortOrder: sort.order }),
       getPurchaseOrderSummary(),
     ])
       .then(([result, totals]) => {
         setItems(result.items)
+        setPagination(result.pagination)
         setSummary(totals)
       })
       .finally(() => setLoading(false))
@@ -517,7 +521,7 @@ export function PurchaseOrdersPage() {
   }, [])
   useEffect(() => {
     load()
-  }, [page, search, status, sort])
+  }, [page, limit, search, status, sort])
   const sortBy = (field: string) =>
     setSort((current) => ({ field, order: current.field === field && current.order === 'asc' ? 'desc' : 'asc' }))
   const sortHeader = (label: string, field: string) => {
@@ -680,6 +684,26 @@ export function PurchaseOrdersPage() {
           )}
         </Card.Body>
       </Card.Root>
+      <HStack justify="space-between" flexWrap="wrap" gap="3">
+        <Text fontSize="sm" color="secondary">{pagination.total} purchase orders</Text>
+        <HStack flexWrap="wrap" gap="3">
+          <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+          <HStack>
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
+              Previous
+            </Button>
+            <Text fontSize="sm">Page {page} of {pagination.totalPages}</Text>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page >= pagination.totalPages}
+              onClick={() => setPage((value) => value + 1)}
+            >
+              Next
+            </Button>
+          </HStack>
+        </HStack>
+      </HStack>
       <Drawer.Root
         open={formOpen}
         onOpenChange={(event) => !event.open && setFormOpen(false)}

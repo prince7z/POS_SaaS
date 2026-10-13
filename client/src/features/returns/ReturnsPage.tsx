@@ -50,6 +50,7 @@ import { showSuccess, showError } from '@/components/feedback/notifications'
 import { formatCurrency } from '@/lib/formatters'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
+import { PageSizeControl } from '@/components/common/PageSizeControl'
 
 const money = (value: number) => formatCurrency(value)
 const date = (value: string) =>
@@ -633,7 +634,11 @@ export function ReturnsPage() {
                   <Label icon={CalendarDays}>To</Label>
                   <Input type="date" value={filters.to ?? ''} onChange={(e) => setFilter({ to: e.target.value })} />
                 </Box>
-                <Button variant="ghost" alignSelf="end" onClick={() => setFilters({ page: 1, limit: 10 })}>
+                <Button
+                  variant="ghost"
+                  alignSelf="end"
+                  onClick={() => setFilters((current) => ({ page: 1, limit: current.limit ?? 10 }))}
+                >
                   <X size={14} />
                   Clear
                 </Button>
@@ -712,11 +717,16 @@ export function ReturnsPage() {
                   No returns match the selected filters.
                 </Text>
               )}
-              <HStack justify="space-between" mt="4">
+              <HStack justify="space-between" mt="4" flexWrap="wrap" gap="3">
                 <Text fontSize="sm" color="secondary">
                   {pagination.total} return{pagination.total === 1 ? '' : 's'}
                 </Text>
-                <HStack>
+                <HStack flexWrap="wrap" gap="3">
+                  <PageSizeControl
+                    value={filters.limit ?? 10}
+                    onChange={(limit) => setFilter({ limit })}
+                  />
+                  <HStack>
                   <Button
                     size="sm"
                     variant="outline"
@@ -733,6 +743,7 @@ export function ReturnsPage() {
                   >
                     Next
                   </Button>
+                  </HStack>
                 </HStack>
               </HStack>
             </Card.Body>

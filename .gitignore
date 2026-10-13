@@ -10,3 +10,8 @@ ignoreprompt*
 # client/
 improve.md
 service.md
+# Demo seed cache (downloaded/processed images)
+server/.cache/demo-seed/
+.cache/demo-seed/
+
+seed-demo

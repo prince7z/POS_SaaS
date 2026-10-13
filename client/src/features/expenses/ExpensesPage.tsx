@@ -54,6 +54,7 @@ import { formatCurrency } from '@/lib/formatters'
 import { EChart } from '@/components/charts/EChart'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
+import { PageSizeControl } from '@/components/common/PageSizeControl'
 
 const money = (value = 0) => formatCurrency(value)
 const date = (value: string) =>
@@ -437,7 +438,14 @@ export function ExpensesPage() {
               </Box>
               <Button
                 variant="ghost"
-                onClick={() => setFilters({ page: 1, limit: 10, sortBy: 'expenseDate', sortOrder: 'desc' })}
+                onClick={() =>
+                  setFilters((current) => ({
+                    page: 1,
+                    limit: current.limit,
+                    sortBy: 'expenseDate',
+                    sortOrder: 'desc',
+                  }))
+                }
               >
                 Clear
               </Button>
@@ -596,11 +604,16 @@ export function ExpensesPage() {
                 No expenses match the selected filters.
               </Text>
             )}
-            <HStack justify="space-between" mt="4">
+            <HStack justify="space-between" mt="4" flexWrap="wrap" gap="3">
               <Text fontSize="sm" color="secondary">
                 {pagination.total} expense{pagination.total === 1 ? '' : 's'}
               </Text>
-              <HStack>
+              <HStack flexWrap="wrap" gap="3">
+                <PageSizeControl
+                  value={filters.limit ?? 10}
+                  onChange={(limit) => setFilter({ limit })}
+                />
+                <HStack>
                 <Button
                   size="sm"
                   variant="outline"
@@ -617,6 +630,7 @@ export function ExpensesPage() {
                 >
                   Next
                 </Button>
+                </HStack>
               </HStack>
             </HStack>
           </Card.Body>

@@ -13,7 +13,6 @@ import {
   HStack,
   IconButton,
   Input,
-  NativeSelect,
   Separator,
   Skeleton,
   Table,
@@ -67,6 +66,7 @@ import { SUPPORTED_COUNTRIES, SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { QrImageUploader } from '@/components/common/QrImageUploader'
 import { PageHeader } from '@/components/common/PageHeader'
+import { PageSizeControl } from '@/components/common/PageSizeControl'
 import { SearchableSelect } from '@/components/common/SearchableSelect'
 
 const MotionBox = motion(Box)
@@ -504,6 +504,7 @@ function UsersSettings({
   onReload: () => void
 }) {
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: users.length, totalPages: 1 })
   const [rows, setRows] = useState(users)
   const [editing, setEditing] = useState<CompanyUser>()
@@ -511,16 +512,16 @@ function UsersSettings({
   const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => {
-    getCompanyUsers(page)
+    getCompanyUsers(page, limit)
       .then((result) => {
         setRows(result.items)
         setPagination(result.pagination)
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : 'Users could not be loaded.'))
-  }, [page])
+  }, [page, limit])
   return (
     <VStack align="stretch" gap="4">
-      <HStack justify="space-between">
+      <HStack justify="space-between" flexWrap="wrap" gap="3">
         <Box>
           <Heading size="sm">Users & Roles</Heading>
           <Text fontSize="sm" color="secondary">
@@ -601,11 +602,13 @@ function UsersSettings({
           </Table.Body>
         </Table.Root>
       </Table.ScrollArea>
-      <HStack justify="space-between">
+      <HStack justify="space-between" flexWrap="wrap" gap="3">
         <Text fontSize="sm" color="secondary">
           {pagination.total} users
         </Text>
-        <HStack>
+        <HStack flexWrap="wrap" gap="3">
+          <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+          <HStack>
           <Button size="xs" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>
             Previous
           </Button>
@@ -617,6 +620,7 @@ function UsersSettings({
           >
             Next
           </Button>
+          </HStack>
         </HStack>
       </HStack>
       <Dialog.Root open={Boolean(confirmUser)} onOpenChange={(e) => !e.open && setConfirmUser(undefined)}>
