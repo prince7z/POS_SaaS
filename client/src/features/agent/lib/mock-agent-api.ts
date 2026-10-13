@@ -205,7 +205,7 @@ export async function mockStreamAgent(options: StreamAgentOptions): Promise<void
             chartType: 'line',
             title: 'Monthly Revenue Growth',
             xKey: 'month',
-            series: [{ dataKey: 'revenue', label: 'Revenue (₹)' }],
+            series: [{ dataKey: 'revenue', label: 'Revenue (R)' }],
             data: [
               { month: 'Jul', revenue: 320000 },
               { month: 'Aug', revenue: 380000 },
@@ -239,14 +239,14 @@ export async function mockStreamAgent(options: StreamAgentOptions): Promise<void
         title: 'Branch Performance Summary',
         columns: [
           { key: 'branch', label: 'Branch Location' },
-          { key: 'revenue', label: 'Revenue (₹)' },
+          { key: 'revenue', label: 'Revenue (R)' },
           { key: 'growth', label: 'MoM Growth' },
           { key: 'orders', label: 'Total Orders' },
         ],
         rows: [
-          { branch: 'Main Store (HQ)', revenue: '₹310,000', growth: '+18.4%', orders: '154' },
-          { branch: 'Downtown Branch', revenue: '₹140,000', growth: '+12.1%', orders: '68' },
-          { branch: 'Express Outlet', revenue: '₹60,000', growth: '+8.5%', orders: '23' },
+          { branch: 'Main Store (HQ)', revenue: 'R310,000', growth: '+18.4%', orders: '154' },
+          { branch: 'Downtown Branch', revenue: 'R140,000', growth: '+12.1%', orders: '68' },
+          { branch: 'Express Outlet', revenue: 'R60,000', growth: '+8.5%', orders: '23' },
         ],
       },
     })
@@ -311,7 +311,7 @@ export async function mockStreamAgent(options: StreamAgentOptions): Promise<void
   const m1 = `m1_${Date.now()}`
   const chunks1 = [
     'Sales increased **17.1%** this month compared to last month. ',
-    'Total revenue reached **₹510,000** across all retail categories. ',
+    'Total revenue reached **R510,000** across all retail categories. ',
     'Here is the monthly breakdown visualised below:',
   ]
   for (const chunk of chunks1) {
@@ -333,7 +333,7 @@ export async function mockStreamAgent(options: StreamAgentOptions): Promise<void
       chartType: 'line',
       title: 'Monthly Revenue Trend (2026)',
       xKey: 'month',
-      series: [{ dataKey: 'sales', label: 'Sales (₹)' }],
+      series: [{ dataKey: 'sales', label: 'Sales (R)' }],
       data: [
         { month: 'Jul', sales: 320000 },
         { month: 'Aug', sales: 360000 },
@@ -373,10 +373,10 @@ export async function mockStreamAgent(options: StreamAgentOptions): Promise<void
         { key: 'revenue', label: 'Revenue' },
       ],
       rows: [
-        { product: 'Wireless POS Terminal X1', category: 'Hardware', units: '142', revenue: '₹213,000' },
-        { product: 'Thermal Receipt Paper (Pack)', category: 'Supplies', units: '580', revenue: '₹87,000' },
-        { product: 'Barcode Scanner Pro', category: 'Hardware', units: '89', revenue: '₹124,600' },
-        { product: 'Cash Drawer Heavy Duty', category: 'Hardware', units: '45', revenue: '₹85,400' },
+        { product: 'Wireless POS Terminal X1', category: 'Hardware', units: '142', revenue: 'R213,000' },
+        { product: 'Thermal Receipt Paper (Pack)', category: 'Supplies', units: '580', revenue: 'R87,000' },
+        { product: 'Barcode Scanner Pro', category: 'Hardware', units: '89', revenue: 'R124,600' },
+        { product: 'Cash Drawer Heavy Duty', category: 'Hardware', units: '45', revenue: 'R85,400' },
       ],
     },
   })

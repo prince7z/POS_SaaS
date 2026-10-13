@@ -78,7 +78,7 @@ Update system prompt instructions to direct the model/tools when to produce stru
     "chartType": "line | bar | donut",
     "title": "Monthly Revenue Growth",
     "xKey": "month",
-    "series": [{ "dataKey": "revenue", "label": "Revenue (₹)" }],
+    "series": [{ "dataKey": "revenue", "label": "Revenue (R)" }],
     "data": [{ "month": "Jul", "revenue": 320000 }, ...]
   }
   ```
@@ -91,7 +91,7 @@ Update system prompt instructions to direct the model/tools when to produce stru
       { "key": "revenue", "label": "Revenue" }
     ],
     "rows": [
-      { "product": "Barcode Scanner Pro", "revenue": "₹124,600" }
+      { "product": "Barcode Scanner Pro", "revenue": "R124,600" }
     ]
   }
   ```

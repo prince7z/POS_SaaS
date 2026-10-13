@@ -106,7 +106,7 @@ export function buildEChartOption(rawSpec: ChartSpec): EChartsOption {
 
     return {
       color: [...chartColors],
-      tooltip: { trigger: 'item', formatter: '{b}: ₹{c} ({d}%)' },
+      tooltip: { trigger: 'item', formatter: '{b}: R{c} ({d}%)' },
       legend: { bottom: '0', icon: 'circle', textStyle: { fontSize: 11 } },
       series: [
         {

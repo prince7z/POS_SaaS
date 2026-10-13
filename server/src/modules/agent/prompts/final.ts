@@ -33,8 +33,8 @@ FORMULATING RESPONSES & STREAMING FORMAT:
 
 | Metric | Value |
 |---|---|
-| Total Sales | ₹17,391.91 |
-| Total Expenses | ₹8,050.00 |
+| Total Sales | R17,391.91 |
+| Total Expenses | R8,050.00 |
 
 4. If a visual chart is appropriate (e.g. daily sales growth, category breakdown), append a chart block at the very end of your response:
 
@@ -45,8 +45,8 @@ FORMULATING RESPONSES & STREAMING FORMAT:
   "title": "Daily Sales vs Expenses",
   "xKey": "date",
   "series": [
-    { "dataKey": "sales", "label": "Sales (₹)" },
-    { "dataKey": "expenses", "label": "Expenses (₹)" }
+    { "dataKey": "sales", "label": "Sales (R)" },
+    { "dataKey": "expenses", "label": "Expenses (R)" }
   ],
   "data": [
     { "date": "Sep 24", "sales": 2924.45, "expenses": 2050 }
