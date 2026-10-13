@@ -54,6 +54,7 @@ import { formatCurrency } from '@/lib/formatters'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
+import { SearchableSelect } from '@/components/common/SearchableSelect'
 
 const money = (value = 0) => formatCurrency(value)
 const date = (value: string | null) =>
@@ -125,16 +126,13 @@ function OrderForm({
             <Truck size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
             Supplier
           </Text>
-          <NativeSelect.Root>
-            <NativeSelect.Field value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
-              <option value="">Select supplier</option>
-              {suppliers.map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>
-                  {supplier.name}
-                </option>
-              ))}
-            </NativeSelect.Field>
-          </NativeSelect.Root>
+          <SearchableSelect
+            options={suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))}
+            value={supplierId}
+            onChange={setSupplierId}
+            placeholder="Search and select a supplier"
+            emptyMessage="No suppliers found."
+          />
         </Box>
         <Box>
           <Text fontSize="xs" mb="1">

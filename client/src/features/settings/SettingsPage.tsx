@@ -67,6 +67,7 @@ import { SUPPORTED_COUNTRIES, SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { QrImageUploader } from '@/components/common/QrImageUploader'
 import { PageHeader } from '@/components/common/PageHeader'
+import { SearchableSelect } from '@/components/common/SearchableSelect'
 
 const MotionBox = motion(Box)
 type Section = 'general' | 'business' | 'users' | 'invoice' | 'tax' | 'integrations' | 'security'
@@ -279,18 +280,16 @@ function General({ company, onSaved }: { company: Company; onSaved: (company: Co
         ))}
         <Box>
           <Label icon={Globe2}>Country</Label>
-          <NativeSelect.Root>
-            <NativeSelect.Field
-              value={form.countryCode}
-              onChange={(e) => set('countryCode', e.target.value)}
-            >
-              {SUPPORTED_COUNTRIES.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.name} ({c.code})
-                </option>
-              ))}
-            </NativeSelect.Field>
-          </NativeSelect.Root>
+          <SearchableSelect
+            options={SUPPORTED_COUNTRIES.map((country) => ({
+              value: country.code,
+              label: `${country.name} (${country.code})`,
+            }))}
+            value={form.countryCode}
+            onChange={(value) => set('countryCode', value)}
+            placeholder="Search countries"
+            emptyMessage="No countries found."
+          />
         </Box>
       </Grid>
       <Separator />
@@ -405,44 +404,54 @@ function Business({ company, onSaved }: { company: Company; onSaved: (company: C
       <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap="4">
         <Box>
           <Label icon={CircleDollarSign}>Currency</Label>
-          <NativeSelect.Root>
-            <NativeSelect.Field value={form.currencyCode} onChange={(e) => set('currencyCode', e.target.value)}>
-              {SUPPORTED_CURRENCIES.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.name}
-                </option>
-              ))}
-            </NativeSelect.Field>
-          </NativeSelect.Root>
+          <SearchableSelect
+            options={SUPPORTED_CURRENCIES.map((currency) => ({
+              value: currency.code,
+              label: currency.name,
+            }))}
+            value={form.currencyCode}
+            onChange={(value) => set('currencyCode', value)}
+            placeholder="Search currencies"
+            emptyMessage="No currencies found."
+          />
         </Box>
         <Box>
           <Label icon={Globe2}>Timezone</Label>
-          <NativeSelect.Root>
-            <NativeSelect.Field value={form.timezone} onChange={(e) => set('timezone', e.target.value)}>
-              <option value="Africa/Johannesburg">Africa/Johannesburg</option>
-              <option value="UTC">UTC</option>
-              <option value="Europe/London">Europe/London</option>
-              <option value="America/New_York">America/New_York</option>
-            </NativeSelect.Field>
-          </NativeSelect.Root>
+          <SearchableSelect
+            options={[
+              { value: 'Africa/Johannesburg', label: 'Africa/Johannesburg' },
+              { value: 'UTC', label: 'UTC' },
+              { value: 'Europe/London', label: 'Europe/London' },
+              { value: 'America/New_York', label: 'America/New_York' },
+            ]}
+            value={form.timezone}
+            onChange={(value) => set('timezone', value)}
+            placeholder="Search timezones"
+          />
         </Box>
         <Box>
           <Label icon={CalendarDays}>Date format</Label>
-          <NativeSelect.Root>
-            <NativeSelect.Field value={form.dateFormat} onChange={(e) => set('dateFormat', e.target.value)}>
-              <option value="dd MMMM yyyy">15th May (dd MMMM yyyy)</option>
-              <option value="yyyy-MM-dd">2026-05-15 (yyyy-MM-dd)</option>
-            </NativeSelect.Field>
-          </NativeSelect.Root>
+          <SearchableSelect
+            options={[
+              { value: 'dd MMMM yyyy', label: '15th May (dd MMMM yyyy)' },
+              { value: 'yyyy-MM-dd', label: '2026-05-15 (yyyy-MM-dd)' },
+            ]}
+            value={form.dateFormat}
+            onChange={(value) => set('dateFormat', value)}
+            placeholder="Search date formats"
+          />
         </Box>
         <Box>
           <Label icon={CalendarDays}>Time format</Label>
-          <NativeSelect.Root>
-            <NativeSelect.Field value={form.timeFormat} onChange={(e) => set('timeFormat', e.target.value)}>
-              <option value="hh:mm a">12-hour — 02:30 PM</option>
-              <option value="HH:mm">24-hour — 14:30</option>
-            </NativeSelect.Field>
-          </NativeSelect.Root>
+          <SearchableSelect
+            options={[
+              { value: 'hh:mm a', label: '12-hour — 02:30 PM' },
+              { value: 'HH:mm', label: '24-hour — 14:30' },
+            ]}
+            value={form.timeFormat}
+            onChange={(value) => set('timeFormat', value)}
+            placeholder="Search time formats"
+          />
         </Box>
       </Grid>
       <Separator />
@@ -775,16 +784,13 @@ function UserForm({
                 )}
                 <Box>
                   <Label icon={UserCog}>Role</Label>
-                  <NativeSelect.Root>
-                    <NativeSelect.Field
-                      value={form.roleName}
-                      onChange={(e) => setForm({ ...form, roleName: e.target.value })}
-                    >
-                      {roles.map((role) => (
-                        <option key={role}>{role}</option>
-                      ))}
-                    </NativeSelect.Field>
-                  </NativeSelect.Root>
+                  <SearchableSelect
+                    options={roles.map((role) => ({ value: role, label: role }))}
+                    value={form.roleName}
+                    onChange={(value) => setForm({ ...form, roleName: value })}
+                    placeholder="Search roles"
+                    emptyMessage="No roles found."
+                  />
                 </Box>
               </Grid>
               <Text fontSize="sm" fontWeight="600">
@@ -1079,27 +1085,27 @@ function SimpleCompanySection({
       <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap="4">
         <Box>
           <Label icon={CalendarDays}>Date format</Label>
-          <NativeSelect.Root>
-            <NativeSelect.Field
-              value={form.dateFormat}
-              onChange={(e) => setForm({ ...form, dateFormat: e.target.value })}
-            >
-              <option value="dd MMMM yyyy">15th May (dd MMMM yyyy)</option>
-              <option value="yyyy-MM-dd">2026-05-15 (yyyy-MM-dd)</option>
-            </NativeSelect.Field>
-          </NativeSelect.Root>
+          <SearchableSelect
+            options={[
+              { value: 'dd MMMM yyyy', label: '15th May (dd MMMM yyyy)' },
+              { value: 'yyyy-MM-dd', label: '2026-05-15 (yyyy-MM-dd)' },
+            ]}
+            value={form.dateFormat}
+            onChange={(value) => setForm({ ...form, dateFormat: value })}
+            placeholder="Search date formats"
+          />
         </Box>
         <Box>
           <Label icon={CalendarDays}>Time format</Label>
-          <NativeSelect.Root>
-            <NativeSelect.Field
-              value={form.timeFormat}
-              onChange={(e) => setForm({ ...form, timeFormat: e.target.value })}
-            >
-              <option value="hh:mm a">12-hour — 02:30 PM</option>
-              <option value="HH:mm">24-hour — 14:30</option>
-            </NativeSelect.Field>
-          </NativeSelect.Root>
+          <SearchableSelect
+            options={[
+              { value: 'hh:mm a', label: '12-hour — 02:30 PM' },
+              { value: 'HH:mm', label: '24-hour — 14:30' },
+            ]}
+            value={form.timeFormat}
+            onChange={(value) => setForm({ ...form, timeFormat: value })}
+            placeholder="Search time formats"
+          />
         </Box>
       </Grid>
       <ToggleRow

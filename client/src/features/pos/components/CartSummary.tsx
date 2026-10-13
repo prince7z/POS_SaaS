@@ -20,10 +20,12 @@ export function CartSummary({ totals }: { totals: SaleTotals }) {
           </Text>
         </HStack>
       )}
-      <HStack justify="space-between" fontSize="sm">
-        <Text color="fg.subtle">Tax</Text>
-        <Text fontWeight="500">{formatCurrency(totals.tax)}</Text>
-      </HStack>
+      {totals.tax > 0 && (
+        <HStack justify="space-between" fontSize="sm">
+          <Text color="fg.subtle">Tax</Text>
+          <Text fontWeight="500">{formatCurrency(totals.tax)}</Text>
+        </HStack>
+      )}
       <Separator />
       <HStack justify="space-between" fontWeight="700" fontSize="lg" pt="1">
         <Text>Total</Text>

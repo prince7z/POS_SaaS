@@ -1,6 +1,7 @@
 import { Button, HStack, Input, NativeSelect, VStack } from '@chakra-ui/react'
 import { Filter, Search } from 'lucide-react'
 import type { CatalogBrand, CatalogCategory } from '@/api/endpoints/catalog'
+import { SearchableSelect } from '@/components/common/SearchableSelect'
 
 export function InventoryToolbar({
   search,
@@ -37,26 +38,24 @@ export function InventoryToolbar({
             placeholder="Search products, SKU or barcode..."
           />
         </HStack>
-        <NativeSelect.Root size="sm" w="160px">
-          <NativeSelect.Field value={categoryId} onChange={(event) => onCategory(event.target.value)}>
-            <option value="">All categories</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </NativeSelect.Field>
-        </NativeSelect.Root>
-        <NativeSelect.Root size="sm" w="140px">
-          <NativeSelect.Field value={brandId} onChange={(event) => onBrand(event.target.value)}>
-            <option value="">All brands</option>
-            {brands.map((brand) => (
-              <option key={brand.id} value={brand.id}>
-                {brand.name}
-              </option>
-            ))}
-          </NativeSelect.Field>
-        </NativeSelect.Root>
+        <SearchableSelect
+          options={[
+            { value: '__all__', label: 'All categories' },
+            ...categories.map((category) => ({ value: category.id, label: category.name })),
+          ]}
+          value={categoryId || '__all__'}
+          onChange={(value) => onCategory(value === '__all__' ? '' : value)}
+          placeholder="Search categories"
+        />
+        <SearchableSelect
+          options={[
+            { value: '__all__', label: 'All brands' },
+            ...brands.map((brand) => ({ value: brand.id, label: brand.name })),
+          ]}
+          value={brandId || '__all__'}
+          onChange={(value) => onBrand(value === '__all__' ? '' : value)}
+          placeholder="Search brands"
+        />
         <NativeSelect.Root size="sm" w="140px">
           <NativeSelect.Field value={status} onChange={(event) => onStatus(event.target.value)}>
             <option value="">All stock</option>

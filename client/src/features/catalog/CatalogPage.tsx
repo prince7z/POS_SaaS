@@ -21,6 +21,7 @@ import { Box, Card as ChakraCard, Checkbox, Grid, HStack, Heading, Image, Native
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 import { QrImageUploader } from '@/components/common/QrImageUploader'
+import { SearchableSelect } from '@/components/common/SearchableSelect'
 import {
   Button,
   Card,
@@ -29,11 +30,6 @@ import {
   CardTitle,
   Input,
   Textarea,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Badge,
   Skeleton,
   Separator,
@@ -635,48 +631,39 @@ function ProductDialog({
             </Field>
             <Field>
               <FieldLabel>Category</FieldLabel>
-              <Select value={form.categoryId} onValueChange={(value) => set('categoryId', value ?? '')}>
-                <SelectTrigger>
-                  <span>{categories.find((item) => item.id === form.categoryId)?.name ?? 'Select category'}</span>
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={categories.map((item) => ({ value: item.id, label: item.name }))}
+                value={form.categoryId}
+                onChange={(value) => set('categoryId', value)}
+                placeholder="Search and select a category"
+                emptyMessage="No categories found."
+              />
             </Field>
             <Field>
               <FieldLabel>Brand</FieldLabel>
-              <Select value={form.brandId ?? ''} onValueChange={(value) => set('brandId', value || null)}>
-                <SelectTrigger>
-                  <span>{brands.find((item) => item.id === form.brandId)?.name ?? 'No brand'}</span>
-                </SelectTrigger>{' '}
-                <SelectContent>
-                  {brands.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={[
+                  { value: '__none__', label: 'No brand' },
+                  ...brands.map((item) => ({ value: item.id, label: item.name })),
+                ]}
+                value={form.brandId ?? ''}
+                onChange={(value) => set('brandId', value && value !== '__none__' ? value : null)}
+                placeholder="Search and select a brand (optional)"
+                emptyMessage="No brands found."
+              />
             </Field>
             <Field>
               <FieldLabel>Supplier</FieldLabel>
-              <Select value={form.supplierId ?? ''} onValueChange={(value) => set('supplierId', value || null)}>
-                <SelectTrigger>
-                  <span>{suppliers.find((item) => item.id === form.supplierId)?.name ?? 'No supplier'}</span>
-                </SelectTrigger>
-                <SelectContent>
-                  {suppliers.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={[
+                  { value: '__none__', label: 'No supplier' },
+                  ...suppliers.map((item) => ({ value: item.id, label: item.name })),
+                ]}
+                value={form.supplierId ?? ''}
+                onChange={(value) => set('supplierId', value && value !== '__none__' ? value : null)}
+                placeholder="Search and select a supplier (optional)"
+                emptyMessage="No suppliers found."
+              />
             </Field>
           </div>
           <Field>
@@ -922,24 +909,17 @@ function EntityDialog({
           {kind === 'category' && (
             <Field>
               <FieldLabel>Parent category</FieldLabel>
-              <Select value={parentId ?? ''} onValueChange={(value) => setParentId(value || null)}>
-                {' '}
-                <SelectTrigger>
-                  <span>
-                    {(categories ?? []).find((category) => category.id === parentId)?.name ?? 'No parent category'}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">No parent category</SelectItem>
-                  {(categories ?? [])
+              <SearchableSelect
+                options={[
+                  { value: '__none__', label: 'No parent category' },
+                  ...(categories ?? [])
                     .filter((category) => category.id !== initial?.id)
-                    .map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+                    .map((category) => ({ value: category.id, label: category.name })),
+                ]}
+                value={parentId ?? '__none__'}
+                onChange={(value) => setParentId(value && value !== '__none__' ? value : null)}
+                placeholder="Search parent categories"
+              />
             </Field>
           )}
           <Field>
@@ -1162,35 +1142,27 @@ function ProductsSection() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="w-40">
-          <Select value={categoryId} onValueChange={(value) => setCategoryId(value ?? '')}>
-            <SelectTrigger>
-              <SelectValue placeholder="All categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">All categories</SelectItem>
-              {categories.map((item) => (
-                <SelectItem key={item.id} value={item.id}>
-                  {item.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="w-48">
+          <SearchableSelect
+            options={[
+              { value: '__all__', label: 'All categories' },
+              ...categories.map((item) => ({ value: item.id, label: item.name })),
+            ]}
+            value={categoryId || '__all__'}
+            onChange={(value) => setCategoryId(value === '__all__' ? '' : value)}
+            placeholder="Search categories"
+          />
         </div>
-        <div className="w-36">
-          <Select value={brandId} onValueChange={(value) => setBrandId(value ?? '')}>
-            <SelectTrigger>
-              <SelectValue placeholder="All brands" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">All brands</SelectItem>
-              {brands.map((item) => (
-                <SelectItem key={item.id} value={item.id}>
-                  {item.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="w-48">
+          <SearchableSelect
+            options={[
+              { value: '__all__', label: 'All brands' },
+              ...brands.map((item) => ({ value: item.id, label: item.name })),
+            ]}
+            value={brandId || '__all__'}
+            onChange={(value) => setBrandId(value === '__all__' ? '' : value)}
+            placeholder="Search brands"
+          />
         </div>
         <Button size="sm" onClick={() => setDialog({ open: true })}>
           <Plus />

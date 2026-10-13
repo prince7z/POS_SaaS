@@ -210,10 +210,12 @@ function InvoicePreview({
               <Text color="secondary">Subtotal</Text>
               <Text>{money(subtotal)}</Text>
             </HStack>
-            <HStack justify="space-between">
-              <Text color="secondary">Tax ({taxRate}%)</Text>
-              <Text>{money(tax)}</Text>
-            </HStack>
+            {tax > 0 && (
+              <HStack justify="space-between">
+                <Text color="secondary">Tax ({taxRate}%)</Text>
+                <Text>{money(tax)}</Text>
+              </HStack>
+            )}
             <HStack justify="space-between">
               <Text color="secondary">Discount</Text>
               <Text>-{money(discountAmount)}</Text>
@@ -288,12 +290,12 @@ function InvoiceEditor({
     setProductMatches([])
     setCustomerSearch(invoice?.customer?.name ?? '')
     setItems(invoice?.items ?? [])
-    setTaxRate(invoice?.taxRate ?? 0)
+    setTaxRate(invoice?.taxRate ?? company?.defaultTaxRate ?? 0)
     setDiscountType(invoice?.discountType ?? null)
     setDiscountValue(invoice?.discountValue ?? 0)
     setNotes(invoice?.notes ?? '')
     setError('')
-  }, [invoice, open])
+  }, [invoice, open, company?.defaultTaxRate])
 
   useEffect(() => {
     if (customerSearch.trim().length < 2) return setCustomerMatches([])

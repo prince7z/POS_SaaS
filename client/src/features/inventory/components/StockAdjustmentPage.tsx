@@ -144,15 +144,15 @@ export function StockAdjustmentPage() {
           productId: row.product.productId,
           action: row.action,
           quantity: Number(row.quantity),
-          unitCost: row.unitCost ? Number(row.unitCost) : undefined,
+          ...(row.action === 'ADD' && row.unitCost ? { unitCost: Number(row.unitCost) } : {}),
           reason: row.reason || undefined,
           note: row.note || undefined,
         })),
       })
       setRows([])
       setMessage('Stock adjustment saved successfully.')
-    } catch {
-      setError('Stock adjustment could not be saved. Please try again.')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Stock adjustment could not be saved. Please try again.')
     } finally {
       setSubmitting(false)
     }

@@ -54,6 +54,7 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { showError, showSuccess } from '@/components/feedback/notifications'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { getStoredCompany, getStoredUser } from '@/lib/auth'
+import { PageSizeControl } from '@/components/common/PageSizeControl'
 import { formatCurrency, formatNumber, formatReportDate } from '@/lib/formatters'
 import {
   readTakealotCache,
@@ -639,12 +640,13 @@ function ProductPanel({
   const sortBy: TakealotPageFilters['sortBy'] = 'revenue'
   const [order, setOrder] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
   const [draftSku, setDraftSku] = useState('')
   const [draftTitle, setDraftTitle] = useState('')
   const [filter, setFilter] = useState<{ sku?: string; productTitle?: string }>({})
   const filters = useMemo(
-    () => ({ ...range, ...filter, page, limit: 10, sortBy, order }),
-    [range.from, range.to, filter, page, sortBy, order],
+    () => ({ ...range, ...filter, page, limit, sortBy, order }),
+    [range.from, range.to, filter, page, limit, sortBy, order],
   )
   const requestKey = JSON.stringify(filters)
   const key = cacheKey(identity, 'products', filters)
@@ -850,27 +852,30 @@ function ProductPanel({
                 </Table.Body>
               </Table.Root>
             </Box>
-            <Flex justify="space-between" align="center" p="4">
+            <Flex justify="space-between" align="center" p="4" wrap="wrap" gap="3">
               <Text fontSize="sm" color="fg.muted">
                 Page {productData.pagination.page} of {Math.max(productData.pagination.totalPages, 1)}
               </Text>
-              <Flex gap="2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page <= 1}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                >
-                  <ChevronLeft size={15} /> Previous
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page >= productData.pagination.totalPages}
-                  onClick={() => setPage((current) => current + 1)}
-                >
-                  Next <ChevronRight size={15} />
-                </Button>
+              <Flex gap="3" align="center" wrap="wrap">
+                <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+                <Flex gap="2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page <= 1}
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  >
+                    <ChevronLeft size={15} /> Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page >= productData.pagination.totalPages}
+                    onClick={() => setPage((current) => current + 1)}
+                  >
+                    Next <ChevronRight size={15} />
+                  </Button>
+                </Flex>
               </Flex>
             </Flex>
           </Card.Root>
@@ -943,14 +948,15 @@ function OrdersPanel({
   const [draftTitle, setDraftTitle] = useState('')
   const [draftOrderId, setDraftOrderId] = useState('')
   const [filter, setFilter] = useState<{ sku?: string; productTitle?: string; orderId?: number }>({})
+  const [limit, setLimit] = useState(10)
   const filters = useMemo(
     () => ({
       ...range,
       ...filter,
       page,
-      limit: 10,
+      limit,
     }),
-    [range.from, range.to, filter, page],
+    [range.from, range.to, filter, page, limit],
   )
   const requestKey = JSON.stringify(filters)
   const key = cacheKey(identity, 'orders', filters)
@@ -1043,17 +1049,20 @@ function OrdersPanel({
               </Table.Body>
             </Table.Root>
           </Box>
-          <Flex justify="space-between" align="center" p="4">
+          <Flex justify="space-between" align="center" p="4" wrap="wrap" gap="3">
             <Text fontSize="sm" color="fg.muted">
               Page {ordersData.pagination.page} of {Math.max(ordersData.pagination.totalPages, 1)} · {formatNumber(ordersData.pagination.total)} orders
             </Text>
-            <Flex gap="2">
-              <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-                <ChevronLeft size={15} /> Previous
-              </Button>
-              <Button size="sm" variant="outline" disabled={page >= ordersData.pagination.totalPages} onClick={() => setPage((current) => current + 1)}>
-                Next <ChevronRight size={15} />
-              </Button>
+            <Flex gap="3" align="center" wrap="wrap">
+              <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+              <Flex gap="2">
+                <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+                  <ChevronLeft size={15} /> Previous
+                </Button>
+                <Button size="sm" variant="outline" disabled={page >= ordersData.pagination.totalPages} onClick={() => setPage((current) => current + 1)}>
+                  Next <ChevronRight size={15} />
+                </Button>
+              </Flex>
             </Flex>
           </Flex>
         </Card.Root>

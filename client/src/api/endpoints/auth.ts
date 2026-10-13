@@ -51,6 +51,7 @@ export interface AuthResponse {
     logoUrl?: string | null
     currencyCode: string
     countryCode: string
+    defaultTaxRate?: number
     takealotConfigured?: boolean
     takealotApiKeyPrefix?: string | null
   }

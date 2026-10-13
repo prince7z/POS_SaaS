@@ -7,6 +7,7 @@ import { appConfig } from '@/config/app'
 import { createSaleDraft, completeSale, type SaleDiscountType, type SalePaymentMethod } from '@/api/endpoints/sales'
 import { showSuccess, showError, showInfo } from '@/components/feedback/notifications'
 import { celebrateSale } from '@/components/feedback/saleCelebration'
+import { getStoredCompany } from '@/lib/auth'
 
 import { fetchPOSProducts, loadPOSInitialData } from './pos.service'
 import { calculateSaleTotals } from './pos.calculations'
@@ -21,9 +22,10 @@ import { ProductPagination } from './components/ProductPagination'
 import { CartPanel } from './components/CartPanel'
 import { EmptyProductState } from './components/EmptyProductState'
 
-const TAX_RATE = appConfig.tax.defaultRate * 100
+const defaultTaxRate = () => getStoredCompany()?.defaultTaxRate ?? appConfig.tax.defaultRate * 100
 
 export function POSPage() {
+  const [taxRate, setTaxRate] = useState(defaultTaxRate)
   const [categories, setCategories] = useState<CatalogCategory[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [products, setProducts] = useState<CatalogProduct[]>([])
@@ -50,6 +52,12 @@ export function POSPage() {
   const [customerId, setCustomerId] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod>('CASH')
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    const updateTaxRate = () => setTaxRate(defaultTaxRate())
+    window.addEventListener('pos-company-updated', updateTaxRate)
+    return () => window.removeEventListener('pos-company-updated', updateTaxRate)
+  }, [])
 
   const [notifyCustomer, setNotifyCustomer] = useState(false)
   const [recipientType, setRecipientType] = useState<'CUSTOMER' | 'OTHER'>('CUSTOMER')
@@ -150,7 +158,7 @@ export function POSPage() {
     cart.reduce((total, item) => total + item.sellingPrice * item.quantity, 0),
     discountType,
     discountValue,
-    TAX_RATE,
+    taxRate,
   )
 
   const addToCart = (product: CatalogProduct) => {
@@ -196,12 +204,12 @@ export function POSPage() {
         source: 'POS',
         customerId,
         items: cart.map((item) => ({ productId: item.id, quantity: item.quantity })),
-        taxRate: TAX_RATE,
+        taxRate,
         discountType,
         discountValue: discountType ? discountValue : null,
       })
       const completed = await completeSale(draft.id, {
-        taxRate: TAX_RATE,
+        taxRate,
         discountType,
         discountValue: discountType ? discountValue : null,
         customerId,
