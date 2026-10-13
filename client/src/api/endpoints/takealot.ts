@@ -22,6 +22,7 @@ export interface TakealotOverview {
 export interface TakealotTrendPoint {
   date: string
   revenue: number
+  totalFee: number | null
   units: number
   orders: number
 }
@@ -57,6 +58,12 @@ export interface TakealotProduct {
   sku?: string
   tsin?: number
   title?: string
+  unitCost: number | null
+  totalCost: number | null
+  totalFee: number | null
+  feePerUnit: number | null
+  profit: number | null
+  profitPerUnit: number | null
   revenue: number
   units: number
   orders: number
@@ -161,6 +168,11 @@ const requireNumber = (value: unknown, label: string): number => {
   return value
 }
 
+const requireNullableNumber = (value: unknown, label: string): number | null => {
+  if (value === null) return null
+  return requireNumber(value, label)
+}
+
 const requireString = (value: unknown, label: string): string => {
   if (typeof value !== 'string') throw new Error(`Takealot returned an invalid ${label} value.`)
   return value
@@ -209,6 +221,7 @@ function assertTrends(value: TakealotTrends): TakealotTrends {
     const row = requireRecord(point, 'sales trend point')
     requireString(row.date, 'trend date')
     requireNumber(row.revenue, 'trend sales value')
+    requireNullableNumber(row.totalFee, 'trend total fee')
     requireNumber(row.units, 'trend units')
     requireNumber(row.orders, 'trend orders')
   })
@@ -237,6 +250,12 @@ function assertProducts(value: { data: { products: TakealotProduct[] }; paginati
     requireNumber(row.units, 'product units')
     requireNumber(row.orders, 'product orders')
     requireNumber(row.averagePrice, 'product average selling price')
+    requireNullableNumber(row.unitCost, 'product unit cost')
+    requireNullableNumber(row.totalCost, 'product total cost')
+    requireNullableNumber(row.totalFee, 'product total fee')
+    requireNullableNumber(row.feePerUnit, 'product fee per unit')
+    requireNullableNumber(row.profit, 'product profit/loss')
+    requireNullableNumber(row.profitPerUnit, 'product profit/loss per unit')
   })
   return {
     products: response.products as TakealotProduct[],

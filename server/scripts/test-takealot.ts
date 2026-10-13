@@ -82,21 +82,21 @@ const main = async (): Promise<void> => {
 		{
 			shipment_id: 1, shipment_state_id: 1, po_number: 101, shipment_name: "Shipment 1",
 			offer_id: 55, product_title: "Alpha item", takealot_url_mobi: "https://example.test/a",
-			sku: "SKU-A", tsin: 100, order_id: 10, order_item_id: 1, quantity: 2, selling_price: 10,
+			sku: "SKU-R10-A", tsin: 100, order_id: 10, order_item_id: 1, quantity: 2, selling_price: 10, total_fee: 1,
 			dc: "JHB", customer_dc: "CPT", order_date: "01 Oct 2026 10:00:00",
 			sale_status: true, promotion: false, customer: "Must not be returned", stock_source_region: "ZA",
 		},
 		{
 			shipment_id: 2, shipment_state_id: 1, po_number: 102, shipment_name: "Shipment 2",
 			offer_id: 55, product_title: "Alpha item", takealot_url_mobi: "https://example.test/a",
-			sku: "SKU-A", tsin: 100, order_id: 10, order_item_id: 2, quantity: 1, selling_price: 20,
+			sku: "SKU-R10-A", tsin: 100, order_id: 10, order_item_id: 2, quantity: 1, selling_price: 20, total_fee: 2,
 			dc: "JHB", customer_dc: "CPT", order_date: "2026-10-01T12:00:00Z",
 			sale_status: false, promotion: true, customer: "Must not be returned", stock_source_region: "ZA",
 		},
 		{
 			shipment_id: 3, shipment_state_id: 1, po_number: 103, shipment_name: "Shipment 3",
 			offer_id: 66, product_title: "Beta item", takealot_url_mobi: "https://example.test/b",
-			sku: "SKU-B", tsin: 200, order_id: 11, order_item_id: 3, quantity: 3, selling_price: 5,
+			sku: "SKU-B", tsin: 200, order_id: 11, order_item_id: 3, quantity: 3, selling_price: 5, total_fee: 1.15,
 			dc: "CPT", customer_dc: "JHB", order_date: "2026-10-02T08:00:00Z",
 			sale_status: true, promotion: true, customer: "Must not be returned", stock_source_region: "ZA",
 		},
@@ -262,8 +262,8 @@ const main = async (): Promise<void> => {
 		assert.equal(trends.status, 200);
 		const trendSeries = dataOf(trends).series as Array<Record<string, unknown>>;
 		assert.equal(trendSeries.length, 2);
-		assert.deepEqual(trendSeries[0], { date: "2026-10-01", revenue: 40, units: 3, orders: 1 });
-		assert.deepEqual(trendSeries[1], { date: "2026-10-02", revenue: 15, units: 3, orders: 1 });
+		assert.deepEqual(trendSeries[0], { date: "2026-10-01", revenue: 30, units: 3, orders: 1, totalFee: 3 });
+		assert.deepEqual(trendSeries[1], { date: "2026-10-02", revenue: 5, units: 3, orders: 1, totalFee: 1.15 });
 		logPass("trends aggregate ISO and Takealot-formatted dates by UTC day");
 		const invalidOrderDate = await request("/takealot/sales/trends?from=2026-10-01&to=2026-10-02&sku=INVALID_DATE");
 		assert.equal(invalidOrderDate.status, 502);
@@ -290,15 +290,18 @@ const main = async (): Promise<void> => {
 		assert.equal(breakdown.status, 200);
 		const groups = dataOf(breakdown).breakdown as Array<Record<string, unknown>>;
 		assert.deepEqual(groups, [
-			{ key: "false", revenue: 20, units: 2, orders: 1 },
-			{ key: "true", revenue: 35, units: 4, orders: 2 },
+			{ key: "false", revenue: 10, units: 2, orders: 1 },
+			{ key: "true", revenue: 25, units: 4, orders: 2 },
 		]);
 		logPass("breakdowns group data and deduplicate orders across multiple line items");
 
 		const products = await request("/takealot/products/performance?from=2026-10-01&to=2026-10-02&sortBy=revenue&order=desc&page=1&limit=1");
 		assert.equal(products.status, 200);
 		assert.deepEqual((dataOf(products).products as Array<Record<string, unknown>>)[0], {
-			sku: "SKU-A", tsin: 100, title: "Alpha item", revenue: 40, units: 3, orders: 1, averagePrice: 13.33,
+			sku: "SKU-R10-A", tsin: 100, title: "Alpha item",
+			unitCost: 10, totalCost: 30, totalFee: 3, feePerUnit: 1,
+			profit: -3, profitPerUnit: -1,
+			revenue: 30, units: 3, orders: 1, averagePrice: 10,
 		});
 		assert.equal((products.body.pagination as Record<string, unknown>).total, 2);
 		logPass("product performance ranks by stable offer identifier and calculates weighted average price");

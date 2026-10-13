@@ -209,10 +209,25 @@ const assertSaleMetrics = (sale: TakealotSale) => {
 	if (
 		!Number.isFinite(sale.selling_price) ||
 		!Number.isFinite(sale.quantity) ||
-		!Number.isFinite(sale.order_id)
+		!Number.isFinite(sale.order_id) ||
+		(sale.total_fee !== undefined && !Number.isFinite(sale.total_fee))
 	) {
-		throw new AppError("Takealot returned sales without valid price, quantity, or order identifiers.", 502, "TAKEALOT_INVALID_RESPONSE");
+		throw new AppError("Takealot returned sales without valid price, quantity, fee, or order identifiers.", 502, "TAKEALOT_INVALID_RESPONSE");
 	}
+};
+
+const skuUnitCost = (sku?: string): number | undefined => {
+	const costMatch = /[CR](\d+)(?!\d)/i.exec(sku?.trim() ?? "");
+	return costMatch ? Number(costMatch[1]) : undefined;
+};
+
+const aggregateTotalFees = (sales: TakealotSale[]): number | null => {
+	let total = 0;
+	for (const sale of sales) {
+		if (sale.total_fee === undefined) return null;
+		total += sale.total_fee;
+	}
+	return roundMoney(total);
 };
 
 const invalidOrderDate = (): never => {
@@ -266,14 +281,14 @@ const aggregateSales = (sales: TakealotSale[]) => {
 	const orders = new Set<number>();
 	for (const sale of sales) {
 		assertSaleMetrics(sale);
-		salesValue += sale.selling_price * sale.quantity;
+		salesValue += sale.selling_price;
 		units += sale.quantity;
 		orders.add(sale.order_id);
 	}
 	return { revenue: roundMoney(salesValue), units, orders: orders.size };
 };
 
-const revenueDefinition = "Gross sales value is the sum of selling_price × quantity. All returned sale_status values are included because the API documentation does not define their business meaning; this is not net revenue or profit.";
+const revenueDefinition = "Gross sales value is the sum of Takealot selling_price values per sales row; quantity is summed separately. All returned sale_status values are included because the API documentation does not define their business meaning; this is not net revenue or profit.";
 
 export const overview = async (apiKey: string, input: z.infer<typeof overviewSchema>) => {
 	const [salesSummary, stockCounts, stockHealth] = await Promise.all([
@@ -331,7 +346,7 @@ export const salesTrends = async (companyId: string, apiKey: string, input: z.in
 	}
 	const series = [...buckets.entries()]
 		.sort(([left], [right]) => left.localeCompare(right))
-		.map(([date, rows]) => ({ date, ...aggregateSales(rows) }));
+		.map(([date, rows]) => ({ date, ...aggregateSales(rows), totalFee: aggregateTotalFees(rows) }));
 	return { interval: input.interval, metric: input.metric, series, revenueDefinition };
 };
 
@@ -378,7 +393,17 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 		productTitle: input.productTitle,
 		tsin: input.tsin,
 	});
-	const products = new Map<string, { stableId: string; sku?: string; tsin?: number; title?: string; salesValue: number; units: number; orderIds: Set<number> }>();
+	const products = new Map<string, {
+		stableId: string;
+		sku?: string;
+		tsin?: number;
+		title?: string;
+		salesValue: number;
+		totalFee: number;
+		feesAvailable: boolean;
+		units: number;
+		orderIds: Set<number>;
+	}>();
 	sales.forEach((sale, index) => {
 		assertSaleMetrics(sale);
 		const stableId = productIdentifier(sale, index);
@@ -388,25 +413,54 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 			tsin: sale.tsin,
 			title: sale.product_title,
 			salesValue: 0,
+			totalFee: 0,
+			feesAvailable: true,
 			units: 0,
 			orderIds: new Set<number>(),
 		};
-		product.salesValue += sale.selling_price ;
+		product.salesValue += sale.selling_price;
+		if (sale.total_fee === undefined) {
+			product.feesAvailable = false;
+		} else {
+			product.totalFee += sale.total_fee;
+		}
 		product.units += sale.quantity;
 		product.orderIds.add(sale.order_id);
 		products.set(stableId, product);
 	});
 
-	const ranked = [...products.values()].map((product) => ({
-		sku: product.sku,
-		tsin: product.tsin,
-		title: product.title,
-		revenue: roundMoney(product.salesValue),
-		units: product.units,
-		orders: product.orderIds.size,
-		averagePrice: product.units === 0 ? 0 : roundMoney(product.salesValue / product.units),
-		stableId: product.stableId,
-	}));
+	const ranked = [...products.values()].map((product) => {
+		const unitCost = skuUnitCost(product.sku);
+		const revenue = roundMoney(product.salesValue);
+		const averagePrice = product.units === 0 ? 0 : roundMoney(product.salesValue / product.units);
+		const totalFee = product.feesAvailable ? roundMoney(product.totalFee) : null;
+		const feePerUnit = totalFee === null || product.units === 0
+			? null
+			: roundMoney(totalFee / product.units);
+		const totalCost = unitCost === undefined ? null : roundMoney(unitCost * product.units);
+		const profit = totalCost === null || totalFee === null
+			? null
+			: roundMoney(revenue - totalCost - totalFee);
+		const profitPerUnit = profit === null || product.units === 0
+			? null
+			: roundMoney(profit / product.units);
+		return {
+			sku: product.sku,
+			tsin: product.tsin,
+			title: product.title,
+			unitCost: unitCost ?? null,
+			totalCost,
+			totalFee,
+			feePerUnit,
+			profit,
+			profitPerUnit,
+			revenue,
+			units: product.units,
+			orders: product.orderIds.size,
+			averagePrice,
+			stableId: product.stableId,
+		};
+	});
 	const direction = input.order === "asc" ? 1 : -1;
 	ranked.sort((left, right) => {
 		const comparison = left[input.sortBy] - right[input.sortBy];

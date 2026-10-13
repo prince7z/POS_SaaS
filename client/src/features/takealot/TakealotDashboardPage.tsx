@@ -91,10 +91,6 @@ const validDate = (value: string) => {
 }
 const toErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback
-const skuUnitCost = (sku?: string) => {
-  const costMatch = /[CR](\d+)(?!\d)/i.exec(sku?.trim() ?? '')
-  return costMatch ? Number(costMatch[1]) : undefined
-}
 const escapeChartText = (value: string) =>
   value.replace(/[&<>"']/g, (character) => ({
     '&': '&amp;',
@@ -445,7 +441,7 @@ function OverviewPanel({
       <Card.Root variant="outline">
         <Card.Body>
           <Text fontSize="sm" color="fg.muted">
-            The sales summary uses Takealot&apos;s fixed reporting periods, and the selected date range does not change them. Sales Analytics calculates gross sales as selling price × quantity, units as the sum of quantity, and orders as distinct order IDs. Inventory values are reported directly by Takealot.
+            The sales summary uses Takealot&apos;s fixed reporting periods, and the selected date range does not change them. Sales Analytics sums the selling_price value from each sales row, units from quantity, and distinct order IDs. Inventory values are reported directly by Takealot.
           </Text>
         </Card.Body>
       </Card.Root>
@@ -474,7 +470,7 @@ function AnalyticsPanel({
     [range, granularity],
   )
   const keyFilters = JSON.stringify(filters)
-  const trendKey = cacheKey(identity, 'trends', filters)
+  const trendKey = cacheKey(identity, 'trends-v2', filters)
   const breakdownKey = cacheKey(identity, 'breakdown', { from: range.from, to: range.to, groupBy })
   const loadTrends = useCallback(
     (signal: AbortSignal) => getTakealotTrends(filters, signal),
@@ -497,15 +493,20 @@ function AnalyticsPanel({
     { revenue: 0, units: 0, orders: 0 },
   ), [points])
   const trendOption: EChartsOption = useMemo(() => ({
-    legend: { data: ['Sales value', 'Units sold', 'Orders'], bottom: 0, selectedMode: 'multiple' },
+    legend: { data: ['Sales value', 'Total fee', 'Units sold', 'Orders'], bottom: 0, selectedMode: 'multiple' },
     tooltip: {
       trigger: 'axis',
       formatter: (params) => {
         const items = Array.isArray(params) ? params : [params]
         const date = String(items[0]?.name ?? '')
         const values = items.map((item) => {
+          if (item.value === null || item.value === undefined) {
+            return `${item.marker ?? ''}${item.seriesName}: unavailable`
+          }
           const value = Number(item.value)
-          const formatted = item.seriesName === 'Sales value' ? formatCurrency(value) : formatNumber(value)
+          const formatted = ['Sales value', 'Total fee'].includes(String(item.seriesName))
+            ? formatCurrency(value)
+            : formatNumber(value)
           return `${item.marker ?? ''}${item.seriesName}: ${formatted}`
         })
         return [dateLabel(date), ...values].join('<br/>')
@@ -520,6 +521,7 @@ function AnalyticsPanel({
     ],
     series: [
       { name: 'Sales value', type: 'line', yAxisIndex: 0, smooth: true, showSymbol: false, data: points.map((point) => point.revenue) },
+      { name: 'Total fee', type: 'line', yAxisIndex: 0, smooth: true, showSymbol: false, data: points.map((point) => point.totalFee) },
       { name: 'Units sold', type: 'line', yAxisIndex: 1, smooth: true, showSymbol: false, data: points.map((point) => point.units) },
       { name: 'Orders', type: 'line', yAxisIndex: 2, smooth: true, showSymbol: false, data: points.map((point) => point.orders) },
     ],
@@ -585,13 +587,13 @@ function AnalyticsPanel({
       {points.length > 0 && (
         <>
           <SimpleGrid columns={{ base: 1, sm: 2, xl: 4 }} gap="4">
-            <MetricCard label="Sales value" value={formatCurrency(totals.revenue)} detail="Formula: sum of selling price × quantity." icon={CircleDollarSign} />
+            <MetricCard label="Sales value" value={formatCurrency(totals.revenue)} detail="Sum of selling_price from the sales rows." icon={CircleDollarSign} />
             <MetricCard label="Units sold" value={formatNumber(totals.units)} detail="Formula: sum of sale-item quantities." icon={ShoppingCart} />
             <MetricCard label="Orders" value={formatNumber(totals.orders)} detail="Formula: count of distinct order IDs." icon={ReceiptText} />
           </SimpleGrid>
           <ChartCard
             title="Sales trend"
-            description="Daily, weekly, or monthly gross sales (selling price × quantity), units (sum of quantity), and distinct orders. Click legend items to show or hide each line; each metric uses its own axis."
+            description="Daily, weekly, or monthly sales value (sum of selling_price per sales row), total Takealot fees, units, and distinct orders. Click legend items to show or hide each line; each metric uses its own axis."
             option={trendOption}
             height="340px"
             icon={Activity}
@@ -649,7 +651,7 @@ function ProductPanel({
     [range.from, range.to, filter, page, limit, sortBy, order],
   )
   const requestKey = JSON.stringify(filters)
-  const key = cacheKey(identity, 'products', filters)
+  const key = cacheKey(identity, 'products-v2', filters)
   const fetcher = useCallback((signal: AbortSignal) => getTakealotProducts(filters, signal), [requestKey])
   const resource = useCachedResource(enabled, key, fetcher, refreshToken, onMeta)
   const productData = resource.data
@@ -658,7 +660,7 @@ function ProductPanel({
     setPage(1)
   }, [range.from, range.to])
   const scatterOption: EChartsOption = useMemo(() => ({
-    legend: { data: ['Sales value', 'Units sold', 'Orders', 'Profit / loss'], bottom: 0, selectedMode: 'multiple' },
+    legend: { data: ['Sales value', 'Units sold', 'Orders', 'Total fee', 'Profit / loss'], bottom: 0, selectedMode: 'multiple' },
     tooltip: {
       trigger: 'axis',
       formatter: (params) => {
@@ -666,25 +668,23 @@ function ProductPanel({
         const index = Number(items[0]?.dataIndex ?? 0)
         const product = products[index]
         if (!product) return ''
-        const cost = skuUnitCost(product.sku)
-        const estimatedProfitPerUnit = cost === undefined ? undefined : product.averagePrice - cost
-        const estimatedProfit = estimatedProfitPerUnit === undefined ? undefined : estimatedProfitPerUnit * product.units
         return [
           escapeChartText(product.title ?? 'Untitled product'),
           `SKU: ${escapeChartText(product.sku ?? '—')}`,
           `TSIN: ${product.tsin === undefined ? '—' : String(product.tsin)}`,
           ...items.map((item) => {
+            if (item.value === null || item.value === undefined) {
+              return `${item.marker ?? ''}${item.seriesName}: unavailable`
+            }
             const value = Number(item.value)
-            const formatted = item.seriesName === 'Sales value'
+            const formatted = ['Sales value', 'Total fee', 'Profit / loss'].includes(String(item.seriesName))
               ? formatCurrency(value)
               : formatNumber(value)
             return `${item.marker ?? ''}${item.seriesName}: ${formatted}`
           }),
           `Average selling price: ${formatCurrency(product.averagePrice)}`,
-          cost === undefined ? 'Unit cost: not encoded in SKU' : `Unit cost: ${formatCurrency(cost)}`,
-          estimatedProfit === undefined
-            ? 'Profit / loss: unavailable'
-            : `Estimated profit / loss: ${estimatedProfit >= 0 ? '+' : ''}${formatCurrency(estimatedProfit)}`,
+          product.unitCost === null ? 'Unit cost: not encoded in SKU' : `Unit cost: ${formatCurrency(product.unitCost)}`,
+          product.feePerUnit === null ? 'Fee per unit: unavailable' : `Fee per unit: ${formatCurrency(product.feePerUnit)}`,
         ].join('<br/>')
       },
     },
@@ -704,6 +704,7 @@ function ProductPanel({
       { name: 'Sales value', type: 'line', yAxisIndex: 0, smooth: true, showSymbol: true, data: products.map((product) => product.revenue) },
       { name: 'Units sold', type: 'line', yAxisIndex: 1, smooth: true, showSymbol: true, data: products.map((product) => product.units) },
       { name: 'Orders', type: 'line', yAxisIndex: 2, smooth: true, showSymbol: true, data: products.map((product) => product.orders) },
+      { name: 'Total fee', type: 'line', yAxisIndex: 0, smooth: true, showSymbol: true, data: products.map((product) => product.totalFee) },
       {
         name: 'Profit / loss',
         type: 'line',
@@ -712,15 +713,12 @@ function ProductPanel({
         showSymbol: true,
         connectNulls: false,
         lineStyle: { color: '#64748b', type: 'dashed' },
-        data: products.map((product) => {
-          const unitCost = skuUnitCost(product.sku)
-          if (unitCost === undefined) return { value: null }
-          const profit = (product.averagePrice - unitCost) * product.units
-          return {
-            value: Math.round((profit + Number.EPSILON) * 100) / 100,
-            itemStyle: { color: profit >= 0 ? '#16a34a' : '#dc2626' },
-          }
-        }),
+        data: products.map((product) => ({
+          value: product.profit,
+          ...(product.profit !== null && {
+            itemStyle: { color: product.profit >= 0 ? '#16a34a' : '#dc2626' },
+          }),
+        })),
       },
     ],
   }), [products])
@@ -757,7 +755,7 @@ function ProductPanel({
         <>
           <ChartCard
             title="Product performance"
-            description="Sales value (selling price × quantity), units sold, distinct orders, and estimated profit/loss ((average selling price - SKU unit cost) × units) by product. Click legend items to show or hide lines; profit/loss is unavailable when SKU cost cannot be read."
+            description="Sales value, units sold, distinct orders, total Takealot fees, and backend-calculated profit/loss (sales value - product cost - fees) by product. Click legend items to show or hide lines."
             option={scatterOption}
             icon={ChartNoAxesCombined}
           />
@@ -770,9 +768,6 @@ function ProductPanel({
             </Card.Header>
             <Stack display={{ base: 'flex', lg: 'none' }} gap="3" px="4" pb="4">
               {products.map((product, index) => {
-                const unitCost = skuUnitCost(product.sku)
-                const profitPerUnit = unitCost === undefined ? undefined : product.averagePrice - unitCost
-                const totalProfit = profitPerUnit === undefined ? undefined : profitPerUnit * product.units
                 return (
                   <Card.Root key={`${product.sku ?? 'product'}-${product.tsin ?? index}`} variant="subtle">
                     <Card.Body gap="3">
@@ -783,14 +778,25 @@ function ProductPanel({
                         </Text>
                       </Box>
                       <SimpleGrid columns={2} gap="3">
-                        <Box><Text fontSize="xs" color="fg.muted">Unit cost</Text><Text>{unitCost === undefined ? '—' : formatCurrency(unitCost)}</Text></Box>
+                        <Box><Text fontSize="xs" color="fg.muted">Unit cost</Text><Text>{product.unitCost === null ? '—' : formatCurrency(product.unitCost)}</Text></Box>
                         <Box>
                           <Text fontSize="xs" color="fg.muted">Profit / loss</Text>
-                          {totalProfit === undefined ? <Text>—</Text> : (
-                            <Text color={totalProfit >= 0 ? 'green.fg' : 'fg.error'}>
-                              {totalProfit >= 0 ? '+' : ''}{formatCurrency(totalProfit)}
+                          {product.profit === null ? <Text>—</Text> : (
+                            <Text color={product.profit >= 0 ? 'green.fg' : 'fg.error'}>
+                              {product.profit >= 0 ? '+' : ''}{formatCurrency(product.profit)}
                               <Text as="span" display="block" fontSize="xs" color="fg.muted">
-                                {profitPerUnit !== undefined && `${profitPerUnit >= 0 ? '+' : ''}${formatCurrency(profitPerUnit)} / unit`}
+                                {product.profitPerUnit !== null && `${product.profitPerUnit >= 0 ? '+' : ''}${formatCurrency(product.profitPerUnit)} / unit`}
+                              </Text>
+                            </Text>
+                          )}
+                        </Box>
+                        <Box>
+                          <Text fontSize="xs" color="fg.muted">Total fee</Text>
+                          {product.totalFee === null ? <Text>—</Text> : (
+                            <Text>
+                              {formatCurrency(product.totalFee)}
+                              <Text as="span" display="block" fontSize="xs" color="fg.muted">
+                                {product.feePerUnit !== null && `${formatCurrency(product.feePerUnit)} / unit`}
                               </Text>
                             </Text>
                           )}
@@ -810,19 +816,17 @@ function ProductPanel({
                 <Table.Header>
                   <Table.Row>
                     <Table.ColumnHeader w="28%">Product</Table.ColumnHeader>
-                    <Table.ColumnHeader w="11%" textAlign="end">Unit cost</Table.ColumnHeader>
-                    <Table.ColumnHeader w="15%" textAlign="end">Profit / loss</Table.ColumnHeader>
-                    <Table.ColumnHeader w="8%" textAlign="end">Units</Table.ColumnHeader>
-                    <Table.ColumnHeader w="8%" textAlign="end">Orders</Table.ColumnHeader>
-                    <Table.ColumnHeader w="14%" textAlign="end">Average price</Table.ColumnHeader>
-                    <Table.ColumnHeader w="16%" textAlign="end">Sales value</Table.ColumnHeader>
+                    <Table.ColumnHeader w="10%" textAlign="end">Unit cost</Table.ColumnHeader>
+                    <Table.ColumnHeader w="13%" textAlign="end">Profit / loss</Table.ColumnHeader>
+                    <Table.ColumnHeader w="12%" textAlign="end">Total fee</Table.ColumnHeader>
+                    <Table.ColumnHeader w="7%" textAlign="end">Units</Table.ColumnHeader>
+                    <Table.ColumnHeader w="7%" textAlign="end">Orders</Table.ColumnHeader>
+                    <Table.ColumnHeader w="12%" textAlign="end">Average price</Table.ColumnHeader>
+                    <Table.ColumnHeader w="11%" textAlign="end">Sales value</Table.ColumnHeader>
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
                   {products.map((product, index) => {
-                    const unitCost = skuUnitCost(product.sku)
-                    const profitPerUnit = unitCost === undefined ? undefined : product.averagePrice - unitCost
-                    const totalProfit = profitPerUnit === undefined ? undefined : profitPerUnit * product.units
                     return (
                       <Table.Row key={`${product.sku ?? 'product'}-${product.tsin ?? index}`}>
                         <Table.Cell overflowWrap="anywhere">
@@ -831,13 +835,23 @@ function ProductPanel({
                             SKU {product.sku ?? '—'} · TSIN {product.tsin === undefined ? '—' : String(product.tsin)}
                           </Text>
                         </Table.Cell>
-                        <Table.Cell textAlign="end" whiteSpace="nowrap">{unitCost === undefined ? '—' : formatCurrency(unitCost)}</Table.Cell>
+                        <Table.Cell textAlign="end" whiteSpace="nowrap">{product.unitCost === null ? '—' : formatCurrency(product.unitCost)}</Table.Cell>
                         <Table.Cell textAlign="end" whiteSpace="nowrap">
-                          {totalProfit === undefined ? '—' : (
-                            <Text as="span" color={totalProfit >= 0 ? 'green.fg' : 'fg.error'}>
-                              {totalProfit >= 0 ? '+' : ''}{formatCurrency(totalProfit)}
+                          {product.profit === null ? '—' : (
+                            <Text as="span" color={product.profit >= 0 ? 'green.fg' : 'fg.error'}>
+                              {product.profit >= 0 ? '+' : ''}{formatCurrency(product.profit)}
                               <Text as="span" display="block" fontSize="xs" color="fg.muted">
-                                {profitPerUnit !== undefined && `${profitPerUnit >= 0 ? '+' : ''}${formatCurrency(profitPerUnit)} / unit`}
+                                {product.profitPerUnit !== null && `${product.profitPerUnit >= 0 ? '+' : ''}${formatCurrency(product.profitPerUnit)} / unit`}
+                              </Text>
+                            </Text>
+                          )}
+                        </Table.Cell>
+                        <Table.Cell textAlign="end" whiteSpace="nowrap">
+                          {product.totalFee === null ? '—' : (
+                            <Text as="span">
+                              {formatCurrency(product.totalFee)}
+                              <Text as="span" display="block" fontSize="xs" color="fg.muted">
+                                {product.feePerUnit !== null && `${formatCurrency(product.feePerUnit)} / unit`}
                               </Text>
                             </Text>
                           )}
