@@ -221,6 +221,60 @@ const skuUnitCost = (sku?: string): number | undefined => {
 	return costMatch ? Number(costMatch[1]) : undefined;
 };
 
+const summarizeProductSales = (sales: TakealotSale[]) => {
+	let revenue = 0;
+	let units = 0;
+	let totalFee = 0;
+	let totalCost = 0;
+	let feesAvailable = true;
+	let costedUnits = 0;
+	let uncostedUnits = 0;
+	const orderIds = new Set<number>();
+
+	for (const sale of sales) {
+		assertSaleMetrics(sale);
+		revenue += sale.selling_price;
+		units += sale.quantity;
+		orderIds.add(sale.order_id);
+
+		if (sale.total_fee === undefined) {
+			feesAvailable = false;
+		} else {
+			totalFee += sale.total_fee;
+		}
+
+		const unitCost = skuUnitCost(sale.sku);
+		if (unitCost === undefined) {
+			uncostedUnits += sale.quantity;
+		} else {
+			totalCost += unitCost * sale.quantity;
+			costedUnits += sale.quantity;
+		}
+	}
+
+	const roundedRevenue = roundMoney(revenue);
+	const roundedTotalFee = feesAvailable ? roundMoney(totalFee) : null;
+	const roundedTotalCost = costedUnits > 0 ? roundMoney(totalCost) : null;
+	const profit = roundedTotalFee === null || roundedTotalCost === null
+		? null
+		: roundMoney(roundedRevenue - roundedTotalCost - roundedTotalFee);
+
+	return {
+		revenue: roundedRevenue,
+		averagePrice: units === 0 ? 0 : roundMoney(revenue / units),
+		units,
+		orders: orderIds.size,
+		totalFee: roundedTotalFee,
+		feePerUnit: roundedTotalFee === null || units === 0 ? null : roundMoney(roundedTotalFee / units),
+		totalCost: roundedTotalCost,
+		costedUnits,
+		uncostedUnits,
+		profit,
+		profitPerUnit: profit === null || units === 0 ? null : roundMoney(profit / units),
+		unitsPerOrder: orderIds.size === 0 ? 0 : roundMoney(units / orderIds.size),
+	};
+};
+
 const aggregateTotalFees = (sales: TakealotSale[]): number | null => {
 	let total = 0;
 	for (const sale of sales) {
@@ -401,6 +455,9 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 		salesValue: number;
 		totalFee: number;
 		feesAvailable: boolean;
+		totalCost: number;
+		costedUnits: number;
+		uncostedUnits: number;
 		units: number;
 		orderIds: Set<number>;
 	}>();
@@ -415,6 +472,9 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 			salesValue: 0,
 			totalFee: 0,
 			feesAvailable: true,
+			totalCost: 0,
+			costedUnits: 0,
+			uncostedUnits: 0,
 			units: 0,
 			orderIds: new Set<number>(),
 		};
@@ -423,6 +483,13 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 			product.feesAvailable = false;
 		} else {
 			product.totalFee += sale.total_fee;
+		}
+		const saleUnitCost = skuUnitCost(sale.sku);
+		if (saleUnitCost === undefined) {
+			product.uncostedUnits += sale.quantity;
+		} else {
+			product.totalCost += saleUnitCost * sale.quantity;
+			product.costedUnits += sale.quantity;
 		}
 		product.units += sale.quantity;
 		product.orderIds.add(sale.order_id);
@@ -437,8 +504,8 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 		const feePerUnit = totalFee === null || product.units === 0
 			? null
 			: roundMoney(totalFee / product.units);
-		const totalCost = unitCost === undefined ? null : roundMoney(unitCost * product.units);
-		const profit = totalCost === null || totalFee === null
+		const totalCost = roundMoney(product.totalCost);
+		const profit = totalFee === null || product.uncostedUnits > 0
 			? null
 			: roundMoney(revenue - totalCost - totalFee);
 		const profitPerUnit = profit === null || product.units === 0
@@ -450,6 +517,8 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 			title: product.title,
 			unitCost: unitCost ?? null,
 			totalCost,
+			costedUnits: product.costedUnits,
+			uncostedUnits: product.uncostedUnits,
 			totalFee,
 			feePerUnit,
 			profit,
@@ -470,6 +539,7 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 	return {
 		products: ranked.slice(start, start + input.limit).map(({ stableId: _stableId, ...product }) => product),
 		pagination: pageResult(input.page, input.limit, ranked.length),
+		summary: summarizeProductSales(sales),
 		revenueDefinition,
 	};
 };

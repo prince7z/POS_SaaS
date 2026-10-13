@@ -60,6 +60,8 @@ export interface TakealotProduct {
   title?: string
   unitCost: number | null
   totalCost: number | null
+  costedUnits: number
+  uncostedUnits: number
   totalFee: number | null
   feePerUnit: number | null
   profit: number | null
@@ -70,9 +72,25 @@ export interface TakealotProduct {
   averagePrice: number
 }
 
+export interface TakealotProductSummary {
+  revenue: number
+  averagePrice: number
+  units: number
+  orders: number
+  totalFee: number | null
+  feePerUnit: number | null
+  totalCost: number | null
+  costedUnits: number
+  uncostedUnits: number
+  profit: number | null
+  profitPerUnit: number | null
+  unitsPerOrder: number
+}
+
 export interface TakealotProducts {
   products: TakealotProduct[]
   pagination: ApiPagination
+  summary: TakealotProductSummary
   revenueDefinition: string
 }
 
@@ -241,7 +259,7 @@ function assertBreakdown(value: TakealotBreakdown): TakealotBreakdown {
   return value
 }
 
-function assertProducts(value: { data: { products: TakealotProduct[] }; pagination?: ApiPagination }): TakealotProducts {
+function assertProducts(value: { data: { products: TakealotProduct[]; summary: TakealotProductSummary }; pagination?: ApiPagination }): TakealotProducts {
   const response = requireRecord(value.data, 'product performance')
   if (!Array.isArray(response.products)) throw new Error('Takealot returned invalid product data.')
   response.products.forEach((product: unknown) => {
@@ -252,14 +270,30 @@ function assertProducts(value: { data: { products: TakealotProduct[] }; paginati
     requireNumber(row.averagePrice, 'product average selling price')
     requireNullableNumber(row.unitCost, 'product unit cost')
     requireNullableNumber(row.totalCost, 'product total cost')
+    requireNumber(row.costedUnits, 'product costed units')
+    requireNumber(row.uncostedUnits, 'product uncosted units')
     requireNullableNumber(row.totalFee, 'product total fee')
     requireNullableNumber(row.feePerUnit, 'product fee per unit')
     requireNullableNumber(row.profit, 'product profit/loss')
     requireNullableNumber(row.profitPerUnit, 'product profit/loss per unit')
   })
+  const summary = requireRecord(response.summary, 'product summary')
+  requireNumber(summary.revenue, 'summary sales value')
+  requireNumber(summary.averagePrice, 'summary average product price')
+  requireNumber(summary.units, 'summary units')
+  requireNumber(summary.orders, 'summary orders')
+  requireNullableNumber(summary.totalFee, 'summary total fee')
+  requireNullableNumber(summary.feePerUnit, 'summary fee per unit')
+  requireNullableNumber(summary.totalCost, 'summary total product cost')
+  requireNumber(summary.costedUnits, 'summary costed units')
+  requireNumber(summary.uncostedUnits, 'summary uncosted units')
+  requireNullableNumber(summary.profit, 'summary profit/loss')
+  requireNullableNumber(summary.profitPerUnit, 'summary profit/loss per unit')
+  requireNumber(summary.unitsPerOrder, 'summary units per order')
   return {
     products: response.products as TakealotProduct[],
     pagination: requirePagination(value.pagination),
+    summary: response.summary as TakealotProductSummary,
     revenueDefinition: requireString(response.revenueDefinition, 'revenue definition'),
   }
 }
@@ -304,7 +338,7 @@ export function getTakealotBreakdown(
 }
 
 export async function getTakealotProducts(filters: TakealotPageFilters, signal?: AbortSignal) {
-  const response = await apiRequestWithMeta<{ products: TakealotProduct[]; revenueDefinition: string }>(
+  const response = await apiRequestWithMeta<{ products: TakealotProduct[]; summary: TakealotProductSummary; revenueDefinition: string }>(
     `/takealot/products/performance${query({
       ...filters,
       page: filters.page ?? 1,

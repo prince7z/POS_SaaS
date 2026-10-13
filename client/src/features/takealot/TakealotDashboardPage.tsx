@@ -256,11 +256,13 @@ function MetricCard({
   value,
   detail,
   icon: Icon = BarChart3,
+  valueColor,
 }: {
   label: string
   value?: string
   detail?: string
   icon?: LucideIcon
+  valueColor?: string
 }) {
   return (
     <MotionCard
@@ -277,10 +279,42 @@ function MetricCard({
           <Text color="fg.muted" fontSize="sm">{label}</Text>
           <Icon size={18} aria-hidden="true" />
         </Flex>
-        <Heading size="lg" mt="2">{value ?? 'Unavailable'}</Heading>
+        <Heading size="lg" mt="2" color={valueColor}>{value ?? 'Unavailable'}</Heading>
         {detail && <Text fontSize="xs" color="fg.muted" mt="1">{detail}</Text>}
       </Card.Body>
     </MotionCard>
+  )
+}
+
+function SummaryGroupCard({
+  label,
+  value,
+  secondary,
+  detail,
+  valueColor,
+}: {
+  label: string
+  value: string
+  secondary: Array<{ label: string; value: string }>
+  detail?: string
+  valueColor?: string
+}) {
+  return (
+    <Card.Root variant="outline" minW="0">
+      <Card.Body>
+        <Text color="fg.muted" fontSize="sm">{label}</Text>
+        <Heading size="lg" mt="2" color={valueColor}>{value}</Heading>
+        <Stack gap="1" mt="3">
+          {secondary.map((item) => (
+            <Flex key={item.label} justify="space-between" gap="3">
+              <Text color="fg.muted" fontSize="sm">{item.label}</Text>
+              <Text fontSize="sm" fontWeight="medium" color={valueColor}>{item.value}</Text>
+            </Flex>
+          ))}
+        </Stack>
+        {detail && <Text fontSize="xs" color="fg.muted" mt="2">{detail}</Text>}
+      </Card.Body>
+    </Card.Root>
   )
 }
 
@@ -651,7 +685,7 @@ function ProductPanel({
     [range.from, range.to, filter, page, limit, sortBy, order],
   )
   const requestKey = JSON.stringify(filters)
-  const key = cacheKey(identity, 'products-v2', filters)
+  const key = cacheKey(identity, 'products-v3', filters)
   const fetcher = useCallback((signal: AbortSignal) => getTakealotProducts(filters, signal), [requestKey])
   const resource = useCachedResource(enabled, key, fetcher, refreshToken, onMeta)
   const productData = resource.data
@@ -735,7 +769,7 @@ function ProductPanel({
   return (
     <Stack gap="4">
       <ResourceNotice resource={resource} retry={resource.refresh} />
-      <Flex gap="3" wrap="wrap" align="end">
+          <Flex gap="3" wrap="wrap" align="end">
         <Box>
           <Text fontSize="sm" mb="1">SKU</Text>
           <Input size="sm" aria-label="Filter products by SKU" value={draftSku} onChange={(event) => setDraftSku(event.target.value)} />
@@ -749,6 +783,77 @@ function ProductPanel({
         </Button>
         <Button size="sm" onClick={applyFilter}>Apply filters</Button>
       </Flex>
+      {productData && (
+        <>
+          <Text fontSize="sm" color="fg.muted">
+            Date-range summary · {dateLabel(range.from)} – {dateLabel(range.to)}
+          </Text>
+          <SimpleGrid columns={{ base: 1, sm: 2, xl: 3 }} gap="4">
+            <SummaryGroupCard
+              label="Total revenue"
+              value={formatCurrency(productData.summary.revenue)}
+              secondary={[{ label: 'Average product price', value: formatCurrency(productData.summary.averagePrice) }]}
+            />
+            <SummaryGroupCard
+              label="Total orders"
+              value={formatNumber(productData.summary.orders)}
+              secondary={[
+                { label: 'Units sold', value: formatNumber(productData.summary.units) },
+                { label: 'Average units per order', value: formatNumber(productData.summary.unitsPerOrder) },
+              ]}
+            />
+            <SummaryGroupCard
+              label="Total Takealot fees"
+              value={productData.summary.totalFee === null ? 'Unavailable' : formatCurrency(productData.summary.totalFee)}
+              secondary={[{
+                label: 'Average fee per unit',
+                value: productData.summary.feePerUnit === null ? 'Unavailable' : formatCurrency(productData.summary.feePerUnit),
+              }]}
+              detail="Charges deducted by Takealot."
+              valueColor="fg.error"
+            />
+          </SimpleGrid>
+          <Card.Root variant="outline">
+            <Card.Body>
+              <SimpleGrid columns={{ base: 1, md: 2 }} gap="6" alignItems="center">
+                <Box>
+                  <Text color="fg.muted" fontSize="sm">Total item cost</Text>
+                  <Heading size="xl" mt="2">
+                    {productData.summary.totalCost === null ? 'Unavailable' : formatCurrency(productData.summary.totalCost)}
+                  </Heading>
+                  <Text fontSize="xs" color="fg.muted" mt="2">
+                    Sum of unit cost × quantity for each sale row with a cost encoded in its SKU.
+                  </Text>
+                  {productData.summary.uncostedUnits > 0 && (
+                    <Text fontSize="xs" color="fg.error" mt="1">
+                      Cost is unavailable for {formatNumber(productData.summary.uncostedUnits)} units; this total excludes them.
+                    </Text>
+                  )}
+                </Box>
+                <Box>
+                  <Text color="fg.muted" fontSize="sm">Estimated total profit / loss</Text>
+                  <Heading
+                    size="2xl"
+                    mt="2"
+                    color={productData.summary.profit === null
+                      ? undefined
+                      : productData.summary.profit >= 0 ? 'green.fg' : 'fg.error'}
+                  >
+                    {productData.summary.profit === null
+                      ? 'Unavailable'
+                      : `${productData.summary.profit >= 0 ? '+' : ''}${formatCurrency(productData.summary.profit)}`}
+                  </Heading>
+                  <Text fontSize="sm" color="fg.muted" mt="2">
+                    Calculated as total revenue − Takealot fees − total item cost
+                    {productData.summary.uncostedUnits > 0 ? ' (excludes units without an SKU-encoded cost).' : '.'}
+                  </Text>
+                </Box>
+              </SimpleGrid>
+            </Card.Body>
+          </Card.Root>
+        </>
+      )}
+  
       {!productData || products.length === 0 ? (
         <Card.Root variant="outline"><Card.Body><Text>No products were returned for this date range.</Text></Card.Body></Card.Root>
       ) : (
@@ -778,7 +883,27 @@ function ProductPanel({
                         </Text>
                       </Box>
                       <SimpleGrid columns={2} gap="3">
-                        <Box><Text fontSize="xs" color="fg.muted">Unit cost</Text><Text>{product.unitCost === null ? '—' : formatCurrency(product.unitCost)}</Text></Box>
+                        <Box>
+                          <Text fontSize="xs" color="fg.muted">Sales value</Text>
+                          <Text color="blue.600">{formatCurrency(product.revenue)}</Text>
+                          <Text fontSize="xs" color="fg.muted">Avg. price {formatCurrency(product.averagePrice)}</Text>
+                        </Box>
+                        <Box>
+                          <Text fontSize="xs" color="fg.muted">Total fee</Text>
+                          <Text color="fg.error">{product.totalFee === null ? '—' : formatCurrency(product.totalFee)}</Text>
+                          <Text fontSize="xs" color="fg.muted">
+                            {product.feePerUnit === null ? '—' : `${formatCurrency(product.feePerUnit)} / unit`}
+                          </Text>
+                        </Box>
+                        <Box>
+                          <Text fontSize="xs" color="fg.muted">Total cost</Text>
+                          <Text color="yellow.600">
+                            {product.totalCost === null ? '—' : formatCurrency(product.totalCost)}
+                          </Text>
+                          <Text fontSize="xs" color="fg.muted">
+                            {product.unitCost === null ? 'Unit cost unavailable' : `${formatCurrency(product.unitCost)} / unit`}
+                          </Text>
+                        </Box>
                         <Box>
                           <Text fontSize="xs" color="fg.muted">Profit / loss</Text>
                           {product.profit === null ? <Text>—</Text> : (
@@ -791,20 +916,10 @@ function ProductPanel({
                           )}
                         </Box>
                         <Box>
-                          <Text fontSize="xs" color="fg.muted">Total fee</Text>
-                          {product.totalFee === null ? <Text>—</Text> : (
-                            <Text>
-                              {formatCurrency(product.totalFee)}
-                              <Text as="span" display="block" fontSize="xs" color="fg.muted">
-                                {product.feePerUnit !== null && `${formatCurrency(product.feePerUnit)} / unit`}
-                              </Text>
-                            </Text>
-                          )}
+                          <Text fontSize="xs" color="fg.muted">Orders</Text>
+                          <Text>{formatNumber(product.orders)}</Text>
+                          <Text fontSize="xs" color="fg.muted">{formatNumber(product.units)} units</Text>
                         </Box>
-                        <Box><Text fontSize="xs" color="fg.muted">Units</Text><Text>{formatNumber(product.units)}</Text></Box>
-                        <Box><Text fontSize="xs" color="fg.muted">Orders</Text><Text>{formatNumber(product.orders)}</Text></Box>
-                        <Box><Text fontSize="xs" color="fg.muted">Average price</Text><Text>{formatCurrency(product.averagePrice)}</Text></Box>
-                        <Box><Text fontSize="xs" color="fg.muted">Sales value</Text><Text>{formatCurrency(product.revenue)}</Text></Box>
                       </SimpleGrid>
                     </Card.Body>
                   </Card.Root>
@@ -815,14 +930,12 @@ function ProductPanel({
               <Table.Root size="sm" tableLayout="fixed" w="full">
                 <Table.Header>
                   <Table.Row>
-                    <Table.ColumnHeader w="28%">Product</Table.ColumnHeader>
-                    <Table.ColumnHeader w="10%" textAlign="end">Unit cost</Table.ColumnHeader>
-                    <Table.ColumnHeader w="13%" textAlign="end">Profit / loss</Table.ColumnHeader>
-                    <Table.ColumnHeader w="12%" textAlign="end">Total fee</Table.ColumnHeader>
-                    <Table.ColumnHeader w="7%" textAlign="end">Units</Table.ColumnHeader>
-                    <Table.ColumnHeader w="7%" textAlign="end">Orders</Table.ColumnHeader>
-                    <Table.ColumnHeader w="12%" textAlign="end">Average price</Table.ColumnHeader>
-                    <Table.ColumnHeader w="11%" textAlign="end">Sales value</Table.ColumnHeader>
+                    <Table.ColumnHeader w="27%">Product</Table.ColumnHeader>
+                    <Table.ColumnHeader w="16%" textAlign="end">Sales value</Table.ColumnHeader>
+                    <Table.ColumnHeader w="13%" textAlign="end">Total fee</Table.ColumnHeader>
+                    <Table.ColumnHeader w="14%" textAlign="end">Total cost</Table.ColumnHeader>
+                    <Table.ColumnHeader w="16%" textAlign="end">Profit / loss</Table.ColumnHeader>
+                    <Table.ColumnHeader w="14%" textAlign="end">Orders</Table.ColumnHeader>
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
@@ -835,7 +948,30 @@ function ProductPanel({
                             SKU {product.sku ?? '—'} · TSIN {product.tsin === undefined ? '—' : String(product.tsin)}
                           </Text>
                         </Table.Cell>
-                        <Table.Cell textAlign="end" whiteSpace="nowrap">{product.unitCost === null ? '—' : formatCurrency(product.unitCost)}</Table.Cell>
+                        <Table.Cell textAlign="end" whiteSpace="nowrap">
+                          <Text color="blue.600">{formatCurrency(product.revenue)}</Text>
+                          <Text display="block" fontSize="xs" color="fg.muted">
+                            Avg. price {formatCurrency(product.averagePrice)}
+                          </Text>
+                        </Table.Cell>
+                        <Table.Cell textAlign="end" whiteSpace="nowrap">
+                          {product.totalFee === null ? '—' : (
+                            <>
+                              <Text color="fg.error">{formatCurrency(product.totalFee)}</Text>
+                              <Text display="block" fontSize="xs" color="fg.muted">
+                                {product.feePerUnit !== null && `${formatCurrency(product.feePerUnit)} / unit`}
+                              </Text>
+                            </>
+                          )}
+                        </Table.Cell>
+                        <Table.Cell textAlign="end" whiteSpace="nowrap">
+                          <Text color="yellow.600">
+                            {product.totalCost === null ? '—' : formatCurrency(product.totalCost)}
+                          </Text>
+                          <Text display="block" fontSize="xs" color="fg.muted">
+                            {product.unitCost === null ? 'Unit cost unavailable' : `${formatCurrency(product.unitCost)} / unit`}
+                          </Text>
+                        </Table.Cell>
                         <Table.Cell textAlign="end" whiteSpace="nowrap">
                           {product.profit === null ? '—' : (
                             <Text as="span" color={product.profit >= 0 ? 'green.fg' : 'fg.error'}>
@@ -847,19 +983,9 @@ function ProductPanel({
                           )}
                         </Table.Cell>
                         <Table.Cell textAlign="end" whiteSpace="nowrap">
-                          {product.totalFee === null ? '—' : (
-                            <Text as="span">
-                              {formatCurrency(product.totalFee)}
-                              <Text as="span" display="block" fontSize="xs" color="fg.muted">
-                                {product.feePerUnit !== null && `${formatCurrency(product.feePerUnit)} / unit`}
-                              </Text>
-                            </Text>
-                          )}
+                          {formatNumber(product.orders)}
+                          <Text display="block" fontSize="xs" color="fg.muted">{formatNumber(product.units)} units</Text>
                         </Table.Cell>
-                        <Table.Cell textAlign="end" whiteSpace="nowrap">{formatNumber(product.units)}</Table.Cell>
-                        <Table.Cell textAlign="end" whiteSpace="nowrap">{formatNumber(product.orders)}</Table.Cell>
-                        <Table.Cell textAlign="end" whiteSpace="nowrap">{formatCurrency(product.averagePrice)}</Table.Cell>
-                        <Table.Cell textAlign="end" whiteSpace="nowrap">{formatCurrency(product.revenue)}</Table.Cell>
                       </Table.Row>
                     )
                   })}

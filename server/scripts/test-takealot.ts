@@ -300,10 +300,25 @@ const main = async (): Promise<void> => {
 		assert.deepEqual((dataOf(products).products as Array<Record<string, unknown>>)[0], {
 			sku: "SKU-R10-A", tsin: 100, title: "Alpha item",
 			unitCost: 10, totalCost: 30, totalFee: 3, feePerUnit: 1,
+			costedUnits: 3, uncostedUnits: 0,
 			profit: -3, profitPerUnit: -1,
 			revenue: 30, units: 3, orders: 1, averagePrice: 10,
 		});
 		assert.equal((products.body.pagination as Record<string, unknown>).total, 2);
+		assert.deepEqual(dataOf(products).summary, {
+			revenue: 35,
+			averagePrice: 5.83,
+			units: 6,
+			orders: 2,
+			totalFee: 4.15,
+			feePerUnit: 0.69,
+			totalCost: 30,
+			costedUnits: 3,
+			uncostedUnits: 3,
+			profit: 0.85,
+			profitPerUnit: 0.14,
+			unitsPerOrder: 3,
+		});
 		logPass("product performance ranks by stable offer identifier and calculates weighted average price");
 
 		const orders = await request("/takealot/orders?from=2026-10-01&to=2026-10-02&sku=SKU-A&orderId=10&page=1&limit=2");
