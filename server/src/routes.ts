@@ -11,6 +11,7 @@ import reportsRouter from "./modules/reports/route";
 import salesRouter from "./modules/sales/route";
 import agentRouter from "./modules/agent/route";
 import qrUploadRouter from "./modules/qr-upload/route";
+import takealotRouter from "./modules/takealot/route";
 
 const router = Router();
 
@@ -25,5 +26,6 @@ router.use("/purchases", purchasesRouter);
 router.use("/reports", reportsRouter);
 router.use("/agent", agentRouter);
 router.use("/qr-upload", qrUploadRouter);
+router.use("/takealot", takealotRouter);
 
 export default router;

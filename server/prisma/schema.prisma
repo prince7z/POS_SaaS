@@ -24,6 +24,7 @@ enum Access {
   RETURNS
   SETTINGS
   USERS_ROLES
+  TAKEALOT
 }
 
 enum SaleSource {
@@ -180,6 +181,7 @@ model Company {
   auditLogs          AuditLog[]
   emailLogs          EmailLog[]
   conversations       AgentConversation[]
+  takealotInventorySnapshots TakealotInventorySnapshot[]
 
   @@index([email])
   @@index([deletedAt])
@@ -718,4 +720,16 @@ model EmailLog {
   @@index([customerId])
   @@index([entityType, entityId])
   @@index([status])
+}
+
+model TakealotInventorySnapshot {
+  id          String   @id @default(uuid())
+  companyId   String
+  capturedAt  DateTime @default(now())
+  stockCounts Json
+  stockHealth Json
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, capturedAt])
 }
