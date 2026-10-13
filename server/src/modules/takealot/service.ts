@@ -391,7 +391,7 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 			units: 0,
 			orderIds: new Set<number>(),
 		};
-		product.salesValue += sale.selling_price * sale.quantity;
+		product.salesValue += sale.selling_price ;
 		product.units += sale.quantity;
 		product.orderIds.add(sale.order_id);
 		products.set(stableId, product);
