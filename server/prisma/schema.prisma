@@ -289,7 +289,7 @@ model Category {
   children Category[] @relation("CategoryTree")
   products Product[]
 
-  @@unique([companyId, name])
+  @@unique([companyId, parentId, name])
   @@index([companyId, parentId])
   @@index([deletedAt])
 }
