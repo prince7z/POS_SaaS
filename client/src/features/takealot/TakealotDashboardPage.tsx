@@ -90,6 +90,18 @@ const validDate = (value: string) => {
 }
 const toErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback
+const skuUnitCost = (sku?: string) => {
+  const costMatch = /^C(\d+)(?:$|[^0-9])/i.exec(sku?.trim() ?? '')
+  return costMatch ? Number(costMatch[1]) : undefined
+}
+const escapeChartText = (value: string) =>
+  value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character] ?? character)
 const cacheKey = (identity: DashboardIdentity, section: string, parameters: object = {}) =>
   JSON.stringify({
     companyId: identity.companyId,
@@ -386,7 +398,6 @@ function OverviewPanel({
   const fetcher = useCallback((signal: AbortSignal) => getTakealotOverview(signal), [])
   const resource = useCachedResource(enabled, key, fetcher, refreshToken, onMeta)
   const data = resource.data
-  const period = data?.salesSummary.periods[0]
   const totalStock = recordNumber(data?.inventory.stockCounts, 'total_stock_count')
   const unbalanced = recordNumber(data?.inventory.stockCounts, 'unbalanced_stock_count')
   const storageFees = recordNumber(data?.inventory.stockHealth, 'storage_fee_enabled_offer_count')
@@ -400,38 +411,38 @@ function OverviewPanel({
     <Stack gap="4">
       <ResourceNotice resource={resource} retry={resource.refresh} />
       <SimpleGrid columns={{ base: 1, sm: 2, xl: 4 }} gap="4">
+        {data.salesSummary.periods.map((period) => (
+          <MetricCard
+            key={period.date_range}
+            label={`Sales · ${period.date_range}`}
+            value={formatCurrency(period.total)}
+            detail={`Units: ${formatNumber(period.quantity)} · Sales total and quantity are reported by Takealot; neither is recalculated in the dashboard.`}
+            icon={CircleDollarSign}
+          />
+        ))}
         <MetricCard
-          label={period ? `Sales · ${period.date_range}` : 'Sales summary'}
-          value={period ? formatCurrency(period.total) : undefined}
-          detail="Takealot summary period; not adjusted to the date filter."
-          icon={CircleDollarSign}
-        />
-        <MetricCard
-          label="Units in summary period"
-          value={period ? formatNumber(period.quantity) : undefined}
-          icon={ShoppingCart}
-        />
-        <MetricCard
-          label="Offers with stock"
+          label="Total stock count"
           value={totalStock === undefined ? undefined : formatNumber(totalStock)}
+          detail="Takealot-reported total_stock_count; direct API value."
           icon={Package}
         />
         <MetricCard
           label="Unbalanced stock"
           value={unbalanced === undefined ? undefined : formatNumber(unbalanced)}
+          detail="Takealot-reported unbalanced_stock_count; direct API value."
           icon={Activity}
         />
         {storageFees !== undefined && (
-          <MetricCard label="Storage-fee-enabled offers" value={formatNumber(storageFees)} icon={ReceiptText} />
+          <MetricCard label="Storage-fee-enabled offers" value={formatNumber(storageFees)} detail="Takealot-reported offer count; direct API value." icon={ReceiptText} />
         )}
         {replenishment !== undefined && (
-          <MetricCard label="Recommended for replenishment" value={formatNumber(replenishment)} icon={Warehouse} />
+          <MetricCard label="Recommended for replenishment" value={formatNumber(replenishment)} detail="Takealot-reported offer count; direct API value." icon={Warehouse} />
         )}
       </SimpleGrid>
       <Card.Root variant="outline">
         <Card.Body>
           <Text fontSize="sm" color="fg.muted">
-            The sales summary uses Takealot&apos;s fixed reporting periods. The selected date range applies to Sales Analytics, Product Performance and Orders.
+            The sales summary uses Takealot&apos;s fixed reporting periods, and the selected date range does not change them. Sales Analytics calculates gross sales as selling price × quantity, units as the sum of quantity, and orders as distinct order IDs. Inventory values are reported directly by Takealot.
           </Text>
         </Card.Body>
       </Card.Root>
@@ -454,8 +465,7 @@ function AnalyticsPanel({
   refreshToken: number
   onMeta: (meta: ResourceMeta, refreshToken: number, outcome?: 'success' | 'error') => void
 }) {
-  const [metric, setMetric] = useState<'revenue' | 'units' | 'orders'>('revenue')
-  const [groupBy, setGroupBy] = useState<TakealotBreakdownGroup>('promotion')
+  const [groupBy, setGroupBy] = useState<TakealotBreakdownGroup>('saleStatus')
   const filters: TakealotDateFilters = useMemo(
     () => ({ ...range, interval: granularity }),
     [range, granularity],
@@ -475,7 +485,6 @@ function AnalyticsPanel({
   const breakdown = useCachedResource(enabled, breakdownKey, loadBreakdown, refreshToken, onMeta)
   const points = trends.data?.series ?? []
   const dates = points.map((point) => point.date)
-  const metricField = metric === 'revenue' ? 'revenue' : metric
   const totals = useMemo(() => points.reduce(
     (result, point) => ({
       revenue: result.revenue + point.revenue,
@@ -485,37 +494,32 @@ function AnalyticsPanel({
     { revenue: 0, units: 0, orders: 0 },
   ), [points])
   const trendOption: EChartsOption = useMemo(() => ({
+    legend: { data: ['Sales value', 'Units sold', 'Orders'], bottom: 0, selectedMode: 'multiple' },
     tooltip: {
       trigger: 'axis',
-      valueFormatter: (value) => metric === 'revenue'
-        ? formatCurrency(Number(value))
-        : formatNumber(Number(value)),
-    },
-    grid: { left: 60, right: 20, top: 28, bottom: 54 },
-    xAxis: { type: 'category', data: dates, axisLabel: { formatter: (value: string) => dateLabel(value) } },
-    yAxis: {
-      type: 'value',
-      axisLabel: {
-        formatter: (value: number) => metric === 'revenue'
-          ? formatCurrency(Number(value))
-          : formatNumber(Number(value)),
+      formatter: (params) => {
+        const items = Array.isArray(params) ? params : [params]
+        const date = String(items[0]?.name ?? '')
+        const values = items.map((item) => {
+          const value = Number(item.value)
+          const formatted = item.seriesName === 'Sales value' ? formatCurrency(value) : formatNumber(value)
+          return `${item.marker ?? ''}${item.seriesName}: ${formatted}`
+        })
+        return [dateLabel(date), ...values].join('<br/>')
       },
     },
-    series: [{
-      name: metric === 'revenue' ? 'Sales value' : metric === 'units' ? 'Units sold' : 'Orders',
-      type: 'line',
-      smooth: true,
-      showSymbol: false,
-      areaStyle: { opacity: 0.08 },
-      data: points.map((point) => point[metricField]),
-    }],
-  }), [dates, metric, metricField, points])
-  const revenueOption: EChartsOption = useMemo(() => ({
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => formatCurrency(Number(value)) },
-    grid: { left: 72, right: 20, top: 24, bottom: 54 },
+    grid: { left: 76, right: 92, top: 32, bottom: 70 },
     xAxis: { type: 'category', data: dates, axisLabel: { formatter: (value: string) => dateLabel(value) } },
-    yAxis: { type: 'value', axisLabel: { formatter: (value: number) => formatCurrency(Number(value)) } },
-    series: [{ name: 'Sales value', type: 'bar', data: points.map((point) => point.revenue) }],
+    yAxis: [
+      { type: 'value', name: 'Sales', position: 'left', axisLabel: { formatter: (value: number) => formatCurrency(Number(value)) } },
+      { type: 'value', name: 'Units', position: 'right', axisLabel: { formatter: (value: number) => formatNumber(Number(value)) } },
+      { type: 'value', name: 'Orders', position: 'right', offset: 58, axisLabel: { formatter: (value: number) => formatNumber(Number(value)) } },
+    ],
+    series: [
+      { name: 'Sales value', type: 'line', yAxisIndex: 0, smooth: true, showSymbol: false, data: points.map((point) => point.revenue) },
+      { name: 'Units sold', type: 'line', yAxisIndex: 1, smooth: true, showSymbol: false, data: points.map((point) => point.units) },
+      { name: 'Orders', type: 'line', yAxisIndex: 2, smooth: true, showSymbol: false, data: points.map((point) => point.orders) },
+    ],
   }), [dates, points])
   const breakdownPoints = breakdown.data?.breakdown ?? []
   const breakdownOption: EChartsOption = useMemo(() => {
@@ -578,30 +582,16 @@ function AnalyticsPanel({
       {points.length > 0 && (
         <>
           <SimpleGrid columns={{ base: 1, sm: 2, xl: 4 }} gap="4">
-            <MetricCard label="Sales value" value={formatCurrency(totals.revenue)} detail="Gross sales value" icon={CircleDollarSign} />
-            <MetricCard label="Units sold" value={formatNumber(totals.units)} icon={ShoppingCart} />
+            <MetricCard label="Sales value" value={formatCurrency(totals.revenue)} detail="Formula: sum of selling price × quantity." icon={CircleDollarSign} />
+            <MetricCard label="Units sold" value={formatNumber(totals.units)} detail="Formula: sum of sale-item quantities." icon={ShoppingCart} />
+            <MetricCard label="Orders" value={formatNumber(totals.orders)} detail="Formula: count of distinct order IDs." icon={ReceiptText} />
           </SimpleGrid>
-          <Flex justify="flex-end">
-            <NativeSelect.Root size="sm" maxW="180px">
-              <NativeSelect.Field aria-label="Sales trend metric" value={metric} onChange={(event) => setMetric(event.target.value as typeof metric)}>
-                <option value="revenue">Sales value</option>
-                <option value="units">Units sold</option>
-                <option value="orders">Orders</option>
-              </NativeSelect.Field>
-            </NativeSelect.Root>
-          </Flex>
           <ChartCard
             title="Sales trend"
-            description="Gross sales value, units, and distinct orders by selected period."
+            description="Daily, weekly, or monthly gross sales (selling price × quantity), units (sum of quantity), and distinct orders. Click legend items to show or hide each line; each metric uses its own axis."
             option={trendOption}
             height="340px"
             icon={Activity}
-          />
-          <ChartCard
-            title="Sales value by period"
-            description="Gross selling price multiplied by quantity."
-            option={revenueOption}
-            icon={BarChart3}
           />
         </>
       )}
@@ -644,7 +634,7 @@ function ProductPanel({
   refreshToken: number
   onMeta: (meta: ResourceMeta, refreshToken: number, outcome?: 'success' | 'error') => void
 }) {
-  const [sortBy, setSortBy] = useState<TakealotPageFilters['sortBy']>('revenue')
+  const sortBy: TakealotPageFilters['sortBy'] = 'revenue'
   const [order, setOrder] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
   const [draftSku, setDraftSku] = useState('')
@@ -664,24 +654,51 @@ function ProductPanel({
     setPage(1)
   }, [range.from, range.to])
   const scatterOption: EChartsOption = useMemo(() => ({
+    legend: { data: ['Sales value', 'Units sold', 'Orders'], bottom: 0, selectedMode: 'multiple' },
     tooltip: {
+      trigger: 'axis',
       formatter: (params) => {
-        const item = Array.isArray(params) ? params[0] : params
-        const product = products[item.dataIndex ?? 0]
-        return product
-          ? `${product.title ?? 'Untitled product'}<br/>SKU: ${product.sku ?? '—'}<br/>Units: ${formatNumber(product.units)}<br/>Sales: ${formatCurrency(product.revenue)}`
-          : ''
+        const items = Array.isArray(params) ? params : [params]
+        const index = Number(items[0]?.dataIndex ?? 0)
+        const product = products[index]
+        if (!product) return ''
+        const cost = skuUnitCost(product.sku)
+        const estimatedProfit = cost === undefined ? undefined : product.averagePrice - cost
+        return [
+          escapeChartText(product.title ?? 'Untitled product'),
+          `SKU: ${escapeChartText(product.sku ?? '—')}`,
+          `TSIN: ${product.tsin === undefined ? '—' : String(product.tsin)}`,
+          ...items.map((item) => {
+            const value = Number(item.value)
+            const formatted = item.seriesName === 'Sales value'
+              ? formatCurrency(value)
+              : formatNumber(value)
+            return `${item.marker ?? ''}${item.seriesName}: ${formatted}`
+          }),
+          `Average selling price: ${formatCurrency(product.averagePrice)}`,
+          cost === undefined ? 'Unit cost: not encoded in SKU' : `Unit cost: ${formatCurrency(cost)}`,
+          estimatedProfit === undefined
+            ? 'Profit / loss: unavailable'
+            : `Estimated profit / loss per unit: ${formatCurrency(estimatedProfit)}`,
+        ].join('<br/>')
       },
     },
-    grid: { left: 70, right: 24, top: 24, bottom: 54 },
-    xAxis: { type: 'value', name: 'Units sold', axisLabel: { formatter: (value: number) => formatNumber(Number(value)) } },
-    yAxis: { type: 'value', name: 'Sales value', axisLabel: { formatter: (value: number) => formatCurrency(Number(value)) } },
-    series: [{
-      name: 'Products',
-      type: 'scatter',
-      symbolSize: (value: number[]) => Math.max(9, Math.sqrt(Number(value[1] ?? 0)) / 3),
-      data: products.map((product) => [product.units, product.revenue]),
-    }],
+    grid: { left: 78, right: 96, top: 34, bottom: 74 },
+    xAxis: {
+      type: 'category',
+      data: products.map((product) => product.sku || product.title || 'Product'),
+      axisLabel: { rotate: 25, interval: 0 },
+    },
+    yAxis: [
+      { type: 'value', name: 'Sales', position: 'left', axisLabel: { formatter: (value: number) => formatCurrency(Number(value)) } },
+      { type: 'value', name: 'Units', position: 'right', axisLabel: { formatter: (value: number) => formatNumber(Number(value)) } },
+      { type: 'value', name: 'Orders', position: 'right', offset: 58, axisLabel: { formatter: (value: number) => formatNumber(Number(value)) } },
+    ],
+    series: [
+      { name: 'Sales value', type: 'line', yAxisIndex: 0, smooth: true, showSymbol: true, data: products.map((product) => product.revenue) },
+      { name: 'Units sold', type: 'line', yAxisIndex: 1, smooth: true, showSymbol: true, data: products.map((product) => product.units) },
+      { name: 'Orders', type: 'line', yAxisIndex: 2, smooth: true, showSymbol: true, data: products.map((product) => product.orders) },
+    ],
   }), [products])
 
   const applyFilter = () => {
@@ -691,11 +708,6 @@ function ProductPanel({
       ...(draftTitle.trim() && { productTitle: draftTitle.trim() }),
     })
   }
-  const changeSort = (value: string) => {
-    setPage(1)
-    setSortBy(value as TakealotPageFilters['sortBy'])
-  }
-
   if (resource.loading && !resource.data) return <><LoadingCards count={3} /><ChartSkeletons /></>
   if (!resource.data && resource.error) return <ErrorPanel message={resource.error} retry={resource.refresh} />
   return (
@@ -710,14 +722,6 @@ function ProductPanel({
           <Text fontSize="sm" mb="1">Product title</Text>
           <Input size="sm" aria-label="Filter products by title" value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} />
         </Box>
-        <NativeSelect.Root size="sm" maxW="180px">
-          <NativeSelect.Field aria-label="Sort products" value={sortBy} onChange={(event) => changeSort(event.target.value)}>
-            <option value="revenue">Sales value</option>
-            <option value="units">Units</option>
-            <option value="orders">Orders</option>
-            <option value="averagePrice">Average price</option>
-          </NativeSelect.Field>
-        </NativeSelect.Root>
         <Button size="sm" variant="outline" onClick={() => { setPage(1); setOrder(order === 'desc' ? 'asc' : 'desc') }}>
           {order === 'desc' ? 'Highest first' : 'Lowest first'}
         </Button>
@@ -729,7 +733,7 @@ function ProductPanel({
         <>
           <ChartCard
             title="Product performance"
-            description="Units sold compared with gross sales value for products on this page."
+            description="Sales value (selling price × quantity), units sold, and distinct orders by product on this page. Click legend items to show or hide each line; each metric uses its own axis."
             option={scatterOption}
             icon={ChartNoAxesCombined}
           />
@@ -747,6 +751,8 @@ function ProductPanel({
                     <Table.ColumnHeader>Product</Table.ColumnHeader>
                     <Table.ColumnHeader>SKU</Table.ColumnHeader>
                     <Table.ColumnHeader>TSIN</Table.ColumnHeader>
+                    <Table.ColumnHeader textAlign="end">Unit cost</Table.ColumnHeader>
+                    <Table.ColumnHeader textAlign="end">Profit / loss</Table.ColumnHeader>
                     <Table.ColumnHeader textAlign="end">Units</Table.ColumnHeader>
                     <Table.ColumnHeader textAlign="end">Orders</Table.ColumnHeader>
                     <Table.ColumnHeader textAlign="end">Average price</Table.ColumnHeader>
@@ -754,17 +760,33 @@ function ProductPanel({
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
-                  {products.map((product, index) => (
-                    <Table.Row key={`${product.sku ?? 'product'}-${product.tsin ?? index}`}>
-                      <Table.Cell>{product.title ?? 'Untitled product'}</Table.Cell>
-                      <Table.Cell>{product.sku ?? '—'}</Table.Cell>
-                      <Table.Cell>{product.tsin === undefined ? '—' : formatNumber(product.tsin)}</Table.Cell>
-                      <Table.Cell textAlign="end">{formatNumber(product.units)}</Table.Cell>
-                      <Table.Cell textAlign="end">{formatNumber(product.orders)}</Table.Cell>
-                      <Table.Cell textAlign="end">{formatCurrency(product.averagePrice)}</Table.Cell>
-                      <Table.Cell textAlign="end">{formatCurrency(product.revenue)}</Table.Cell>
-                    </Table.Row>
-                  ))}
+                  {products.map((product, index) => {
+                    const unitCost = skuUnitCost(product.sku)
+                    const profitPerUnit = unitCost === undefined ? undefined : product.averagePrice - unitCost
+                    const totalProfit = profitPerUnit === undefined ? undefined : profitPerUnit * product.units
+                    return (
+                      <Table.Row key={`${product.sku ?? 'product'}-${product.tsin ?? index}`}>
+                        <Table.Cell>{product.title ?? 'Untitled product'}</Table.Cell>
+                        <Table.Cell>{product.sku ?? '—'}</Table.Cell>
+                        <Table.Cell>{product.tsin === undefined ? '—' : String(product.tsin)}</Table.Cell>
+                        <Table.Cell textAlign="end">{unitCost === undefined ? '—' : formatCurrency(unitCost)}</Table.Cell>
+                        <Table.Cell textAlign="end">
+                          {totalProfit === undefined ? '—' : (
+                            <Text as="span" color={totalProfit >= 0 ? 'green.fg' : 'fg.error'}>
+                              {totalProfit >= 0 ? '+' : ''}{formatCurrency(totalProfit)}
+                              <Text as="span" display="block" fontSize="xs" color="fg.muted">
+                                {profitPerUnit !== undefined && `${profitPerUnit >= 0 ? '+' : ''}${formatCurrency(profitPerUnit)} / unit`}
+                              </Text>
+                            </Text>
+                          )}
+                        </Table.Cell>
+                        <Table.Cell textAlign="end">{formatNumber(product.units)}</Table.Cell>
+                        <Table.Cell textAlign="end">{formatNumber(product.orders)}</Table.Cell>
+                        <Table.Cell textAlign="end">{formatCurrency(product.averagePrice)}</Table.Cell>
+                        <Table.Cell textAlign="end">{formatCurrency(product.revenue)}</Table.Cell>
+                      </Table.Row>
+                    )
+                  })}
                 </Table.Body>
               </Table.Root>
             </Box>
@@ -792,7 +814,9 @@ function ProductPanel({
               </Flex>
             </Flex>
           </Card.Root>
-          <Text fontSize="xs" color="fg.muted">{productData.revenueDefinition}</Text>
+          <Text fontSize="xs" color="fg.muted">
+            {productData.revenueDefinition} Estimated profit / loss uses the C&lt;amount&gt; in the SKU as unit cost and calculates (average selling price - unit cost) × units; it excludes Takealot fees and other costs. Rows without that SKU pattern have no profit estimate.
+          </Text>
         </>
       )}
     </Stack>
@@ -925,8 +949,8 @@ function OrdersPanel({
               <Table.Body>
                 {rows.map((row) => (
                   <Table.Row key={row.key}>
-                    <Table.Cell>{formatNumber(row.orderId)}</Table.Cell>
-                    <Table.Cell>{row.itemId === undefined ? '—' : formatNumber(row.itemId)}</Table.Cell>
+                    <Table.Cell>{String(row.orderId)}</Table.Cell>
+                    <Table.Cell>{row.itemId === undefined ? '—' : String(row.itemId)}</Table.Cell>
                     <Table.Cell>{row.date ? formatReportDate(row.date) : '—'}</Table.Cell>
                     <Table.Cell>{row.title ?? '—'}</Table.Cell>
                     <Table.Cell>{row.sku ?? '—'}</Table.Cell>
