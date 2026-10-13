@@ -87,7 +87,6 @@ function OrderForm({
   const [unitCost, setUnitCost] = useState(initial?.items[0]?.unitCost ?? 0)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [productOpen, setProductOpen] = useState(false)
   const selectedProduct = products.find((product) => product.id === productId)
   const submit = async () => {
     if (!supplierId || !productId || quantity <= 0 || unitCost < 0)
@@ -142,59 +141,25 @@ function OrderForm({
           </Text>
           <Input type="date" value={expectedDate} onChange={(event) => setExpectedDate(event.target.value)} />
         </Box>
-        <Box position="relative">
+        <Box>
           <Text fontSize="xs" mb="1">
             <Package size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
             Product
           </Text>
-          <Button
-            variant="outline"
-            w="full"
-            justifyContent="flex-start"
-            onClick={() => setProductOpen((value) => !value)}
-          >
-            <ProductThumb product={selectedProduct} />
-            {selectedProduct ? `${selectedProduct.name} (${selectedProduct.sku})` : 'Select product'}
-          </Button>
-          {productOpen && (
-            <VStack
-              position="absolute"
-              zIndex="dropdown"
-              top="68px"
-              left="0"
-              right="0"
-              align="stretch"
-              bg="bg.panel"
-              borderWidth="1px"
-              borderRadius="md"
-              shadow="lg"
-              maxH="260px"
-              overflowY="auto"
-              gap="0"
-            >
-              {products.map((product) => (
-                <Button
-                  key={product.id}
-                  variant="ghost"
-                  justifyContent="flex-start"
-                  borderRadius="none"
-                  onClick={() => {
-                    setProductId(product.id)
-                    setUnitCost(product.purchaseCost ?? 0)
-                    setProductOpen(false)
-                  }}
-                >
-                  <ProductThumb product={product} />{' '}
-                  <Box textAlign="left">
-                    <Text fontSize="sm">{product.name}</Text>
-                    <Text fontSize="xs" color="secondary">
-                      {product.sku}
-                    </Text>
-                  </Box>
-                </Button>
-              ))}
-            </VStack>
-          )}
+          <SearchableSelect
+            options={products.map((product) => ({
+              value: product.id,
+              label: `${product.name} (${product.sku})`,
+            }))}
+            value={productId}
+            onChange={(value) => {
+              setProductId(value)
+              const product = products.find((item) => item.id === value)
+              setUnitCost(product?.purchaseCost ?? 0)
+            }}
+            placeholder="Search and select a product"
+            emptyMessage="No products found."
+          />
         </Box>
         <Box>
           <Text fontSize="xs" mb="1">

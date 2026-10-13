@@ -1,5 +1,6 @@
-import { Combobox } from '@base-ui/react/combobox'
-import { Input } from '@chakra-ui/react'
+import { useEffect } from 'react'
+import { Combobox, Portal, useListCollection } from '@chakra-ui/react'
+import { Check, ChevronDown, X } from 'lucide-react'
 
 export interface SearchableSelectOption {
   value: string
@@ -23,43 +24,75 @@ export function SearchableSelect({
   emptyMessage?: string
   width?: string
 }) {
-  const selectedOption = options.find((option) => option.value === value) ?? null
+  const optionsSignature = JSON.stringify(options)
+  const { collection, filter, set } = useListCollection({
+    initialItems: options,
+    itemToString: (option) => option.label,
+    itemToValue: (option) => option.value,
+    filter: (itemText, filterText) =>
+      itemText.toLocaleLowerCase().includes(filterText.toLocaleLowerCase()),
+  })
+
+  useEffect(() => {
+    set(options)
+  }, [optionsSignature, set])
 
   return (
     <Combobox.Root
-      items={options}
-      value={selectedOption}
-      onValueChange={(option) => onChange(option?.value ?? '')}
-      itemToStringLabel={(option) => option.label}
-      itemToStringValue={(option) => option.value}
-      isItemEqualToValue={(option, selected) => option.value === selected.value}
-      autoHighlight
+      collection={collection}
+      value={value ? [value] : []}
+      onValueChange={(details) => onChange(details.value[0] ?? '')}
+      onInputValueChange={(details) => filter(details.inputValue)}
+      openOnClick
+      disabled={disabled}
+      size="sm"
+      width={width}
     >
-      <Combobox.Input
-        render={<Input size="sm" w={width} disabled={disabled} />}
-        placeholder={placeholder}
-        aria-label={placeholder}
-      />
-      <Combobox.Portal>
-        <Combobox.Positioner className="z-50">
-          <Combobox.Popup className="max-h-72 min-w-[var(--anchor-width)] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md">
-            <Combobox.List className="max-h-64 overflow-y-auto">
-              {options.map((option) => (
-                <Combobox.Item
-                  key={option.value}
-                  value={option}
-                  className="cursor-pointer rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-                >
-                  {option.label}
-                </Combobox.Item>
-              ))}
-              <Combobox.Empty className="px-2 py-2 text-center text-sm text-muted-foreground">
-                {emptyMessage}
-              </Combobox.Empty>
-            </Combobox.List>
-          </Combobox.Popup>
+      <Combobox.Control>
+        <Combobox.Input placeholder={placeholder} aria-label={placeholder} />
+        <Combobox.IndicatorGroup>
+          <Combobox.ClearTrigger aria-label="Clear selection">
+            <X size={14} />
+          </Combobox.ClearTrigger>
+          <Combobox.Trigger aria-label="Show options">
+            <ChevronDown size={16} />
+          </Combobox.Trigger>
+        </Combobox.IndicatorGroup>
+      </Combobox.Control>
+      <Portal>
+        <Combobox.Positioner>
+          <Combobox.Content
+            bg="bg.panel"
+            borderWidth="1px"
+            borderColor="border"
+            borderRadius="md"
+            boxShadow="lg"
+            maxH="72"
+            overflowY="auto"
+            zIndex="popover"
+            width="var(--reference-width)"
+          >
+            <Combobox.Empty px="3" py="2" textAlign="center" color="fg.muted" fontSize="sm">
+              {emptyMessage}
+            </Combobox.Empty>
+            {collection.items.map((option) => (
+              <Combobox.Item
+                key={option.value}
+                item={option}
+                px="3"
+                py="2"
+                cursor="pointer"
+                _highlighted={{ bg: 'bg.subtle' }}
+              >
+                <Combobox.ItemText>{option.label}</Combobox.ItemText>
+                <Combobox.ItemIndicator>
+                  <Check size={14} />
+                </Combobox.ItemIndicator>
+              </Combobox.Item>
+            ))}
+          </Combobox.Content>
         </Combobox.Positioner>
-      </Combobox.Portal>
+      </Portal>
     </Combobox.Root>
   )
 }
