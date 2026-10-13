@@ -91,7 +91,7 @@ const validDate = (value: string) => {
 const toErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback
 const skuUnitCost = (sku?: string) => {
-  const costMatch = /^C(\d+)(?:$|[^0-9])/i.exec(sku?.trim() ?? '')
+  const costMatch = /[CR](\d+)(?!\d)/i.exec(sku?.trim() ?? '')
   return costMatch ? Number(costMatch[1]) : undefined
 }
 const escapeChartText = (value: string) =>
@@ -268,6 +268,8 @@ function MetricCard({
   return (
     <MotionCard
       variant="outline"
+      minW="0"
+      w="full"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
@@ -321,7 +323,7 @@ function ChartCard({
 
 function ErrorPanel({ message, retry }: { message: string; retry: () => void }) {
   return (
-    <Card.Root variant="outline">
+    <Card.Root variant="outline" minW="0" w="full">
       <Card.Body>
         <Flex align="start" gap="3">
           <AlertCircle size={18} aria-hidden="true" />
@@ -764,19 +766,54 @@ function ProductPanel({
                 <Badge variant="subtle">{formatNumber(productData.pagination.total)} products</Badge>
               </Flex>
             </Card.Header>
-            <Box overflowX="auto">
-              <Table.Root size="sm">
+            <Stack display={{ base: 'flex', lg: 'none' }} gap="3" px="4" pb="4">
+              {products.map((product, index) => {
+                const unitCost = skuUnitCost(product.sku)
+                const profitPerUnit = unitCost === undefined ? undefined : product.averagePrice - unitCost
+                const totalProfit = profitPerUnit === undefined ? undefined : profitPerUnit * product.units
+                return (
+                  <Card.Root key={`${product.sku ?? 'product'}-${product.tsin ?? index}`} variant="subtle">
+                    <Card.Body gap="3">
+                      <Box minW="0">
+                        <Text fontWeight="semibold" overflowWrap="anywhere">{product.title ?? 'Untitled product'}</Text>
+                        <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                          SKU {product.sku ?? '—'} · TSIN {product.tsin === undefined ? '—' : String(product.tsin)}
+                        </Text>
+                      </Box>
+                      <SimpleGrid columns={2} gap="3">
+                        <Box><Text fontSize="xs" color="fg.muted">Unit cost</Text><Text>{unitCost === undefined ? '—' : formatCurrency(unitCost)}</Text></Box>
+                        <Box>
+                          <Text fontSize="xs" color="fg.muted">Profit / loss</Text>
+                          {totalProfit === undefined ? <Text>—</Text> : (
+                            <Text color={totalProfit >= 0 ? 'green.fg' : 'fg.error'}>
+                              {totalProfit >= 0 ? '+' : ''}{formatCurrency(totalProfit)}
+                              <Text as="span" display="block" fontSize="xs" color="fg.muted">
+                                {profitPerUnit !== undefined && `${profitPerUnit >= 0 ? '+' : ''}${formatCurrency(profitPerUnit)} / unit`}
+                              </Text>
+                            </Text>
+                          )}
+                        </Box>
+                        <Box><Text fontSize="xs" color="fg.muted">Units</Text><Text>{formatNumber(product.units)}</Text></Box>
+                        <Box><Text fontSize="xs" color="fg.muted">Orders</Text><Text>{formatNumber(product.orders)}</Text></Box>
+                        <Box><Text fontSize="xs" color="fg.muted">Average price</Text><Text>{formatCurrency(product.averagePrice)}</Text></Box>
+                        <Box><Text fontSize="xs" color="fg.muted">Sales value</Text><Text>{formatCurrency(product.revenue)}</Text></Box>
+                      </SimpleGrid>
+                    </Card.Body>
+                  </Card.Root>
+                )
+              })}
+            </Stack>
+            <Box display={{ base: 'none', lg: 'block' }} minW="0" w="full">
+              <Table.Root size="sm" tableLayout="fixed" w="full">
                 <Table.Header>
                   <Table.Row>
-                    <Table.ColumnHeader>Product</Table.ColumnHeader>
-                    <Table.ColumnHeader>SKU</Table.ColumnHeader>
-                    <Table.ColumnHeader>TSIN</Table.ColumnHeader>
-                    <Table.ColumnHeader textAlign="end">Unit cost</Table.ColumnHeader>
-                    <Table.ColumnHeader textAlign="end">Profit / loss</Table.ColumnHeader>
-                    <Table.ColumnHeader textAlign="end">Units</Table.ColumnHeader>
-                    <Table.ColumnHeader textAlign="end">Orders</Table.ColumnHeader>
-                    <Table.ColumnHeader textAlign="end">Average price</Table.ColumnHeader>
-                    <Table.ColumnHeader textAlign="end">Sales value</Table.ColumnHeader>
+                    <Table.ColumnHeader w="28%">Product</Table.ColumnHeader>
+                    <Table.ColumnHeader w="11%" textAlign="end">Unit cost</Table.ColumnHeader>
+                    <Table.ColumnHeader w="15%" textAlign="end">Profit / loss</Table.ColumnHeader>
+                    <Table.ColumnHeader w="8%" textAlign="end">Units</Table.ColumnHeader>
+                    <Table.ColumnHeader w="8%" textAlign="end">Orders</Table.ColumnHeader>
+                    <Table.ColumnHeader w="14%" textAlign="end">Average price</Table.ColumnHeader>
+                    <Table.ColumnHeader w="16%" textAlign="end">Sales value</Table.ColumnHeader>
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
@@ -786,11 +823,14 @@ function ProductPanel({
                     const totalProfit = profitPerUnit === undefined ? undefined : profitPerUnit * product.units
                     return (
                       <Table.Row key={`${product.sku ?? 'product'}-${product.tsin ?? index}`}>
-                        <Table.Cell>{product.title ?? 'Untitled product'}</Table.Cell>
-                        <Table.Cell>{product.sku ?? '—'}</Table.Cell>
-                        <Table.Cell>{product.tsin === undefined ? '—' : String(product.tsin)}</Table.Cell>
-                        <Table.Cell textAlign="end">{unitCost === undefined ? '—' : formatCurrency(unitCost)}</Table.Cell>
-                        <Table.Cell textAlign="end">
+                        <Table.Cell overflowWrap="anywhere">
+                          <Text fontWeight="medium">{product.title ?? 'Untitled product'}</Text>
+                          <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                            SKU {product.sku ?? '—'} · TSIN {product.tsin === undefined ? '—' : String(product.tsin)}
+                          </Text>
+                        </Table.Cell>
+                        <Table.Cell textAlign="end" whiteSpace="nowrap">{unitCost === undefined ? '—' : formatCurrency(unitCost)}</Table.Cell>
+                        <Table.Cell textAlign="end" whiteSpace="nowrap">
                           {totalProfit === undefined ? '—' : (
                             <Text as="span" color={totalProfit >= 0 ? 'green.fg' : 'fg.error'}>
                               {totalProfit >= 0 ? '+' : ''}{formatCurrency(totalProfit)}
@@ -800,10 +840,10 @@ function ProductPanel({
                             </Text>
                           )}
                         </Table.Cell>
-                        <Table.Cell textAlign="end">{formatNumber(product.units)}</Table.Cell>
-                        <Table.Cell textAlign="end">{formatNumber(product.orders)}</Table.Cell>
-                        <Table.Cell textAlign="end">{formatCurrency(product.averagePrice)}</Table.Cell>
-                        <Table.Cell textAlign="end">{formatCurrency(product.revenue)}</Table.Cell>
+                        <Table.Cell textAlign="end" whiteSpace="nowrap">{formatNumber(product.units)}</Table.Cell>
+                        <Table.Cell textAlign="end" whiteSpace="nowrap">{formatNumber(product.orders)}</Table.Cell>
+                        <Table.Cell textAlign="end" whiteSpace="nowrap">{formatCurrency(product.averagePrice)}</Table.Cell>
+                        <Table.Cell textAlign="end" whiteSpace="nowrap">{formatCurrency(product.revenue)}</Table.Cell>
                       </Table.Row>
                     )
                   })}
@@ -949,35 +989,55 @@ function OrdersPanel({
       {!ordersData || rows.length === 0 ? (
         <Card.Root variant="outline"><Card.Body><Text>No order records were returned for this date range.</Text></Card.Body></Card.Root>
       ) : (
-        <Card.Root variant="outline">
+        <Card.Root variant="outline" minW="0" w="full">
           <Card.Header><Card.Title>Orders and sale items</Card.Title></Card.Header>
-          <Box overflowX="auto">
-            <Table.Root size="sm">
+          <Stack display={{ base: 'flex', lg: 'none' }} gap="3" px="4" pb="4">
+            {rows.map((row) => (
+              <Card.Root key={row.key} variant="subtle">
+                <Card.Body gap="3">
+                  <Flex justify="space-between" align="start" gap="3">
+                    <Box minW="0">
+                      <Text fontWeight="semibold" overflowWrap="anywhere">{row.title ?? 'Untitled product'}</Text>
+                      <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">SKU {row.sku ?? '—'}</Text>
+                    </Box>
+                    <Text fontSize="xs" color="fg.muted" flexShrink="0">{row.date ? formatReportDate(row.date) : '—'}</Text>
+                  </Flex>
+                  <SimpleGrid columns={2} gap="3">
+                    <Box><Text fontSize="xs" color="fg.muted">Order / item</Text><Text>{String(row.orderId)} / {row.itemId === undefined ? '—' : String(row.itemId)}</Text></Box>
+                    <Box><Text fontSize="xs" color="fg.muted">Quantity</Text><Text>{row.quantity === undefined ? '—' : formatNumber(row.quantity)}</Text></Box>
+                    <Box><Text fontSize="xs" color="fg.muted">Selling price</Text><Text>{row.price === undefined ? '—' : formatCurrency(row.price)}</Text></Box>
+                    <Box><Text fontSize="xs" color="fg.muted">Status / DC</Text><Text>{row.status === undefined ? '—' : String(row.status)} / {row.dc ?? '—'}</Text></Box>
+                  </SimpleGrid>
+                </Card.Body>
+              </Card.Root>
+            ))}
+          </Stack>
+          <Box display={{ base: 'none', lg: 'block' }} minW="0" w="full">
+            <Table.Root size="sm" tableLayout="fixed" w="full">
               <Table.Header>
                 <Table.Row>
-                  <Table.ColumnHeader>Order</Table.ColumnHeader>
-                  <Table.ColumnHeader>Item</Table.ColumnHeader>
-                  <Table.ColumnHeader>Date</Table.ColumnHeader>
-                  <Table.ColumnHeader>Product</Table.ColumnHeader>
-                  <Table.ColumnHeader>SKU</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Quantity</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Selling price</Table.ColumnHeader>
-                  <Table.ColumnHeader>Status</Table.ColumnHeader>
-                  <Table.ColumnHeader>DC</Table.ColumnHeader>
+                  <Table.ColumnHeader w="17%">Order / item</Table.ColumnHeader>
+                  <Table.ColumnHeader w="13%">Date</Table.ColumnHeader>
+                  <Table.ColumnHeader w="30%">Product / SKU</Table.ColumnHeader>
+                  <Table.ColumnHeader w="9%" textAlign="end">Quantity</Table.ColumnHeader>
+                  <Table.ColumnHeader w="13%" textAlign="end">Selling price</Table.ColumnHeader>
+                  <Table.ColumnHeader w="10%">Status</Table.ColumnHeader>
+                  <Table.ColumnHeader w="8%">DC</Table.ColumnHeader>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
                 {rows.map((row) => (
                   <Table.Row key={row.key}>
-                    <Table.Cell>{String(row.orderId)}</Table.Cell>
-                    <Table.Cell>{row.itemId === undefined ? '—' : String(row.itemId)}</Table.Cell>
-                    <Table.Cell>{row.date ? formatReportDate(row.date) : '—'}</Table.Cell>
-                    <Table.Cell>{row.title ?? '—'}</Table.Cell>
-                    <Table.Cell>{row.sku ?? '—'}</Table.Cell>
-                    <Table.Cell textAlign="end">{row.quantity === undefined ? '—' : formatNumber(row.quantity)}</Table.Cell>
-                    <Table.Cell textAlign="end">{row.price === undefined ? '—' : formatCurrency(row.price)}</Table.Cell>
-                    <Table.Cell>{row.status === undefined ? '—' : String(row.status)}</Table.Cell>
-                    <Table.Cell>{row.dc ?? '—'}</Table.Cell>
+                    <Table.Cell whiteSpace="nowrap">{String(row.orderId)} / {row.itemId === undefined ? '—' : String(row.itemId)}</Table.Cell>
+                    <Table.Cell whiteSpace="nowrap">{row.date ? formatReportDate(row.date) : '—'}</Table.Cell>
+                    <Table.Cell overflowWrap="anywhere">
+                      <Text>{row.title ?? '—'}</Text>
+                      <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">SKU {row.sku ?? '—'}</Text>
+                    </Table.Cell>
+                    <Table.Cell textAlign="end" whiteSpace="nowrap">{row.quantity === undefined ? '—' : formatNumber(row.quantity)}</Table.Cell>
+                    <Table.Cell textAlign="end" whiteSpace="nowrap">{row.price === undefined ? '—' : formatCurrency(row.price)}</Table.Cell>
+                    <Table.Cell overflowWrap="anywhere">{row.status === undefined ? '—' : String(row.status)}</Table.Cell>
+                    <Table.Cell overflowWrap="anywhere">{row.dc ?? '—'}</Table.Cell>
                   </Table.Row>
                 ))}
               </Table.Body>
@@ -1299,11 +1359,11 @@ export function TakealotDashboardPage() {
           <Flex
             role="tablist"
             aria-label="Takealot dashboard sections"
+            wrap="wrap"
             gap="1"
             p="1"
             bg="bg.subtle"
             borderRadius="md"
-            overflowX="auto"
           >
             {sections.map(({ id, label, icon: Icon }) => (
               <Button
@@ -1313,7 +1373,7 @@ export function TakealotDashboardPage() {
                 aria-controls={`takealot-panel-${id}`}
                 id={`takealot-tab-${id}`}
                 size="sm"
-                minW="max-content"
+                minW="0"
                 variant={activeSection === id ? 'subtle' : 'ghost'}
                 onClick={() => setActiveSection(id)}
               >
