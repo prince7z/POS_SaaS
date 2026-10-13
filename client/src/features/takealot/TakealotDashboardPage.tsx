@@ -654,7 +654,7 @@ function ProductPanel({
     setPage(1)
   }, [range.from, range.to])
   const scatterOption: EChartsOption = useMemo(() => ({
-    legend: { data: ['Sales value', 'Units sold', 'Orders'], bottom: 0, selectedMode: 'multiple' },
+    legend: { data: ['Sales value', 'Units sold', 'Orders', 'Profit / loss'], bottom: 0, selectedMode: 'multiple' },
     tooltip: {
       trigger: 'axis',
       formatter: (params) => {
@@ -663,7 +663,8 @@ function ProductPanel({
         const product = products[index]
         if (!product) return ''
         const cost = skuUnitCost(product.sku)
-        const estimatedProfit = cost === undefined ? undefined : product.averagePrice - cost
+        const estimatedProfitPerUnit = cost === undefined ? undefined : product.averagePrice - cost
+        const estimatedProfit = estimatedProfitPerUnit === undefined ? undefined : estimatedProfitPerUnit * product.units
         return [
           escapeChartText(product.title ?? 'Untitled product'),
           `SKU: ${escapeChartText(product.sku ?? '—')}`,
@@ -679,11 +680,11 @@ function ProductPanel({
           cost === undefined ? 'Unit cost: not encoded in SKU' : `Unit cost: ${formatCurrency(cost)}`,
           estimatedProfit === undefined
             ? 'Profit / loss: unavailable'
-            : `Estimated profit / loss per unit: ${formatCurrency(estimatedProfit)}`,
+            : `Estimated profit / loss: ${estimatedProfit >= 0 ? '+' : ''}${formatCurrency(estimatedProfit)}`,
         ].join('<br/>')
       },
     },
-    grid: { left: 78, right: 96, top: 34, bottom: 74 },
+    grid: { left: 140, right: 96, top: 34, bottom: 74 },
     xAxis: {
       type: 'category',
       data: products.map((product) => product.sku || product.title || 'Product'),
@@ -693,11 +694,30 @@ function ProductPanel({
       { type: 'value', name: 'Sales', position: 'left', axisLabel: { formatter: (value: number) => formatCurrency(Number(value)) } },
       { type: 'value', name: 'Units', position: 'right', axisLabel: { formatter: (value: number) => formatNumber(Number(value)) } },
       { type: 'value', name: 'Orders', position: 'right', offset: 58, axisLabel: { formatter: (value: number) => formatNumber(Number(value)) } },
+      { type: 'value', name: 'Profit / loss', position: 'left', offset: 60, axisLabel: { formatter: (value: number) => formatCurrency(Number(value)) } },
     ],
     series: [
       { name: 'Sales value', type: 'line', yAxisIndex: 0, smooth: true, showSymbol: true, data: products.map((product) => product.revenue) },
       { name: 'Units sold', type: 'line', yAxisIndex: 1, smooth: true, showSymbol: true, data: products.map((product) => product.units) },
       { name: 'Orders', type: 'line', yAxisIndex: 2, smooth: true, showSymbol: true, data: products.map((product) => product.orders) },
+      {
+        name: 'Profit / loss',
+        type: 'line',
+        yAxisIndex: 3,
+        smooth: true,
+        showSymbol: true,
+        connectNulls: false,
+        lineStyle: { color: '#64748b', type: 'dashed' },
+        data: products.map((product) => {
+          const unitCost = skuUnitCost(product.sku)
+          if (unitCost === undefined) return { value: null }
+          const profit = (product.averagePrice - unitCost) * product.units
+          return {
+            value: Math.round((profit + Number.EPSILON) * 100) / 100,
+            itemStyle: { color: profit >= 0 ? '#16a34a' : '#dc2626' },
+          }
+        }),
+      },
     ],
   }), [products])
 
@@ -733,7 +753,7 @@ function ProductPanel({
         <>
           <ChartCard
             title="Product performance"
-            description="Sales value (selling price × quantity), units sold, and distinct orders by product on this page. Click legend items to show or hide each line; each metric uses its own axis."
+            description="Sales value (selling price × quantity), units sold, distinct orders, and estimated profit/loss ((average selling price - SKU unit cost) × units) by product. Click legend items to show or hide lines; profit/loss is unavailable when SKU cost cannot be read."
             option={scatterOption}
             icon={ChartNoAxesCombined}
           />
