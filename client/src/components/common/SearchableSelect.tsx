@@ -42,6 +42,9 @@ export function SearchableSelect({
       collection={collection}
       value={value ? [value] : []}
       onValueChange={(details) => onChange(details.value[0] ?? '')}
+      onOpenChange={(details) => {
+        if (details.open) filter('')
+      }}
       onInputValueChange={(details) => filter(details.inputValue)}
       openOnClick
       disabled={disabled}
