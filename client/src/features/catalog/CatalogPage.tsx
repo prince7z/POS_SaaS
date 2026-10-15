@@ -18,10 +18,12 @@ import {
 } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { Box, Card as ChakraCard, Checkbox, Grid, HStack, Heading, Image, NativeSelect, Stack, Text } from '@chakra-ui/react'
+import { Barcode } from 'lucide-react'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageSizeControl } from '@/components/common/PageSizeControl'
 import { PageHeader } from '@/components/common/PageHeader'
 import { QrImageUploader } from '@/components/common/QrImageUploader'
+import { BarcodeCameraScanner } from '@/components/common/BarcodeCameraScanner'
 import { SearchableSelect } from '@/components/common/SearchableSelect'
 import {
   Button,
@@ -69,6 +71,7 @@ import {
   createBrand,
   createCategory,
   createProduct,
+  checkProductIdentifierAvailability,
   downloadTakealotOfferImage,
   deleteBrand,
   deleteCategory,
@@ -90,6 +93,13 @@ import { showSuccess, showError } from '@/components/feedback/notifications'
 import { formatCurrency } from '@/lib/formatters'
 
 type Section = 'products' | 'categories' | 'brands'
+type IdentifierStatus = 'idle' | 'tooShort' | 'checking' | 'available' | 'taken' | 'error'
+type IdentifierCheck = {
+  skuValue: string | null
+  barcodeValue: string | null
+  skuAvailable: boolean | null
+  barcodeAvailable: boolean | null
+}
 
 function useDebounced(value: string) {
   const [result, setResult] = useState(value)
@@ -98,6 +108,24 @@ function useDebounced(value: string) {
     return () => window.clearTimeout(timer)
   }, [value])
   return result
+}
+
+function getIdentifierStatus(
+  value: string,
+  debouncedValue: string,
+  check: IdentifierCheck | null,
+  checkError: string,
+  field: 'sku' | 'barcode',
+): IdentifierStatus {
+  const normalized = value.trim()
+  if (!normalized) return 'idle'
+  if (normalized.length < 3) return 'tooShort'
+  if (normalized !== debouncedValue.trim()) return 'checking'
+  if (!check) return checkError ? 'error' : 'checking'
+  const checkedValue = field === 'sku' ? check.skuValue : check.barcodeValue
+  if (checkedValue !== normalized) return 'checking'
+  const available = field === 'sku' ? check.skuAvailable : check.barcodeAvailable
+  return available === null ? 'checking' : available ? 'available' : 'taken'
 }
 
 function ErrorState({ message, retry }: { message: string; retry: () => void }) {
@@ -225,7 +253,14 @@ function ProductDialog({
   const [suggestions, setSuggestions] = useState<TakealotOfferSuggestion[]>([])
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
   const [suggestionsError, setSuggestionsError] = useState('')
+  const debouncedSku = useDebounced(form.sku)
+  const debouncedBarcode = useDebounced(form.barcode ?? '')
+  const [identifierCheck, setIdentifierCheck] = useState<IdentifierCheck | null>(null)
+  const [identifierCheckError, setIdentifierCheckError] = useState('')
+  const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false)
+  const barcodeInputRef = useRef<HTMLInputElement>(null)
   const lookupRequest = useRef(0)
+  const identifierRequest = useRef(0)
 
   useEffect(() => {
     const onCompanyUpdated = () => setTakealotConfigured(localStorage.getItem('takealotapiexist') === 'true')
@@ -263,9 +298,61 @@ function ProductDialog({
     setTakealotImageLoading(false)
     setTakealotImagePreview('')
     setError('')
+    setBarcodeScannerOpen(false)
+    identifierRequest.current += 1
+    setIdentifierCheck(null)
+    setIdentifierCheckError('')
   }, [initial, open])
+
+  useEffect(() => {
+    if (!open) return
+    const timer = window.setTimeout(() => {
+      barcodeInputRef.current?.focus()
+      barcodeInputRef.current?.select()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [initial?.id, open])
+
   const set = <K extends keyof ProductPayload>(key: K, value: ProductPayload[K]) =>
     setForm((current) => ({ ...current, [key]: value }))
+
+  useEffect(() => {
+    const requestId = ++identifierRequest.current
+    const sku = debouncedSku.trim()
+    const barcode = debouncedBarcode.trim()
+    const checkableSku = sku.length >= 3 ? sku : undefined
+    const checkableBarcode = barcode.length >= 3 ? barcode : undefined
+
+    setIdentifierCheck(null)
+    setIdentifierCheckError('')
+    if (!open || (!checkableSku && !checkableBarcode)) return
+
+    checkProductIdentifierAvailability({
+      ...(checkableSku && { sku: checkableSku }),
+      ...(checkableBarcode && { barcode: checkableBarcode }),
+      ...(initial?.id && { excludeId: initial.id }),
+    })
+      .then((result) => {
+        if (requestId === identifierRequest.current) {
+          setIdentifierCheck({
+            skuValue: checkableSku ?? null,
+            barcodeValue: checkableBarcode ?? null,
+            ...result,
+          })
+        }
+      })
+      .catch((cause) => {
+        if (requestId === identifierRequest.current) {
+          setIdentifierCheckError(
+            cause instanceof Error ? cause.message : 'Unable to check SKU and barcode availability.',
+          )
+        }
+      })
+
+    return () => {
+      if (requestId === identifierRequest.current) identifierRequest.current += 1
+    }
+  }, [debouncedSku, debouncedBarcode, initial?.id, open])
 
   useEffect(() => {
     const requestId = ++lookupRequest.current
@@ -298,7 +385,37 @@ function ProductDialog({
     return () => window.clearTimeout(timer)
   }, [lookupType, lookupValue, takealotConfigured, fillByTakealot, open])
 
+  const skuStatus = getIdentifierStatus(form.sku, debouncedSku, identifierCheck, identifierCheckError, 'sku')
+  const barcodeStatus = getIdentifierStatus(
+    form.barcode ?? '',
+    debouncedBarcode,
+    identifierCheck,
+    identifierCheckError,
+    'barcode',
+  )
+  const setBarcode = (barcode: string) => {
+    set('barcode', barcode)
+    if (form.takealotProductId && barcode.trim() !== form.takealotProductId) {
+      set('takealotProductId', null)
+      set('takealotSync', false)
+    }
+  }
+
   const submit = async () => {
+    const skuChanged = !initial || form.sku.trim() !== initial.sku.trim()
+    const barcodeChanged = !initial || (form.barcode ?? '').trim() !== (initial.barcode ?? '').trim()
+    if ((skuChanged && skuStatus === 'tooShort') || (barcodeChanged && barcodeStatus === 'tooShort')) {
+      setError('SKU and barcode must be at least 3 characters when provided.')
+      return
+    }
+    if ((skuChanged && skuStatus === 'taken') || (barcodeChanged && barcodeStatus === 'taken')) {
+      setError('This SKU or barcode is already in use by another product.')
+      return
+    }
+    if ((skuChanged && skuStatus === 'checking') || (barcodeChanged && barcodeStatus === 'checking')) {
+      setError('Wait for the SKU and barcode availability checks to finish.')
+      return
+    }
     if (takealotImageLoading) {
       setError('Wait for the Takealot image import to finish before saving.')
       return
@@ -413,7 +530,8 @@ function ProductDialog({
     }
   }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       {' '}
       <DialogContent className="max-h-[92vh] overflow-y-auto p-8 sm:max-w-3xl">
         <DialogHeader>
@@ -432,21 +550,77 @@ function ProductDialog({
             </Field>
             <Field>
               <FieldLabel>SKU</FieldLabel>
-              <Input value={form.sku} onChange={(e) => set('sku', e.target.value)} placeholder="SKU-001" />
+              <Input
+                value={form.sku}
+                onChange={(e) => set('sku', e.target.value)}
+                placeholder="SKU-001"
+                aria-invalid={skuStatus === 'tooShort' || skuStatus === 'taken'}
+                className={
+                  skuStatus === 'available'
+                    ? 'border-emerald-500 focus-visible:ring-emerald-500'
+                    : skuStatus === 'tooShort' || skuStatus === 'taken'
+                      ? 'border-destructive focus-visible:ring-destructive'
+                      : skuStatus === 'error'
+                        ? 'border-amber-500 focus-visible:ring-amber-500'
+                        : ''
+                }
+              />
+              {skuStatus === 'tooShort' && <FieldError>Enter at least 3 characters.</FieldError>}
+              {skuStatus === 'taken' && <FieldError>This SKU is already in use.</FieldError>}
+              {skuStatus === 'available' && (
+                <FieldDescription className="text-emerald-600">SKU is available.</FieldDescription>
+              )}
+              {skuStatus === 'checking' && <FieldDescription>Checking SKU availability…</FieldDescription>}
+              {skuStatus === 'error' && (
+                <FieldDescription className="text-amber-600">{identifierCheckError}</FieldDescription>
+              )}
             </Field>
             <Field>
               <FieldLabel>Barcode</FieldLabel>
-              <Input
-                value={form.barcode ?? ''}
-                onChange={(e) => {
-                  const nextBarcode = e.target.value
-                  set('barcode', nextBarcode)
-                  if (form.takealotProductId && nextBarcode.trim() !== form.takealotProductId) {
-                    set('takealotProductId', null)
-                    set('takealotSync', false)
+              <HStack gap="2">
+                <Input
+                  ref={barcodeInputRef}
+                  value={form.barcode ?? ''}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') event.preventDefault()
+                  }}
+                  placeholder="Scan or enter barcode"
+                  aria-invalid={barcodeStatus === 'tooShort' || barcodeStatus === 'taken'}
+                  className={
+                    barcodeStatus === 'available'
+                      ? 'border-emerald-500 focus-visible:ring-emerald-500'
+                      : barcodeStatus === 'tooShort' || barcodeStatus === 'taken'
+                        ? 'border-destructive focus-visible:ring-destructive'
+                        : barcodeStatus === 'error'
+                          ? 'border-amber-500 focus-visible:ring-amber-500'
+                          : ''
                   }
-                }}
-              />
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label="Scan barcode with camera"
+                  title="Scan barcode with camera"
+                  onClick={() => setBarcodeScannerOpen(true)}
+                >
+                  <Barcode size={16} />
+                  Scan
+                </Button>
+              </HStack>
+              <FieldDescription>Focus this field before using a hardware scanner, or scan with your camera.</FieldDescription>
+              {barcodeStatus === 'tooShort' && (
+                <FieldError>Enter at least 3 characters or leave it empty.</FieldError>
+              )}
+              {barcodeStatus === 'taken' && <FieldError>This barcode is already in use.</FieldError>}
+              {barcodeStatus === 'available' && (
+                <FieldDescription className="text-emerald-600">Barcode is available.</FieldDescription>
+              )}
+              {barcodeStatus === 'checking' && <FieldDescription>Checking barcode availability…</FieldDescription>}
+              {barcodeStatus === 'error' && (
+                <FieldDescription className="text-amber-600">{identifierCheckError}</FieldDescription>
+              )}
             </Field>
             <Field>
               <Checkbox.Root
@@ -782,7 +956,20 @@ function ProductDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+      <BarcodeCameraScanner
+        open={barcodeScannerOpen}
+        onClose={() => setBarcodeScannerOpen(false)}
+        onDetected={(barcode) => {
+          setBarcode(barcode)
+          setBarcodeScannerOpen(false)
+          window.setTimeout(() => {
+            barcodeInputRef.current?.focus()
+            barcodeInputRef.current?.select()
+          }, 0)
+        }}
+      />
+    </>
   )
 }
 

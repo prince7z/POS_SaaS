@@ -50,7 +50,7 @@ export const env = {
 	testAuthBypass: readBoolean("TEST_AUTH_BYPASS", false),
 	databaseUrl: readRequired("PSQL"),
 	jwtSecret: readRequired("JWT_SECRET"),
-	accessTokenTtl: readOptional("ACCESS_TOKEN_TTL") ?? "15m",
+	accessTokenTtl: readOptional("ACCESS_TOKEN_TTL") ?? "24h",
 	refreshTokenTtlDays: Number(readOptional("REFRESH_TOKEN_TTL_DAYS") ?? "30"),
 	mockBaseUrl: readOptional("MOCK_BASE_URL") ?? readOptional("MOCK_BASE") ?? "https://images.unsplash.com",
 	aws: {

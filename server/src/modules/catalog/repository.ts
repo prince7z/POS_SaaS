@@ -62,6 +62,8 @@ const productRelations = {
 export const findProduct = (db: Db, companyId: string, id: string) => db.product.findFirst({ where: { id, companyId, deletedAt: null }, include: productRelations });
 export const findProductBySku = (db: Db, companyId: string, sku: string, excludeId?: string) => db.product.findFirst({ where: { companyId, sku, ...(excludeId && { id: { not: excludeId } }) } });
 export const findProductByBarcode = (db: Db, companyId: string, barcode: string, excludeId?: string) => db.product.findFirst({ where: { companyId, barcode, ...(excludeId && { id: { not: excludeId } }) } });
+export const findActiveProductByBarcode = (db: Db, companyId: string, barcode: string) =>
+	db.product.findFirst({ where: { companyId, barcode, ...activeProductWhere }, include: productRelations });
 export const countProducts = (db: Db, where: Prisma.ProductWhereInput) => db.product.count({ where });
 export const listProducts = (db: Db, where: Prisma.ProductWhereInput, skip: number | undefined, take: number | undefined, sortBy: "name" | "sellingPrice" | "stockQuantity" | "createdAt", sortOrder: "asc" | "desc") =>
 	db.product.findMany({ where, orderBy: { [sortBy]: sortOrder }, ...(skip !== undefined && { skip }), ...(take !== undefined && { take }), include: productRelations });

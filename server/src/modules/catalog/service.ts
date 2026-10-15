@@ -1,4 +1,4 @@
-import { Access, type Prisma } from "@prisma/client";
+import { Access, Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { createMediaDownloadUrl, createMediaUploadUrls, createStagedMediaUploadUrls, deleteMediaObject, toPublicMediaUrl } from "../../integrations/aws/media";
@@ -53,10 +53,13 @@ export const productListSchema = z.object({
 	includeInactive: booleanQuery.optional().default(false),
 });
 const price = z.coerce.number().min(0);
+const barcodeValue = z.string().trim().max(100)
+	.transform((value) => value || null)
+	.refine((value) => value === null || value.length >= 3, "Barcode must be at least 3 characters");
 const baseProductSchema = z.object({
 	name: z.string().trim().min(1).max(200),
 	sku: z.string().trim().min(1).max(100),
-	barcode: optionalText(100),
+	barcode: barcodeValue.nullable().optional(),
 	description: optionalText(5000),
 	categoryId: uuid,
 	brandId: uuid.nullable().optional(),
@@ -79,6 +82,14 @@ export const productSchema = baseProductSchema.extend({
 	imageKeys: z.array(stagedImageKeySchema).max(10).default([]),
 });
 export const productUpdateSchema = baseProductSchema.partial();
+export const productIdentifierAvailabilitySchema = z.object({
+	sku: z.string().trim().min(3).max(100).optional(),
+	barcode: z.string().trim().min(3).max(100).optional(),
+	excludeId: uuid.optional(),
+}).strict().refine((value) => value.sku !== undefined || value.barcode !== undefined, {
+	message: "Provide a SKU or barcode to check",
+});
+export const productBarcodeLookupSchema = z.string().trim().min(1).max(100);
 export const takealotOfferLookupSchema = z.object({
 	type: z.enum(["BARCODE", "SKU", "OFFER_ID"]),
 	query: z.string().trim().min(3).max(150),
@@ -99,6 +110,23 @@ export const stagedUploadSchema = z.object({
 
 const safeAudit = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const catalogError = (code: string, message: string, statusCode = 400) => new AppError(message, statusCode, code);
+const translateProductUniqueViolation = async (
+	error: unknown,
+	companyId: string,
+	input: { sku?: string; barcode?: string | null },
+	excludeId?: string,
+): Promise<never> => {
+	if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+		throw error;
+	}
+	if (input.sku && await repository.findProductBySku(prisma, companyId, input.sku, excludeId)) {
+		throw catalogError("PRODUCT_SKU_EXISTS", "SKU already exists", 409);
+	}
+	if (input.barcode && await repository.findProductByBarcode(prisma, companyId, input.barcode, excludeId)) {
+		throw catalogError("PRODUCT_BARCODE_EXISTS", "Barcode already exists", 409);
+	}
+	throw catalogError("PRODUCT_IDENTIFIER_EXISTS", "A product with this SKU or barcode already exists", 409);
+};
 const ensureImageContentType = (contentType: string): void => {
 	if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) throw catalogError("INVALID_MEDIA_TYPE", "Catalog media must be JPEG, PNG, or WebP");
 };
@@ -384,6 +412,29 @@ export const getProduct = async (companyId: string, id: string) => {
 	return productView(product);
 };
 
+export const findProductByBarcode = async (companyId: string, barcode: string) => {
+	const product = await repository.findActiveProductByBarcode(prisma, companyId, barcode);
+	if (!product) throw catalogError("PRODUCT_BARCODE_NOT_FOUND", "No active product was found for this barcode", 404);
+	return productView(product);
+};
+
+export const checkProductIdentifierAvailability = async (
+	companyId: string,
+	input: z.infer<typeof productIdentifierAvailabilitySchema>,
+) => {
+	if (input.excludeId && !await repository.findProduct(prisma, companyId, input.excludeId)) {
+		throw catalogError("PRODUCT_NOT_FOUND", "Product not found", 404);
+	}
+	const [skuMatch, barcodeMatch] = await Promise.all([
+		input.sku ? repository.findProductBySku(prisma, companyId, input.sku, input.excludeId) : null,
+		input.barcode ? repository.findProductByBarcode(prisma, companyId, input.barcode, input.excludeId) : null,
+	]);
+	return {
+		skuAvailable: input.sku === undefined ? null : skuMatch === null,
+		barcodeAvailable: input.barcode === undefined ? null : barcodeMatch === null,
+	};
+};
+
 export const findTakealotOffers = (apiKey: string, input: z.infer<typeof takealotOfferLookupSchema>) =>
 	takealotClient.findOffer(apiKey, input.type, input.query).then(normalizeTakealotOffer);
 
@@ -527,7 +578,7 @@ export const createProduct = async (companyId: string, userId: string, input: z.
 		const created = await repository.createProduct(tx, { ...input, companyId, stockQuantity: input.stockQuantity, averageCost: input.purchaseCost, imageKeys: input.imageKeys, takealotProductId: input.takealotProductId, takealotSync: input.takealotSync });
 		await repository.createAuditLog(tx, { companyId, actorUserId: userId, action: "PRODUCT_CREATED", entityType: "Product", entityId: created.id, afterData: safeAudit({ name: created.name, sku: created.sku, sellingPrice: created.sellingPrice }) });
 		return created;
-	});
+	}).catch((error: unknown) => translateProductUniqueViolation(error, companyId, input));
 	return productView(product);
 };
 
@@ -552,7 +603,7 @@ export const updateProduct = async (companyId: string, userId: string, id: strin
 		const priceChanged = ["rrp", "sellingPrice", "purchaseCost"].some((field) => (input as Record<string, unknown>)[field] !== undefined);
 		await repository.createAuditLog(tx, { companyId, actorUserId: userId, action: "PRODUCT_UPDATED", entityType: "Product", entityId: id, beforeData: safeAudit({ name: before.name, sku: before.sku, rrp: before.rrp, sellingPrice: before.sellingPrice, purchaseCost: before.purchaseCost }), afterData: safeAudit({ name: updated.name, sku: updated.sku, rrp: updated.rrp, sellingPrice: updated.sellingPrice, purchaseCost: updated.purchaseCost }), metadata: safeAudit({ priceChanged }) });
 		return updated;
-	});
+	}).catch((error: unknown) => translateProductUniqueViolation(error, companyId, input, id));
 	if (input.imageKeys) {
 		const removedKeys = before.imageKeys.filter((key) => !input.imageKeys!.includes(key));
 		for (const key of removedKeys) {

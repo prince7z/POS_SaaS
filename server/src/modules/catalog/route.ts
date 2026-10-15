@@ -101,6 +101,14 @@ router.delete("/brands/:id/logo", ...brandAccess, async (request, response) => {
 router.get("/products", ...productAccess, async (request, response) => {
 	return sendSuccess(response, await service.listProducts(authContext(request).companyId, service.parse(service.productListSchema, request.query)));
 });
+router.post("/products/check-identifiers", ...productAccess, async (request, response) => {
+	const input = service.parse(service.productIdentifierAvailabilitySchema, request.body);
+	return sendSuccess(response, await service.checkProductIdentifierAvailability(authContext(request).companyId, input));
+});
+router.get("/products/by-barcode/:barcode", ...productAccess, async (request, response) => {
+	const barcode = service.parse(service.productBarcodeLookupSchema, request.params.barcode);
+	return sendSuccess(response, await service.findProductByBarcode(authContext(request).companyId, barcode));
+});
 router.get("/takealot/offers/image", ...productAccess, async (request, response) => {
 	const input = service.parse(service.takealotImageDownloadSchema, request.query);
 	const image = await service.downloadTakealotOfferImage(input.imageUrl);

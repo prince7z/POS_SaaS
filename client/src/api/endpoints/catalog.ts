@@ -128,6 +128,23 @@ export function getProducts(filters: ProductFilters) {
     `/catalog/products?${params({ page, limit, includeInactive: filters.includeInactive ?? false, ...rest })}`,
   )
 }
+export function getProductByBarcode(barcode: string) {
+  return apiRequest<CatalogProduct>(`/catalog/products/by-barcode/${encodeURIComponent(barcode)}`)
+}
+export interface ProductIdentifierAvailability {
+  skuAvailable: boolean | null
+  barcodeAvailable: boolean | null
+}
+export function checkProductIdentifierAvailability(input: {
+  sku?: string
+  barcode?: string
+  excludeId?: string
+}) {
+  return apiRequest<ProductIdentifierAvailability>('/catalog/products/check-identifiers', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
 export type TakealotLookupType = 'BARCODE' | 'SKU' | 'OFFER_ID'
 export interface TakealotOfferSuggestion {
   title: string

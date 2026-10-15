@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Box, Button, Grid, HStack, IconButton, VStack } from '@chakra-ui/react'
 import { RefreshCw, X } from 'lucide-react'
 import { PageContainer } from '@/components/layout/PageContainer'
@@ -6,8 +6,10 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { appConfig } from '@/config/app'
 import { createSaleDraft, completeSale, type SaleDiscountType, type SalePaymentMethod } from '@/api/endpoints/sales'
 import { showSuccess, showError, showInfo } from '@/components/feedback/notifications'
+import { BarcodeCameraScanner } from '@/components/common/BarcodeCameraScanner'
 import { celebrateSale } from '@/components/feedback/saleCelebration'
 import { getStoredCompany } from '@/lib/auth'
+import { getProductByBarcode } from '@/api/endpoints/catalog'
 
 import { fetchPOSProducts, loadPOSInitialData } from './pos.service'
 import { calculateSaleTotals } from './pos.calculations'
@@ -46,6 +48,8 @@ export function POSPage() {
   const [initialLoading, setInitialLoading] = useState(true)
   const [error, setError] = useState('')
   const [addedProductId, setAddedProductId] = useState<string | null>(null)
+  const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false)
+  const productSearchRef = useRef<HTMLInputElement>(null)
 
   const [discountType, setDiscountType] = useState<SaleDiscountType | null>(null)
   const [discountValue, setDiscountValue] = useState(0)
@@ -58,6 +62,10 @@ export function POSPage() {
     window.addEventListener('pos-company-updated', updateTaxRate)
     return () => window.removeEventListener('pos-company-updated', updateTaxRate)
   }, [])
+
+  useEffect(() => {
+    if (!initialLoading) productSearchRef.current?.focus()
+  }, [initialLoading])
 
   const [notifyCustomer, setNotifyCustomer] = useState(false)
   const [recipientType, setRecipientType] = useState<'CUSTOMER' | 'OTHER'>('CUSTOMER')
@@ -162,6 +170,10 @@ export function POSPage() {
   )
 
   const addToCart = (product: CatalogProduct) => {
+    if (product.stockQuantity < 1) {
+      showInfo('Out of stock', `${product.name} is currently out of stock.`)
+      return
+    }
     setCart((current) => {
       const existing = current.find((item) => item.id === product.id)
       if (existing) {
@@ -177,6 +189,17 @@ export function POSPage() {
     window.setTimeout(() => {
       setAddedProductId((current) => (current === product.id ? null : current))
     }, 700)
+  }
+
+  const addScannedBarcodeToCart = async (barcode: string) => {
+    const exactBarcode = barcode.trim()
+    if (!exactBarcode) return
+    try {
+      const product = await getProductByBarcode(exactBarcode)
+      addToCart(product)
+    } catch (cause) {
+      showError('Barcode lookup failed', cause)
+    }
   }
 
   const updateQuantity = (id: string, quantity: number) => {
@@ -280,7 +303,15 @@ export function POSPage() {
             <ProductSearch
               value={filters.search}
               onChange={handleSearchChange}
-              onBarcodeScan={() => showInfo('Hardware Integration', 'Barcode scanning is ready for hardware scanner integration.')}
+              inputRef={productSearchRef}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' || event.repeat) return
+                event.preventDefault()
+                const barcode = event.currentTarget.value.trim()
+                handleSearchChange('')
+                void addScannedBarcodeToCart(barcode)
+              }}
+              onBarcodeScan={() => setBarcodeScannerOpen(true)}
             />
             <ProductSort
               sortBy={filters.sortBy}
@@ -350,6 +381,18 @@ export function POSPage() {
           />
         </VStack>
       </Grid>
+      <BarcodeCameraScanner
+        open={barcodeScannerOpen}
+        onClose={() => {
+          setBarcodeScannerOpen(false)
+          window.setTimeout(() => productSearchRef.current?.focus(), 0)
+        }}
+        onDetected={(barcode) => {
+          setBarcodeScannerOpen(false)
+          void addScannedBarcodeToCart(barcode)
+          window.setTimeout(() => productSearchRef.current?.focus(), 0)
+        }}
+      />
     </PageContainer>
   )
 }

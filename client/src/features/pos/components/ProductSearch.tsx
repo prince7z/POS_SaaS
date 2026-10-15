@@ -1,14 +1,19 @@
 import { Box, HStack, IconButton, Input } from '@chakra-ui/react'
 import { Barcode, Search, X } from 'lucide-react'
+import type { KeyboardEvent, Ref } from 'react'
 
 export function ProductSearch({
   value,
   onChange,
   onBarcodeScan,
+  inputRef,
+  onKeyDown,
 }: {
   value: string
   onChange: (value: string) => void
   onBarcodeScan?: () => void
+  inputRef?: Ref<HTMLInputElement>
+  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void
 }) {
   return (
     <HStack gap="2" w="full">
@@ -27,8 +32,10 @@ export function ProductSearch({
           <Search size={16} />
         </Box>
         <Input
+          ref={inputRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={onKeyDown}
           placeholder="Search products by name, SKU or barcode…"
           pl="9"
           pr={value ? '9' : '3'}
