@@ -3,6 +3,33 @@ import type { AgentToolDefinition } from "./schemas";
 
 export const agentToolRegistry: readonly AgentToolDefinition[] = [
 	{
+		name: "takealot_tool",
+		description: "Priority source for Takealot marketplace data. Use for Takealot-specific revenue, fees, orders, product performance, sales trends, breakdowns, and stock history; do not substitute POS sales or finance reports. Profit is an estimate using current exact-SKU catalog average costs, and is unavailable when any sold units lack a cost match or any sales rows lack total_fee.",
+		operations: ["sales_summary", "sales_trends", "sales_breakdown", "product_performance", "list_sales", "list_orders", "overview", "inventory_summary", "inventory_snapshots"],
+		operationDescriptions: {
+			sales_summary: "Aggregate Takealot sales for required from/to YYYY-MM-DD dates. Returns gross selling_price revenue, quantity, unique orders, reported total_fee, fee components when complete, cost coverage, and estimated merchandise profit only when every unit matches a current catalog averageCost and every row has total_fee. Use first for questions about Takealot revenue, fees, or profit.",
+			sales_trends: "Date-filtered Takealot time series. Requires from/to; interval is day, week, or month and metric is revenue, units, or orders. Includes totalFee per time bucket. Use for trends or charts.",
+			sales_breakdown: "Date-filtered Takealot sales grouped by promotion, saleStatus, dc, customerDc, or stockSourceRegion. Requires from/to and groupBy.",
+			product_performance: "Date-filtered Takealot product rankings and summary. Requires from/to; supports sortBy, order, page, limit, SKU, title, and TSIN filters. Product profit is estimated from current exact-SKU catalog averageCost and is null when fee or cost coverage is incomplete.",
+			list_sales: "Date-filtered Takealot sale rows with marketplace fee fields when supplied by Takealot. Supports from/to, sale filters, page, and limit up to 100; this returns one page, not the full result set.",
+			list_orders: "Date-filtered Takealot order or sale records with optional SKU, product title, TSIN, and order ID filters. Requires from/to and returns one page, up to 100 records.",
+			overview: "Current Takealot stock counts/health and the seller API's fixed sales-summary periods. A requested date range is not applied to those fixed periods; never use these totals as an answer for a custom date range.",
+			inventory_summary: "Fetch current Takealot stock counts and stock-health statistics, and save an inventory snapshot for later historical comparison.",
+			inventory_snapshots: "Read previously saved Takealot inventory snapshots for required from/to YYYY-MM-DD dates. It returns only snapshots actually captured; no snapshot means no historical observation, not zero stock.",
+		},
+		requiredAccessByOperation: {
+			sales_summary: Access.TAKEALOT,
+			sales_trends: Access.TAKEALOT,
+			sales_breakdown: Access.TAKEALOT,
+			product_performance: Access.TAKEALOT,
+			list_sales: Access.TAKEALOT,
+			list_orders: Access.TAKEALOT,
+			overview: Access.TAKEALOT,
+			inventory_summary: Access.TAKEALOT,
+			inventory_snapshots: Access.TAKEALOT,
+		},
+	},
+	{
 		name: "customer_tool",
 		description: "Customer search, reporting, and management operations.",
 		operations: ["list_customers", "customer", "customer_summary", "customer_metrics", "customer_payments", "top_customers", "recent_customers", "create_customer", "update_customer", "delete_customer", "record_customer_payment"],

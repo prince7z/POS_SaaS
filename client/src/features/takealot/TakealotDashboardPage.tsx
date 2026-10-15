@@ -5,7 +5,6 @@ import {
   Activity,
   AlertCircle,
   BarChart3,
-  CalendarDays,
   ChartNoAxesCombined,
   ChevronLeft,
   ChevronRight,
@@ -61,8 +60,9 @@ import {
   TAKEALOT_CACHE_TTL,
   writeTakealotCache,
 } from './takealot-cache'
+import { TakealotDateRangePicker, type TakealotDateRange } from './components/TakealotDateRangePicker'
 
-type DateRange = { from: string; to: string }
+type DateRange = TakealotDateRange
 type Granularity = 'day' | 'week' | 'month'
 type Section = 'overview' | 'analytics' | 'products' | 'orders' | 'stock'
 type ResourceMeta = { savedAt: number; stale: boolean; cached: boolean; loading?: boolean }
@@ -76,18 +76,13 @@ interface ResourceState<T> extends ResourceMeta {
 }
 
 const MotionCard = motion.create(Card.Root)
-const today = () => new Date().toISOString().slice(0, 10)
-const iso = (date: Date) => date.toISOString().slice(0, 10)
+const iso = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 const lastThirtyDays = (): DateRange => {
   const to = new Date()
   const from = new Date(to)
   from.setDate(from.getDate() - 29)
   return { from: iso(from), to: iso(to) }
-}
-const validDate = (value: string) => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  const date = new Date(`${value}T00:00:00.000Z`)
-  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value
 }
 const toErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback
@@ -1308,9 +1303,7 @@ export function TakealotDashboardPage() {
   const [identity, setIdentity] = useState<DashboardIdentity>(() => localIdentity())
   const [activeSection, setActiveSection] = useState<Section>('overview')
   const [range, setRange] = useState<DateRange>(lastThirtyDays)
-  const [draftRange, setDraftRange] = useState<DateRange>(lastThirtyDays)
   const [granularity, setGranularity] = useState<Granularity>('day')
-  const [dateError, setDateError] = useState('')
   const [refreshTokens, setRefreshTokens] = useState<Record<Section, number>>({
     overview: 0,
     analytics: 0,
@@ -1370,36 +1363,6 @@ export function TakealotDashboardPage() {
     }
   }, [])
 
-  const applyQuickRange = (preset: string) => {
-    let next: DateRange
-    const end = new Date()
-    if (preset === 'last7') {
-      const start = new Date(end)
-      start.setDate(start.getDate() - 6)
-      next = { from: iso(start), to: iso(end) }
-    } else if (preset === 'thisMonth') {
-      next = { from: iso(new Date(end.getFullYear(), end.getMonth(), 1)), to: iso(end) }
-    } else {
-      next = lastThirtyDays()
-    }
-    setDraftRange(next)
-    setRange(next)
-    setDateError('')
-  }
-
-  const applyRange = () => {
-    if (!validDate(draftRange.from) || !validDate(draftRange.to)) {
-      setDateError('Enter valid start and end dates.')
-      return
-    }
-    if (draftRange.from > draftRange.to) {
-      setDateError('The start date must be on or before the end date.')
-      return
-    }
-    setDateError('')
-    setRange(draftRange)
-  }
-
   const isBusy = Boolean(resourceMeta[activeSection]?.loading)
   const sections: Array<{ id: Section; label: string; icon: LucideIcon }> = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -1450,49 +1413,7 @@ export function TakealotDashboardPage() {
         <Stack gap="5">
           <Stack gap="3">
             <Flex gap="3" wrap="wrap" align="end">
-              <Box>
-                <Flex align="center" gap="1" mb="1">
-                  <CalendarDays size={14} aria-hidden="true" />
-                  <Text fontSize="sm">From</Text>
-                </Flex>
-                <Input
-                  aria-label="From date"
-                  type="date"
-                  size="sm"
-                  value={draftRange.from}
-                  max={draftRange.to || today()}
-                  onChange={(event) => setDraftRange((current) => ({ ...current, from: event.target.value }))}
-                />
-              </Box>
-              <Box>
-                <Flex align="center" gap="1" mb="1">
-                  <CalendarDays size={14} aria-hidden="true" />
-                  <Text fontSize="sm">To</Text>
-                </Flex>
-                <Input
-                  aria-label="To date"
-                  type="date"
-                  size="sm"
-                  value={draftRange.to}
-                  min={draftRange.from}
-                  max={today()}
-                  onChange={(event) => setDraftRange((current) => ({ ...current, to: event.target.value }))}
-                />
-              </Box>
-              <NativeSelect.Root size="sm" maxW="170px">
-                <NativeSelect.Field
-                  aria-label="Quick date range"
-                  defaultValue="last30"
-                  onChange={(event) => {
-                    if (event.target.value !== 'custom') applyQuickRange(event.target.value)
-                  }}
-                >
-                  <option value="last7">Last 7 days</option>
-                  <option value="last30">Last 30 days</option>
-                  <option value="thisMonth">This month</option>
-                  <option value="custom">Custom</option>
-                </NativeSelect.Field>
-              </NativeSelect.Root>
+              <TakealotDateRangePicker value={range} onApply={setRange} />
               <NativeSelect.Root size="sm" maxW="140px">
                 <NativeSelect.Field aria-label="Chart granularity" value={granularity} onChange={(event) => setGranularity(event.target.value as Granularity)}>
                   <option value="day">Day</option>
@@ -1500,9 +1421,7 @@ export function TakealotDashboardPage() {
                   <option value="month">Month</option>
                 </NativeSelect.Field>
               </NativeSelect.Root>
-              <Button size="sm" variant="outline" onClick={applyRange}>Apply dates</Button>
             </Flex>
-            {dateError && <Text role="alert" color="fg.error" fontSize="sm">{dateError}</Text>}
           </Stack>
 
           <Flex

@@ -82,6 +82,7 @@ export type AgentToolDefinition = {
 	name: string;
 	description: string;
 	operations: readonly string[];
+	operationDescriptions?: Readonly<Record<string, string>>;
 	requiredAccessByOperation: Partial<Record<string, Access>>;
 };
 

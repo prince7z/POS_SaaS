@@ -49,6 +49,11 @@ const main = async (): Promise<void> => {
 		findFirst: (input: unknown) => Promise<{ userId: string; companyId: string; accesses: never[] } | null>;
 	};
 	const originalCompanyUserFindFirst = companyUserModel.findFirst;
+	const productModel = prisma.product as unknown as {
+		findMany: (input: unknown) => Promise<Array<{ sku: string; averageCost: number }>>;
+	};
+	const originalProductFindMany = productModel.findMany;
+	let includeBetaCost = true;
 	snapshotModel.create = async ({ data }) => {
 		snapshotRows.push(data);
 		return { ...data, id: `snapshot-${snapshotRows.length}` };
@@ -63,6 +68,10 @@ const main = async (): Promise<void> => {
 		companyId: "permission-test-company",
 		accesses: [],
 	});
+	productModel.findMany = async () => [
+		{ sku: "SKU-R10-A", averageCost: 10 },
+		...(includeBetaCost ? [{ sku: "SKU-B", averageCost: 2 }] : []),
+	];
 
 	const originalFetch = globalThis.fetch;
 	const originalConsoleError = console.error;
@@ -312,14 +321,45 @@ const main = async (): Promise<void> => {
 			orders: 2,
 			totalFee: 4.15,
 			feePerUnit: 0.69,
-			totalCost: 30,
-			costedUnits: 3,
-			uncostedUnits: 3,
-			profit: 0.85,
-			profitPerUnit: 0.14,
+			feeRowsWithTotal: 3,
+			feeRowsMissingTotal: 0,
+			feeComponents: {
+				successFee: { total: null, rowsWithValue: 0 },
+				fulfillmentFee: { total: null, rowsWithValue: 0 },
+				courierCollectionFee: { total: null, rowsWithValue: 0 },
+				stockTransferFee: { total: null, rowsWithValue: 0 },
+			},
+			totalCost: 36,
+			costedUnits: 6,
+			uncostedUnits: 0,
+			costCoverage: 1,
+			profit: -5.15,
+			profitPerUnit: -0.86,
 			unitsPerOrder: 3,
 		});
 		logPass("product performance ranks by stable offer identifier and calculates weighted average price");
+		const { findAgentTool } = await import("../src/modules/agent/registry");
+		const takealotTool = findAgentTool("takealot_tool", "sales_summary");
+		assert.ok(takealotTool);
+		assert.equal(takealotTool.requiredAccessByOperation.sales_summary, "TAKEALOT");
+		const { executeTakealotTool } = await import("../src/modules/agent/graph/takealotTool");
+		const agentSummary = await executeTakealotTool(
+			"a2b8e672-7f09-4783-81ba-51a572205b71",
+			"sales_summary",
+			{ from: "2026-10-01", to: "2026-10-02" },
+		) as { revenue: number; totalFee: number | null; profit: number | null };
+		assert.equal(agentSummary.revenue, 35);
+		assert.equal(agentSummary.totalFee, 4.15);
+		assert.equal(agentSummary.profit, -5.15);
+		includeBetaCost = false;
+		const incompleteSummary = await executeTakealotTool(
+			"a2b8e672-7f09-4783-81ba-51a572205b71",
+			"sales_summary",
+			{ from: "2026-10-01", to: "2026-10-02" },
+		) as { profit: number | null; costCoverage: number };
+		assert.equal(incompleteSummary.profit, null);
+		assert.equal(incompleteSummary.costCoverage, 0.5);
+		logPass("Takealot agent operation returns estimated profit only with complete fee and catalog-cost coverage");
 
 		const orders = await request("/takealot/orders?from=2026-10-01&to=2026-10-02&sku=SKU-A&orderId=10&page=1&limit=2");
 		assert.equal(orders.status, 200);
@@ -375,6 +415,7 @@ const main = async (): Promise<void> => {
 		snapshotModel.create = originalCreate;
 		snapshotModel.findMany = originalFindMany;
 		companyUserModel.findFirst = originalCompanyUserFindFirst;
+		productModel.findMany = originalProductFindMany;
 		await new Promise<void>((resolve, reject) => {
 			server.close((error) => error ? reject(error) : resolve());
 		});

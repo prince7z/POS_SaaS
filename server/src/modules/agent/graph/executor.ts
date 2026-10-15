@@ -42,6 +42,7 @@ import { estimateTokens, type AgentPerfTracker } from "../utils/perfLogger";
 import { createOpenRouterClient } from "../client/openRouterClient";
 import { emailSystemPrompt } from "../prompts/email";
 import type { AgentUser } from "../schemas";
+import { executeTakealotTool } from "./takealotTool";
 
 type CachedEmailDraft = {
 	draftId: string;
@@ -216,6 +217,20 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 			});
 			const args = step.args;
 			switch (`${step.tool}:${step.operation}`) {
+				case "takealot_tool:sales_summary":
+				case "takealot_tool:sales_trends":
+				case "takealot_tool:sales_breakdown":
+				case "takealot_tool:product_performance":
+				case "takealot_tool:list_sales":
+				case "takealot_tool:list_orders":
+				case "takealot_tool:overview":
+				case "takealot_tool:inventory_summary":
+				case "takealot_tool:inventory_snapshots":
+					stepResults[step.id] = {
+						success: true,
+						data: await executeTakealotTool(state.user.companyId, step.operation, args),
+					};
+					break;
 				case "customer_tool:list_customers":
 					stepResults[step.id] = { success: true, data: await customers.listCustomers(state.user.companyId, customers.listSchema.parse(args)) };
 					break;

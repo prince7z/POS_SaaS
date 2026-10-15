@@ -16,6 +16,14 @@ const plannerToolCatalog = (permissions: string[]) =>
 				tool: tool.name,
 				description: tool.description,
 				operations,
+				...(tool.operationDescriptions && {
+					operationDescriptions: Object.fromEntries(
+						operations.flatMap((operation) => {
+							const description = tool.operationDescriptions?.[operation];
+							return description ? [[operation, description]] : [];
+						}),
+					),
+				}),
 			} : null;
 		})
 		.filter((tool): tool is NonNullable<typeof tool> => tool !== null);
@@ -52,6 +60,8 @@ Return JSON with exactly this shape:
 					companyLogoUrl: user.companyLogoUrl || null,
 				},
 				instruction: `Create an ordered plan using only available tools or human_input/final steps. Take previous conversation history into full account to understand context.
+Takealot marketplace questions have priority over generic POS tools: for any question specifically about Takealot sales, revenue, fees, profit, orders, seller trends, or stock, use takealot_tool and its sales_summary first for date-range revenue/fees/profit. Do not answer Takealot marketplace questions with sales_tool or finance_tool. Use YYYY-MM-DD from/to dates. If a required date range is unclear, ask one human_input question. Only combine with POS sales/finance tools when the user explicitly asks for a comparison.
+For Takealot profit, report only the tool's estimated merchandise profit and its cost-coverage caveat. It uses current local catalog averageCost matched by exact SKU, subtracts Takealot total_fee, and excludes other expenses/tax. If profit is null, explain that complete costs or fee data are unavailable; never infer missing costs or fees. Report total_fee as Takealot-reported fees and do not label it commission or sum fee components as a substitute.
 For expense requests, use finance_tool. Use list_expenses for "what/recent/show/list expenses"; use expense_summary for totals or counts;
 use expense_analytics for trends or category breakdowns; use pnl_dashboard when the request asks about profit or loss.
 Date filters must use YYYY-MM-DD. Always include a final step.`,

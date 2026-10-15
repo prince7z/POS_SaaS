@@ -71,6 +71,11 @@ export const trendsSchema = z.object({
 	productTitle: filterTextSchema,
 	tsin: optionalIntegerSchema,
 }).strict().superRefine((value, context) => dateRangeIssue(value, context, true));
+export const salesSummarySchema = z.object({
+	from: dateSchema,
+	to: dateSchema,
+	...filterFields,
+}).strict().superRefine((value, context) => dateRangeIssue(value, context, true));
 export const breakdownSchema = z.object({
 	from: dateSchema,
 	to: dateSchema,
@@ -139,6 +144,11 @@ const publicSale = (sale: TakealotSale) => ({
 	sale_status: sale.sale_status,
 	promotion: sale.promotion,
 	stock_source_region: sale.stock_source_region,
+	success_fee: sale.success_fee,
+	fulfillment_fee: sale.fulfillment_fee,
+	courier_collection_fee: sale.courier_collection_fee,
+	total_fee: sale.total_fee,
+	stock_transfer_fee: sale.stock_transfer_fee,
 });
 
 const publicOrderItem = (item: TakealotOrderItem) => ({
@@ -210,18 +220,30 @@ const assertSaleMetrics = (sale: TakealotSale) => {
 		!Number.isFinite(sale.selling_price) ||
 		!Number.isFinite(sale.quantity) ||
 		!Number.isFinite(sale.order_id) ||
-		(sale.total_fee !== undefined && !Number.isFinite(sale.total_fee))
+		(sale.total_fee !== undefined && !Number.isFinite(sale.total_fee)) ||
+		[sale.success_fee, sale.fulfillment_fee, sale.courier_collection_fee, sale.stock_transfer_fee]
+			.some((fee) => fee !== undefined && !Number.isFinite(fee))
 	) {
 		throw new AppError("Takealot returned sales without valid price, quantity, fee, or order identifiers.", 502, "TAKEALOT_INVALID_RESPONSE");
 	}
 };
 
-const skuUnitCost = (sku?: string): number | undefined => {
-	const costMatch = /[CR](\d+)(?!\d)/i.exec(sku?.trim() ?? "");
-	return costMatch ? Number(costMatch[1]) : undefined;
+const catalogUnitCosts = async (companyId: string, sales: TakealotSale[]) => {
+	const skus = [...new Set(sales.flatMap((sale) => sale.sku ? [sale.sku] : []))];
+	const products: Array<{ sku: string; averageCost: Prisma.Decimal }> = [];
+	for (let offset = 0; offset < skus.length; offset += 500) {
+		products.push(...await prisma.product.findMany({
+			where: { companyId, deletedAt: null, sku: { in: skus.slice(offset, offset + 500) } },
+			select: { sku: true, averageCost: true },
+		}));
+	}
+	return new Map(products.flatMap((product) => {
+		const averageCost = Number(product.averageCost);
+		return Number.isFinite(averageCost) && averageCost >= 0 ? [[product.sku, averageCost]] : [];
+	}));
 };
 
-const summarizeProductSales = (sales: TakealotSale[]) => {
+const summarizeProductSales = (sales: TakealotSale[], unitCosts: Map<string, number>) => {
 	let revenue = 0;
 	let units = 0;
 	let totalFee = 0;
@@ -229,6 +251,12 @@ const summarizeProductSales = (sales: TakealotSale[]) => {
 	let feesAvailable = true;
 	let costedUnits = 0;
 	let uncostedUnits = 0;
+	const feeComponents = {
+		successFee: { value: 0, rows: 0 },
+		fulfillmentFee: { value: 0, rows: 0 },
+		courierCollectionFee: { value: 0, rows: 0 },
+		stockTransferFee: { value: 0, rows: 0 },
+	};
 	const orderIds = new Set<number>();
 
 	for (const sale of sales) {
@@ -243,7 +271,23 @@ const summarizeProductSales = (sales: TakealotSale[]) => {
 			totalFee += sale.total_fee;
 		}
 
-		const unitCost = skuUnitCost(sale.sku);
+		if (sale.success_fee !== undefined) {
+			feeComponents.successFee.value += sale.success_fee;
+			feeComponents.successFee.rows++;
+		}
+		if (sale.fulfillment_fee !== undefined) {
+			feeComponents.fulfillmentFee.value += sale.fulfillment_fee;
+			feeComponents.fulfillmentFee.rows++;
+		}
+		if (sale.courier_collection_fee !== undefined) {
+			feeComponents.courierCollectionFee.value += sale.courier_collection_fee;
+			feeComponents.courierCollectionFee.rows++;
+		}
+		if (sale.stock_transfer_fee !== undefined) {
+			feeComponents.stockTransferFee.value += sale.stock_transfer_fee;
+			feeComponents.stockTransferFee.rows++;
+		}
+		const unitCost = sale.sku ? unitCosts.get(sale.sku) : undefined;
 		if (unitCost === undefined) {
 			uncostedUnits += sale.quantity;
 		} else {
@@ -253,11 +297,20 @@ const summarizeProductSales = (sales: TakealotSale[]) => {
 	}
 
 	const roundedRevenue = roundMoney(revenue);
-	const roundedTotalFee = feesAvailable ? roundMoney(totalFee) : null;
-	const roundedTotalCost = costedUnits > 0 ? roundMoney(totalCost) : null;
+	const roundedTotalFee = feesAvailable && sales.length > 0 ? roundMoney(totalFee) : null;
+	const roundedTotalCost = sales.length > 0 && uncostedUnits === 0 ? roundMoney(totalCost) : null;
 	const profit = roundedTotalFee === null || roundedTotalCost === null
 		? null
 		: roundMoney(roundedRevenue - roundedTotalCost - roundedTotalFee);
+	const feeComponentSummary = Object.fromEntries(
+		Object.entries(feeComponents).map(([name, component]) => [
+			name,
+			{
+				total: sales.length > 0 && component.rows === sales.length ? roundMoney(component.value) : null,
+				rowsWithValue: component.rows,
+			},
+		]),
+	);
 
 	return {
 		revenue: roundedRevenue,
@@ -266,9 +319,13 @@ const summarizeProductSales = (sales: TakealotSale[]) => {
 		orders: orderIds.size,
 		totalFee: roundedTotalFee,
 		feePerUnit: roundedTotalFee === null || units === 0 ? null : roundMoney(roundedTotalFee / units),
+		feeRowsWithTotal: sales.filter((sale) => sale.total_fee !== undefined).length,
+		feeRowsMissingTotal: sales.filter((sale) => sale.total_fee === undefined).length,
+		feeComponents: feeComponentSummary,
 		totalCost: roundedTotalCost,
 		costedUnits,
 		uncostedUnits,
+		costCoverage: units === 0 ? 0 : roundMoney(costedUnits / units),
 		profit,
 		profitPerUnit: profit === null || units === 0 ? null : roundMoney(profit / units),
 		unitsPerOrder: orderIds.size === 0 ? 0 : roundMoney(units / orderIds.size),
@@ -343,6 +400,7 @@ const aggregateSales = (sales: TakealotSale[]) => {
 };
 
 const revenueDefinition = "Gross sales value is the sum of Takealot selling_price values per sales row; quantity is summed separately. All returned sale_status values are included because the API documentation does not define their business meaning; this is not net revenue or profit.";
+const profitDefinition = "Estimated merchandise profit is gross sales value minus Takealot total_fee and quantity multiplied by the current averageCost of an exact-SKU match in this company's product catalog. It is unavailable unless every sold unit has a catalog cost match and every sales row has total_fee. It is not historical-cost accounting profit and excludes other expenses, taxes, and unreported fees.";
 
 export const overview = async (apiKey: string, input: z.infer<typeof overviewSchema>) => {
 	const [salesSummary, stockCounts, stockHealth] = await Promise.all([
@@ -404,6 +462,29 @@ export const salesTrends = async (companyId: string, apiKey: string, input: z.in
 	return { interval: input.interval, metric: input.metric, series, revenueDefinition };
 };
 
+export const salesSummary = async (companyId: string, apiKey: string, input: z.infer<typeof salesSummarySchema>) => {
+	const sales = await fetchAllSalesForCompany(companyId, apiKey, {
+		from: input.from,
+		to: input.to,
+		sku: input.sku,
+		productTitle: input.productTitle,
+		tsin: input.tsin,
+		orderId: input.orderId,
+		dc: input.dc,
+		customerDc: input.customerDc,
+		saleStatus: input.saleStatus,
+		promotion: input.promotion,
+	});
+	const costs = await catalogUnitCosts(companyId, sales);
+	return {
+		range: { from: input.from, to: input.to },
+		salesRows: sales.length,
+		...summarizeProductSales(sales, costs),
+		revenueDefinition,
+		profitDefinition,
+	};
+};
+
 const breakdownValue = (sale: TakealotSale, groupBy: z.infer<typeof breakdownSchema>["groupBy"]): string => {
 	const value = {
 		promotion: sale.promotion,
@@ -447,6 +528,7 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 		productTitle: input.productTitle,
 		tsin: input.tsin,
 	});
+	const unitCosts = await catalogUnitCosts(companyId, sales);
 	const products = new Map<string, {
 		stableId: string;
 		sku?: string;
@@ -484,7 +566,7 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 		} else {
 			product.totalFee += sale.total_fee;
 		}
-		const saleUnitCost = skuUnitCost(sale.sku);
+		const saleUnitCost = sale.sku ? unitCosts.get(sale.sku) : undefined;
 		if (saleUnitCost === undefined) {
 			product.uncostedUnits += sale.quantity;
 		} else {
@@ -497,7 +579,7 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 	});
 
 	const ranked = [...products.values()].map((product) => {
-		const unitCost = skuUnitCost(product.sku);
+		const unitCost = product.sku ? unitCosts.get(product.sku) : undefined;
 		const revenue = roundMoney(product.salesValue);
 		const averagePrice = product.units === 0 ? 0 : roundMoney(product.salesValue / product.units);
 		const totalFee = product.feesAvailable ? roundMoney(product.totalFee) : null;
@@ -539,8 +621,9 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 	return {
 		products: ranked.slice(start, start + input.limit).map(({ stableId: _stableId, ...product }) => product),
 		pagination: pageResult(input.page, input.limit, ranked.length),
-		summary: summarizeProductSales(sales),
+		summary: summarizeProductSales(sales, unitCosts),
 		revenueDefinition,
+		profitDefinition,
 	};
 };
 

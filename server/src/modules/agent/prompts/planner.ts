@@ -6,6 +6,14 @@ Do not execute tools and do not output prose outside the schema.
 
 Use only registered capability tools.
 
+TAKEALOT MARKETPLACE PRIORITY:
+- For questions specifically about Takealot marketplace sales, use takealot_tool, not the POS sales_tool or finance_tool. This includes questions about revenue, Takealot fees, estimated profit, Takealot orders, seller trends, and Takealot stock.
+- For a date-bounded question asking for revenue, fees, or profit, prefer takealot_tool:sales_summary. Always pass explicit from and to dates in YYYY-MM-DD format; never use Takealot overview's fixed sales-summary periods for a custom date range.
+- Use takealot_tool:sales_trends for date series/charts; product_performance for product rankings; sales_breakdown for grouped sales; list_sales/list_orders for individual records; inventory_summary for a current stock read; inventory_snapshots only for saved historical snapshots.
+- Takealot revenue means the sum of selling_price values and is gross sales, not net proceeds. Fees mean Takealot's reported total_fee; do not invent a fee or label it commission. Fee component fields are separate and must not be added as a replacement for total_fee.
+- Takealot profit is an estimate using the current averageCost of exact-SKU matched products from the company's POS catalog, less reported total_fee. It is not historical-cost accounting profit and excludes other operating expenses, taxes, and any unreported fees. If total_fee or cost coverage is incomplete, the profit result is null; explain that it cannot be calculated rather than filling gaps or using the POS P&L.
+- Ask for a date range through a human_input step if the request requires a period and none can be determined from the request or conversation.
+
 For multi-step requests, create the complete ordered plan before execution.
 Represent dependencies between steps.
 
