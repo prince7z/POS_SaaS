@@ -1,18 +1,22 @@
 import { useEffect, useRef } from 'react'
 import { Box, Flex, Text } from '@chakra-ui/react'
-import { Bot, Sparkles } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import type { AgentMessage as AgentMessageType, InteractionPayload } from '../types/agent'
 import { AgentMessage } from './AgentMessage'
+import { AiAvatar } from './AiAvatar'
+import { ConversationSkeleton } from './AgentSkeletons'
 
 export function AgentChat({
   messages,
   conversationId,
+  isLoading = false,
   onRespond,
   onSuggestionClick,
 }: {
   messages: AgentMessageType[]
   conversationId: string
   isStreaming?: boolean
+  isLoading?: boolean
   onRespond: (payload: InteractionPayload) => void
   onSuggestionClick: (prompt: string) => void
 }) {
@@ -49,21 +53,13 @@ export function AgentChat({
       py="3"
       className="scrollbar-thin scrollbar-thumb-gray-200"
     >
-      {messages.length === 0 ? (
+      {isLoading ? (
+        <ConversationSkeleton />
+      ) : messages.length === 0 ? (
         <Flex direction="column" align="center" justify="center" h="full" py="10" textAlign="center">
-          <Flex
-            w="48px"
-            h="48px"
-            borderRadius="xl"
-            bg="blue-50"
-            color="primary"
-            align="center"
-            justify="center"
-            mb="3"
-            shadow="sm"
-          >
-            <Bot size={24} />
-          </Flex>
+          <Box mb="3">
+            <AiAvatar size={48} />
+          </Box>
           <Text fontSize="sm" fontWeight="semibold" color="foreground" mb="1">
             POS AI Assistant
           </Text>

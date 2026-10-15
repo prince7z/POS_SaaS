@@ -19,6 +19,7 @@ const routeParam = (value: string | string[] | undefined) => {
 };
 
 import { AgentPerfTracker } from "./utils/perfLogger";
+import { ensureConversationTitle } from "./utils/title";
 
 const trustedUser = async (request: Parameters<RequestHandler>[0], tracker?: AgentPerfTracker) => {
 	if (!request.auth) throw unauthorized();
@@ -339,6 +340,7 @@ export const stream: RequestHandler = async (request, response, next) => {
 		const msgDbStart = performance.now();
 		tracker.log({ layer: "backend", module: "controller.ts", operation: "before addMessage DB query" });
 		await addMessage(conversationId, "user", content);
+		void ensureConversationTitle(conversationId, content);
 		const msgDbDurationMs = Math.round((performance.now() - msgDbStart) * 100) / 100;
 		tracker.log({ layer: "backend", module: "controller.ts", operation: `after addMessage DB query (${msgDbDurationMs}ms)` });
 		const controller = registerRun(runId);
@@ -364,6 +366,7 @@ export const stream: RequestHandler = async (request, response, next) => {
 		const messageId = `msg_${Date.now()}`;
 		let accumulatedText = "";
 		let isChartBlock = false;
+		let textWritten = false;
 
 		const onChunk = (chunk: string) => {
 			accumulatedText += chunk;
@@ -376,6 +379,7 @@ export const stream: RequestHandler = async (request, response, next) => {
 			if (isChartBlock || (trimmed.startsWith("{") && !trimmed.includes("\n\n"))) {
 				return;
 			}
+			textWritten = true;
 
 			writeAgentEvent(
 				response,
@@ -486,7 +490,7 @@ export const stream: RequestHandler = async (request, response, next) => {
 
 		if (finalResponsePayload) {
 			await addMessage(conversationId, "assistant", typeof finalResponsePayload === "string" ? finalResponsePayload : JSON.stringify(finalResponsePayload));
-			emitFinalResponse(response, finalResponsePayload, !isChartBlock && accumulatedText.length > 0, messageId, tracker);
+			emitFinalResponse(response, finalResponsePayload, textWritten, messageId, tracker);
 		} else {
 			writeAgentEvent(
 				response,
@@ -576,6 +580,7 @@ export const respond: RequestHandler = async (request, response, next) => {
 		let messageId = `msg_${Date.now()}`;
 		let accumulatedText = "";
 		let isChartBlock = false;
+		let textWritten = false;
 
 		const onChunk = (chunk: string) => {
 			accumulatedText += chunk;
@@ -586,6 +591,7 @@ export const respond: RequestHandler = async (request, response, next) => {
 			if (isChartBlock || (trimmed.startsWith("{") && !trimmed.includes("\n\n"))) {
 				return;
 			}
+			textWritten = true;
 			writeAgentEvent(
 				response,
 				{
@@ -653,9 +659,15 @@ export const respond: RequestHandler = async (request, response, next) => {
 			tracker
 		);
 
+		if (!finalResponsePayload) {
+			finalResponsePayload = (stateSnapshot.values as { finalResponse?: unknown } | undefined)?.finalResponse ?? null;
+		}
+
 		if (finalResponsePayload) {
 			await addMessage(conversationId, "assistant", typeof finalResponsePayload === "string" ? finalResponsePayload : JSON.stringify(finalResponsePayload));
-			emitFinalResponse(response, finalResponsePayload, !isChartBlock && accumulatedText.length > 0, messageId, tracker);
+			emitFinalResponse(response, finalResponsePayload, textWritten, messageId, tracker);
+		} else {
+			emitFinalResponse(response, null, textWritten, messageId, tracker);
 		}
 
 		writeAgentEvent(response, { type: "done", data: null }, tracker);

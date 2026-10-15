@@ -134,8 +134,9 @@ async function generateEmailHtml(params: {
 
 export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTracker) => {
 	const plan = state.plan;
-	if (!plan) return { stepResults: {} };
+	if (!plan) return { stepResults: {}, humanResponse: null };
 	const stepResults: Record<string, unknown> = { ...(state.stepResults || {}) };
+	let humanResponse: unknown | null = null;
 
 	for (const step of plan.steps) {
 		if (step.type === "human_input") {
@@ -166,13 +167,14 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 				  })
 				: undefined;
 
-			const userResponse = interrupt({
+			const userResponse: unknown = interrupt({
 				questionId,
 				message: questionText,
 				options,
 				allowTextInput: req.allowOther ?? true,
 			});
 
+			humanResponse = userResponse;
 			stepResults[step.id] = { success: true, userResponse };
 			continue;
 		}
@@ -506,5 +508,5 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 			});
 		}
 	}
-	return { stepResults };
+	return { stepResults, humanResponse };
 };

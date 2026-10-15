@@ -1,8 +1,9 @@
-import { Box, Flex, HStack, Text } from '@chakra-ui/react'
+import { Box, Flex, HStack, Skeleton, Stack, Text } from '@chakra-ui/react'
 import { motion } from 'motion/react'
-import { Bot, User } from 'lucide-react'
+import { User } from 'lucide-react'
 import type { AgentMessage as AgentMessageType, InteractionPayload } from '../types/agent'
 import { AgentBlockRenderer } from './AgentBlockRenderer'
+import { AiAvatar } from './AiAvatar'
 
 export function AgentMessage({
   message,
@@ -29,8 +30,8 @@ export function AgentMessage({
       >
         <Flex justify="flex-end" my="2">
           <HStack gap="2" maxW="85%" align="flex-start">
-            <Box bg="primary" color="primaryForeground" px="3.5" py="2" borderRadius="lg" borderTopRightRadius="xs" shadow="xs">
-              <Text fontSize="xs" lineHeight="relaxed">
+            <Box bg="#2563EB" color="#FFFFFF" px="3.5" py="2" borderRadius="lg" borderTopRightRadius="xs" shadow="xs" minW="0">
+              <Text fontSize="xs" lineHeight="1.6" whiteSpace="pre-wrap" overflowWrap="anywhere">
                 {textContent}
               </Text>
             </Box>
@@ -38,8 +39,8 @@ export function AgentMessage({
               w="26px"
               h="26px"
               borderRadius="full"
-              bg="blue-100"
-              color="primary"
+              bg="#DBEAFE"
+              color="#2563EB"
               align="center"
               justify="center"
               shrink={0}
@@ -61,29 +62,25 @@ export function AgentMessage({
     >
       <Flex justify="flex-start" my="2.5">
         <HStack gap="2.5" w="full" align="flex-start">
-          <Flex
-            w="28px"
-            h="28px"
-            borderRadius="md"
-            bg="blue-600"
-            color="white"
-            align="center"
-            justify="center"
-            shrink={0}
-            mt="0.5"
-            shadow="xs"
-          >
-            <Bot size={15} />
-          </Flex>
+          <Box mt="0.5">
+            <AiAvatar />
+          </Box>
           <Box flex="1" minW="0" bg="surface" p="3" borderRadius="lg" borderWidth="1px" shadow="xs">
-            {message.blocks.map((block, idx) => (
-              <AgentBlockRenderer
-                key={idx}
-                block={block}
-                conversationId={conversationId}
-                onRespond={onRespond}
-              />
-            ))}
+            {message.blocks.length === 0 ? (
+              <Stack gap="2" role="status" aria-label="Assistant is thinking">
+                <Skeleton h="10px" w="85%" />
+                <Skeleton h="10px" w="60%" />
+              </Stack>
+            ) : (
+              message.blocks.map((block, idx) => (
+                <AgentBlockRenderer
+                  key={idx}
+                  block={block}
+                  conversationId={conversationId}
+                  onRespond={onRespond}
+                />
+              ))
+            )}
           </Box>
         </HStack>
       </Flex>

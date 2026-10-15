@@ -12,9 +12,12 @@ export const createAgentGraph = (checkpointer?: BaseCheckpointSaver) =>
 		.addNode("planner", async (state, config) => {
 			const tracker = config?.configurable?.tracker as AgentPerfTracker | undefined;
 			tracker?.log({ layer: "langgraph", module: "planner.ts", operation: "planner start" });
-			const plan = await createPlan(state.request, state.user, state.history, tracker);
+			const request = state.humanResponse === null
+				? state.request
+				: `${state.request}\n\nUser clarification: ${typeof state.humanResponse === "string" ? state.humanResponse : JSON.stringify(state.humanResponse)}`;
+			const plan = await createPlan(request, state.user, state.history, tracker);
 			tracker?.log({ layer: "langgraph", module: "planner.ts", operation: "planner end" });
-			return { plan };
+			return { plan, humanResponse: null };
 		})
 		.addNode("executor", async (state, config) => {
 			const tracker = config?.configurable?.tracker as AgentPerfTracker | undefined;
@@ -32,6 +35,10 @@ export const createAgentGraph = (checkpointer?: BaseCheckpointSaver) =>
 		})
 		.addEdge(START, "planner")
 		.addEdge("planner", "executor")
-		.addEdge("executor", "final")
+		.addConditionalEdges(
+			"executor",
+			(state) => state.humanResponse === null ? "final" : "planner",
+			["final", "planner"],
+		)
 		.addEdge("final", END)
 		.compile({ checkpointer });

@@ -3,6 +3,7 @@ import { Box, Button, Flex, Text, VStack } from '@chakra-ui/react'
 import { MessageSquare, RotateCw } from 'lucide-react'
 import type { ConversationSummary } from '../types/agent'
 import { listConversations } from '../lib/agent-api'
+import { HistorySkeleton } from './AgentSkeletons'
 
 export function ConversationHistory({
   activeId,
@@ -25,7 +26,7 @@ export function ConversationHistory({
   }, [])
 
   useEffect(() => {
-    fetchConversations(false)
+    fetchConversations(true)
   }, [fetchConversations])
 
   const groups: Array<'Today' | 'Yesterday' | 'Earlier'> = ['Today', 'Yesterday', 'Earlier']
@@ -60,9 +61,7 @@ export function ConversationHistory({
       </Flex>
 
       {isLoading && conversations.length === 0 ? (
-        <Text fontSize="xs" color="secondary" py="2">
-          Loading history...
-        </Text>
+        <HistorySkeleton />
       ) : conversations.length === 0 ? (
         <Text fontSize="xs" color="secondary" py="2">
           No previous conversations found.

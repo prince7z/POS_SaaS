@@ -7,7 +7,7 @@ export const AgentState = Annotation.Root({
 	history: Annotation<Array<{ role: string; content: string }>>({ reducer: (_previous, next) => next, default: () => [] }),
 	plan: Annotation<Plan | null>({ reducer: (_previous, next) => next, default: () => null }),
 	stepResults: Annotation<Record<string, unknown>>({ reducer: (_previous, next) => next, default: () => ({}) }),
-	humanResponse: Annotation<Record<string, unknown> | null>({ reducer: (_previous, next) => next, default: () => null }),
+	humanResponse: Annotation<unknown | null>({ reducer: (_previous, next) => next, default: () => null }),
 	finalResponse: Annotation<string | null>({ reducer: (_previous, next) => next, default: () => null }),
 });
 

@@ -6,6 +6,8 @@ import { reduceAgentEvent } from '../lib/agent-reducer'
 export interface UseAgentStreamReturn {
   messages: AgentMessage[]
   isStreaming: boolean
+  isLoadingConversation: boolean
+  isCreatingConversation: boolean
   activeConversationId: string | null
   setActiveConversationId: (id: string | null) => void
   loadConversation: (id: string) => Promise<void>
@@ -21,6 +23,8 @@ import { FrontendPerfTracker } from '../lib/perfTracker'
 export function useAgentStream(initialConversation?: ConversationSummary | null): UseAgentStreamReturn {
   const [messages, setMessages] = useState<AgentMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false)
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false)
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     initialConversation?.id || null,
   )
@@ -29,6 +33,8 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
 
   const loadConversation = useCallback(async (id: string) => {
     setActiveConversationId(id)
+    setMessages([])
+    setIsLoadingConversation(true)
     try {
       const detailed = await getConversation(id)
       if (detailed && Array.isArray(detailed.messages)) {
@@ -38,6 +44,8 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
       }
     } catch {
       setMessages([])
+    } finally {
+      setIsLoadingConversation(false)
     }
   }, [])
 
@@ -46,6 +54,7 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
       return
     }
 
+    setIsCreatingConversation(true)
     try {
       const newConv = await createConversation()
       setActiveConversationId(newConv.id)
@@ -53,6 +62,8 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
     } catch {
       setActiveConversationId(null)
       setMessages([])
+    } finally {
+      setIsCreatingConversation(false)
     }
   }, [messages.length, activeConversationId])
 
@@ -315,6 +326,8 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
   return {
     messages,
     isStreaming,
+    isLoadingConversation,
+    isCreatingConversation,
     activeConversationId,
     setActiveConversationId,
     loadConversation,

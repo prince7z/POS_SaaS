@@ -9,15 +9,30 @@ import {
   ExternalLink,
   Image as ImageIcon,
   Layers3,
+  MoreHorizontal,
   Package,
   Pencil,
   Plus,
+  Printer,
   Search,
   Tags,
   Trash2,
 } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
-import { Box, Card as ChakraCard, Checkbox, Grid, HStack, Heading, Image, NativeSelect, Stack, Text } from '@chakra-ui/react'
+import {
+  Box,
+  Card as ChakraCard,
+  Checkbox,
+  Grid,
+  HStack,
+  Heading,
+  Image,
+  Menu,
+  NativeSelect,
+  Portal,
+  Stack,
+  Text,
+} from '@chakra-ui/react'
 import { Barcode } from 'lucide-react'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageSizeControl } from '@/components/common/PageSizeControl'
@@ -86,19 +101,28 @@ import {
   updateProduct,
   uploadMediaFile,
 } from '@/api/endpoints/catalog'
-import type { BrandPayload, CatalogBrand, CatalogCategory, CatalogProduct, CategoryPayload, ProductPayload, TakealotLookupType, TakealotOfferSuggestion } from '@/api/endpoints/catalog'
+import type {
+  BrandPayload,
+  CatalogBrand,
+  CatalogCategory,
+  CatalogProduct,
+  CategoryPayload,
+  ProductPayload,
+  TakealotLookupType,
+  TakealotOfferSuggestion,
+} from '@/api/endpoints/catalog'
 import { getSuppliers, type SupplierOption } from '@/api/endpoints/purchases'
 import { getInventorySummary, type InventorySummary } from '@/api/endpoints/inventory'
 import { showSuccess, showError } from '@/components/feedback/notifications'
 import { formatCurrency } from '@/lib/formatters'
+import { generateInternalBarcodeCandidate } from '@/lib/barcode'
+import { BarcodePrintDialog } from './components/BarcodePrintDialog'
 
 type Section = 'products' | 'categories' | 'brands'
 type IdentifierStatus = 'idle' | 'tooShort' | 'checking' | 'available' | 'taken' | 'error'
 type IdentifierCheck = {
-  skuValue: string | null
-  barcodeValue: string | null
-  skuAvailable: boolean | null
-  barcodeAvailable: boolean | null
+  value: string | null
+  available: boolean | null
 }
 
 function useDebounced(value: string) {
@@ -115,17 +139,14 @@ function getIdentifierStatus(
   debouncedValue: string,
   check: IdentifierCheck | null,
   checkError: string,
-  field: 'sku' | 'barcode',
 ): IdentifierStatus {
   const normalized = value.trim()
   if (!normalized) return 'idle'
   if (normalized.length < 3) return 'tooShort'
   if (normalized !== debouncedValue.trim()) return 'checking'
   if (!check) return checkError ? 'error' : 'checking'
-  const checkedValue = field === 'sku' ? check.skuValue : check.barcodeValue
-  if (checkedValue !== normalized) return 'checking'
-  const available = field === 'sku' ? check.skuAvailable : check.barcodeAvailable
-  return available === null ? 'checking' : available ? 'available' : 'taken'
+  if (check.value !== normalized) return 'checking'
+  return check.available === null ? 'checking' : check.available ? 'available' : 'taken'
 }
 
 function ErrorState({ message, retry }: { message: string; retry: () => void }) {
@@ -177,8 +198,6 @@ function useCatalogStats() {
   }, [])
   return stats
 }
-
-
 
 async function stageFiles(
   resource: 'PRODUCT_IMAGE' | 'BRAND_LOGO' | 'CATEGORY_LOGO',
@@ -244,7 +263,9 @@ function ProductDialog({
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [takealotConfigured, setTakealotConfigured] = useState(() => localStorage.getItem('takealotapiexist') === 'true')
+  const [takealotConfigured, setTakealotConfigured] = useState(
+    () => localStorage.getItem('takealotapiexist') === 'true',
+  )
   const [fillByTakealot, setFillByTakealot] = useState(false)
   const [takealotImageLoading, setTakealotImageLoading] = useState(false)
   const [takealotImagePreview, setTakealotImagePreview] = useState('')
@@ -255,12 +276,16 @@ function ProductDialog({
   const [suggestionsError, setSuggestionsError] = useState('')
   const debouncedSku = useDebounced(form.sku)
   const debouncedBarcode = useDebounced(form.barcode ?? '')
-  const [identifierCheck, setIdentifierCheck] = useState<IdentifierCheck | null>(null)
-  const [identifierCheckError, setIdentifierCheckError] = useState('')
+  const [skuCheck, setSkuCheck] = useState<IdentifierCheck | null>(null)
+  const [barcodeCheck, setBarcodeCheck] = useState<IdentifierCheck | null>(null)
+  const [skuCheckError, setSkuCheckError] = useState('')
+  const [barcodeCheckError, setBarcodeCheckError] = useState('')
   const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false)
+  const [barcodeGenerating, setBarcodeGenerating] = useState(false)
   const barcodeInputRef = useRef<HTMLInputElement>(null)
   const lookupRequest = useRef(0)
-  const identifierRequest = useRef(0)
+  const skuRequest = useRef(0)
+  const barcodeRequest = useRef(0)
 
   useEffect(() => {
     const onCompanyUpdated = () => setTakealotConfigured(localStorage.getItem('takealotapiexist') === 'true')
@@ -299,9 +324,13 @@ function ProductDialog({
     setTakealotImagePreview('')
     setError('')
     setBarcodeScannerOpen(false)
-    identifierRequest.current += 1
-    setIdentifierCheck(null)
-    setIdentifierCheckError('')
+    setBarcodeGenerating(false)
+    skuRequest.current += 1
+    barcodeRequest.current += 1
+    setSkuCheck(null)
+    setBarcodeCheck(null)
+    setSkuCheckError('')
+    setBarcodeCheckError('')
   }, [initial, open])
 
   useEffect(() => {
@@ -317,42 +346,58 @@ function ProductDialog({
     setForm((current) => ({ ...current, [key]: value }))
 
   useEffect(() => {
-    const requestId = ++identifierRequest.current
+    const requestId = ++skuRequest.current
     const sku = debouncedSku.trim()
-    const barcode = debouncedBarcode.trim()
-    const checkableSku = sku.length >= 3 ? sku : undefined
-    const checkableBarcode = barcode.length >= 3 ? barcode : undefined
-
-    setIdentifierCheck(null)
-    setIdentifierCheckError('')
-    if (!open || (!checkableSku && !checkableBarcode)) return
+    setSkuCheck(null)
+    setSkuCheckError('')
+    if (!open || sku.length < 3) return
 
     checkProductIdentifierAvailability({
-      ...(checkableSku && { sku: checkableSku }),
-      ...(checkableBarcode && { barcode: checkableBarcode }),
+      sku,
       ...(initial?.id && { excludeId: initial.id }),
     })
       .then((result) => {
-        if (requestId === identifierRequest.current) {
-          setIdentifierCheck({
-            skuValue: checkableSku ?? null,
-            barcodeValue: checkableBarcode ?? null,
-            ...result,
-          })
+        if (requestId === skuRequest.current) {
+          setSkuCheck({ value: sku, available: result.skuAvailable })
         }
       })
       .catch((cause) => {
-        if (requestId === identifierRequest.current) {
-          setIdentifierCheckError(
-            cause instanceof Error ? cause.message : 'Unable to check SKU and barcode availability.',
-          )
+        if (requestId === skuRequest.current) {
+          setSkuCheckError(cause instanceof Error ? cause.message : 'Unable to check SKU availability.')
         }
       })
 
     return () => {
-      if (requestId === identifierRequest.current) identifierRequest.current += 1
+      if (requestId === skuRequest.current) skuRequest.current += 1
     }
-  }, [debouncedSku, debouncedBarcode, initial?.id, open])
+  }, [debouncedSku, initial?.id, open])
+
+  useEffect(() => {
+    const requestId = ++barcodeRequest.current
+    const barcode = debouncedBarcode.trim()
+    setBarcodeCheck(null)
+    setBarcodeCheckError('')
+    if (!open || barcode.length < 3) return
+
+    checkProductIdentifierAvailability({
+      barcode,
+      ...(initial?.id && { excludeId: initial.id }),
+    })
+      .then((result) => {
+        if (requestId === barcodeRequest.current) {
+          setBarcodeCheck({ value: barcode, available: result.barcodeAvailable })
+        }
+      })
+      .catch((cause) => {
+        if (requestId === barcodeRequest.current) {
+          setBarcodeCheckError(cause instanceof Error ? cause.message : 'Unable to check barcode availability.')
+        }
+      })
+
+    return () => {
+      if (requestId === barcodeRequest.current) barcodeRequest.current += 1
+    }
+  }, [debouncedBarcode, initial?.id, open])
 
   useEffect(() => {
     const requestId = ++lookupRequest.current
@@ -385,19 +430,40 @@ function ProductDialog({
     return () => window.clearTimeout(timer)
   }, [lookupType, lookupValue, takealotConfigured, fillByTakealot, open])
 
-  const skuStatus = getIdentifierStatus(form.sku, debouncedSku, identifierCheck, identifierCheckError, 'sku')
-  const barcodeStatus = getIdentifierStatus(
-    form.barcode ?? '',
-    debouncedBarcode,
-    identifierCheck,
-    identifierCheckError,
-    'barcode',
-  )
+  const skuStatus = getIdentifierStatus(form.sku, debouncedSku, skuCheck, skuCheckError)
+  const barcodeStatus = getIdentifierStatus(form.barcode ?? '', debouncedBarcode, barcodeCheck, barcodeCheckError)
   const setBarcode = (barcode: string) => {
     set('barcode', barcode)
     if (form.takealotProductId && barcode.trim() !== form.takealotProductId) {
       set('takealotProductId', null)
       set('takealotSync', false)
+    }
+  }
+
+  const generateBarcode = async () => {
+    if (barcodeGenerating) return
+    setBarcodeGenerating(true)
+    setError('')
+    try {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const candidate = generateInternalBarcodeCandidate()
+        const availability = await checkProductIdentifierAvailability({
+          barcode: candidate,
+          ...(initial?.id && { excludeId: initial.id }),
+        })
+        if (availability.barcodeAvailable === true) {
+          setBarcode(candidate)
+          return
+        }
+        if (availability.barcodeAvailable === null) {
+          throw new Error('Unable to verify the generated barcode. Please try again.')
+        }
+      }
+      throw new Error('Could not find an available barcode after 5 attempts. Please try again.')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to generate a barcode.')
+    } finally {
+      setBarcodeGenerating(false)
     }
   }
 
@@ -410,10 +476,6 @@ function ProductDialog({
     }
     if ((skuChanged && skuStatus === 'taken') || (barcodeChanged && barcodeStatus === 'taken')) {
       setError('This SKU or barcode is already in use by another product.')
-      return
-    }
-    if ((skuChanged && skuStatus === 'checking') || (barcodeChanged && barcodeStatus === 'checking')) {
-      setError('Wait for the SKU and barcode availability checks to finish.')
       return
     }
     if (takealotImageLoading) {
@@ -438,9 +500,11 @@ function ProductDialog({
       const currentImageKeys = [...existingImages, ...stagedKeys]
       if (initial) {
         const diff: Partial<ProductPayload> = {}
+        const barcode = form.barcode?.trim() || null
+        const originalBarcode = initial.barcode?.trim() || null
         if (form.name !== initial.name) diff.name = form.name
         if (form.sku !== initial.sku) diff.sku = form.sku
-        if (form.barcode !== (initial.barcode ?? '')) diff.barcode = form.barcode
+        if (barcode !== originalBarcode) diff.barcode = barcode
         if (form.categoryId !== initial.categoryId) diff.categoryId = form.categoryId
         if (form.brandId !== (initial.brand?.id ?? null)) diff.brandId = form.brandId
         if (form.supplierId !== (initial.supplier?.id ?? null)) diff.supplierId = form.supplierId
@@ -450,7 +514,8 @@ function ProductDialog({
         if (form.purchaseCost !== initial.purchaseCost) diff.purchaseCost = form.purchaseCost
         if (form.stockQuantity !== initial.stockQuantity) diff.stockQuantity = form.stockQuantity
         if (form.lowStockThreshold !== initial.lowStockThreshold) diff.lowStockThreshold = form.lowStockThreshold
-        if ((form.takealotProductId ?? '') !== (initial.takealotProductId ?? '')) diff.takealotProductId = form.takealotProductId || null
+        if ((form.takealotProductId ?? '') !== (initial.takealotProductId ?? ''))
+          diff.takealotProductId = form.takealotProductId || null
         if (Boolean(form.takealotSync) !== Boolean(initial.takealotSync)) diff.takealotSync = Boolean(form.takealotSync)
 
         const initialKeysJson = JSON.stringify(initial.imageKeys ?? [])
@@ -464,7 +529,11 @@ function ProductDialog({
         onOpenChange(false)
         onSaved(saved, false)
       } else {
-        const saved = await createProduct({ ...form, imageKeys: currentImageKeys })
+        const saved = await createProduct({
+          ...form,
+          barcode: form.barcode?.trim() || null,
+          imageKeys: currentImageKeys,
+        })
         showSuccess('Product created', `Created ${saved.name}`)
         onOpenChange(false)
         onSaved(saved, true)
@@ -473,7 +542,6 @@ function ProductDialog({
       showError(initial ? 'Unable to update product' : 'Unable to create product', cause)
       setError(cause instanceof Error ? cause.message : 'Product could not be saved.')
     } finally {
-
       setSaving(false)
     }
   }
@@ -532,430 +600,502 @@ function ProductDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-      {' '}
-      <DialogContent className="max-h-[92vh] overflow-y-auto p-8 sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{initial ? 'Edit product' : 'Add product'}</DialogTitle>
-          <DialogDescription>Keep product information, pricing, inventory and media together.</DialogDescription>
-        </DialogHeader>
-        <FieldSet className="gap-6">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel>Product name</FieldLabel>
-              <Input
-                value={form.name}
-                onChange={(e) => set('name', e.target.value)}
-                placeholder="e.g. Wireless Mouse"
-              />
-            </Field>
-            <Field>
-              <FieldLabel>SKU</FieldLabel>
-              <Input
-                value={form.sku}
-                onChange={(e) => set('sku', e.target.value)}
-                placeholder="SKU-001"
-                aria-invalid={skuStatus === 'tooShort' || skuStatus === 'taken'}
-                className={
-                  skuStatus === 'available'
-                    ? 'border-emerald-500 focus-visible:ring-emerald-500'
-                    : skuStatus === 'tooShort' || skuStatus === 'taken'
-                      ? 'border-destructive focus-visible:ring-destructive'
-                      : skuStatus === 'error'
-                        ? 'border-amber-500 focus-visible:ring-amber-500'
-                        : ''
-                }
-              />
-              {skuStatus === 'tooShort' && <FieldError>Enter at least 3 characters.</FieldError>}
-              {skuStatus === 'taken' && <FieldError>This SKU is already in use.</FieldError>}
-              {skuStatus === 'available' && (
-                <FieldDescription className="text-emerald-600">SKU is available.</FieldDescription>
-              )}
-              {skuStatus === 'checking' && <FieldDescription>Checking SKU availability…</FieldDescription>}
-              {skuStatus === 'error' && (
-                <FieldDescription className="text-amber-600">{identifierCheckError}</FieldDescription>
-              )}
-            </Field>
-            <Field>
-              <FieldLabel>Barcode</FieldLabel>
-              <HStack gap="2">
+        {' '}
+        <DialogContent className="max-h-[92vh] overflow-y-auto p-8 sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{initial ? 'Edit product' : 'Add product'}</DialogTitle>
+            <DialogDescription>Keep product information, pricing, inventory and media together.</DialogDescription>
+          </DialogHeader>
+          <FieldSet className="gap-6">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel>Product name</FieldLabel>
                 <Input
-                  ref={barcodeInputRef}
-                  value={form.barcode ?? ''}
-                  onChange={(e) => setBarcode(e.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') event.preventDefault()
-                  }}
-                  placeholder="Scan or enter barcode"
-                  aria-invalid={barcodeStatus === 'tooShort' || barcodeStatus === 'taken'}
+                  value={form.name}
+                  onChange={(e) => set('name', e.target.value)}
+                  placeholder="e.g. Wireless Mouse"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>SKU</FieldLabel>
+                <Input
+                  value={form.sku}
+                  onChange={(e) => set('sku', e.target.value)}
+                  placeholder="SKU-001"
+                  aria-invalid={skuStatus === 'tooShort' || skuStatus === 'taken'}
                   className={
-                    barcodeStatus === 'available'
+                    skuStatus === 'available'
                       ? 'border-emerald-500 focus-visible:ring-emerald-500'
-                      : barcodeStatus === 'tooShort' || barcodeStatus === 'taken'
+                      : skuStatus === 'tooShort' || skuStatus === 'taken'
                         ? 'border-destructive focus-visible:ring-destructive'
-                        : barcodeStatus === 'error'
+                        : skuStatus === 'error'
                           ? 'border-amber-500 focus-visible:ring-amber-500'
                           : ''
                   }
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label="Scan barcode with camera"
-                  title="Scan barcode with camera"
-                  onClick={() => setBarcodeScannerOpen(true)}
+                {skuStatus === 'tooShort' && <FieldError>Enter at least 3 characters.</FieldError>}
+                {skuStatus === 'taken' && <FieldError>This SKU is already in use.</FieldError>}
+                {skuStatus === 'available' && (
+                  <FieldDescription className="text-emerald-600">SKU is available.</FieldDescription>
+                )}
+                {skuStatus === 'checking' && <FieldDescription>Checking SKU availability…</FieldDescription>}
+                {skuStatus === 'error' && (
+                  <FieldDescription className="text-amber-600">{skuCheckError}</FieldDescription>
+                )}
+              </Field>
+              <Field>
+                <FieldLabel>Barcode</FieldLabel>
+                <HStack gap="2" wrap="wrap">
+                  <Input
+                    ref={barcodeInputRef}
+                    value={form.barcode ?? ''}
+                    onChange={(e) => setBarcode(e.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.preventDefault()
+                    }}
+                    placeholder="Scan or enter barcode"
+                    aria-invalid={barcodeStatus === 'tooShort' || barcodeStatus === 'taken'}
+                    className={
+                      barcodeStatus === 'available'
+                        ? 'border-emerald-500 focus-visible:ring-emerald-500'
+                        : barcodeStatus === 'tooShort' || barcodeStatus === 'taken'
+                          ? 'border-destructive focus-visible:ring-destructive'
+                          : barcodeStatus === 'error'
+                            ? 'border-amber-500 focus-visible:ring-amber-500'
+                            : ''
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label="Scan barcode with camera"
+                    title="Scan barcode with camera"
+                    onClick={() => setBarcodeScannerOpen(true)}
+                  >
+                    <Barcode size={16} />
+                    Scan
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void generateBarcode()}
+                    disabled={barcodeGenerating}
+                  >
+                    {barcodeGenerating ? 'Generating…' : 'Generate barcode'}
+                  </Button>
+                </HStack>
+                <FieldDescription>
+                  Focus this field before using a hardware scanner, or scan with your camera.
+                </FieldDescription>
+                {barcodeStatus === 'tooShort' && (
+                  <FieldError>Enter at least 3 characters or leave it empty.</FieldError>
+                )}
+                {barcodeStatus === 'taken' && <FieldError>This barcode is already in use.</FieldError>}
+                {barcodeStatus === 'available' && (
+                  <FieldDescription className="text-emerald-600">Barcode is available.</FieldDescription>
+                )}
+                {barcodeStatus === 'checking' && <FieldDescription>Checking barcode availability…</FieldDescription>}
+                {barcodeStatus === 'error' && (
+                  <FieldDescription className="text-amber-600">{barcodeCheckError}</FieldDescription>
+                )}
+              </Field>
+              <Field>
+                <Checkbox.Root
+                  checked={fillByTakealot}
+                  disabled={!takealotConfigured}
+                  onCheckedChange={(details) => setFillByTakealot(details.checked === true)}
                 >
-                  <Barcode size={16} />
-                  Scan
-                </Button>
-              </HStack>
-              <FieldDescription>Focus this field before using a hardware scanner, or scan with your camera.</FieldDescription>
-              {barcodeStatus === 'tooShort' && (
-                <FieldError>Enter at least 3 characters or leave it empty.</FieldError>
-              )}
-              {barcodeStatus === 'taken' && <FieldError>This barcode is already in use.</FieldError>}
-              {barcodeStatus === 'available' && (
-                <FieldDescription className="text-emerald-600">Barcode is available.</FieldDescription>
-              )}
-              {barcodeStatus === 'checking' && <FieldDescription>Checking barcode availability…</FieldDescription>}
-              {barcodeStatus === 'error' && (
-                <FieldDescription className="text-amber-600">{identifierCheckError}</FieldDescription>
-              )}
-            </Field>
-            <Field>
-              <Checkbox.Root
-                checked={fillByTakealot}
-                disabled={!takealotConfigured}
-                onCheckedChange={(details) => setFillByTakealot(details.checked === true)}
-              >
-                <Checkbox.HiddenInput />
-                <Checkbox.Control />
-                <Checkbox.Label>Fill product details from Takealot</Checkbox.Label>
-              </Checkbox.Root>
-              {!takealotConfigured && <FieldDescription>Configure Takealot API credentials in Settings to search offers.</FieldDescription>}
-              {fillByTakealot && (
-                <>
-                  <FieldLabel mt="3">Find Takealot offer</FieldLabel>
-                  <div className="grid grid-cols-[130px_minmax(0,1fr)] gap-2">
-                    <NativeSelect.Root size="sm" disabled={!takealotConfigured}>
-                      <NativeSelect.Field value={lookupType} onChange={(event) => setLookupType(event.target.value as TakealotLookupType)}>
-                        <option value="BARCODE">Barcode</option>
-                        <option value="SKU">SKU</option>
-                        <option value="OFFER_ID">Offer ID</option>
-                      </NativeSelect.Field>
-                    </NativeSelect.Root>
-                    <Box position="relative">
-                      <Input
-                        disabled={!takealotConfigured}
-                        value={lookupValue}
-                        onChange={(event) => {
-                          const nextValue = event.target.value
-                          setLookupValue(nextValue)
-                          if (nextValue.trim() !== form.takealotProductId) {
-                            set('takealotProductId', null)
-                            set('takealotSync', false)
-                          }
-                        }}
-                        placeholder="Enter barcode, SKU, or offer ID"
-                        autoComplete="off"
-                      />
-                      {takealotConfigured && lookupValue.trim().length >= 3 && (suggestionsLoading || suggestions.length > 0 || suggestionsError) && (
-                        <Box
-                          position="absolute"
-                          top="calc(100% + 8px)"
-                          right="0"
-                          zIndex="popover"
-                          w="min(480px, calc(100vw - 2rem))"
-                          maxH="96"
-                          overflowY="auto"
-                          p="2"
-                          bg="bg"
-                          borderWidth="1px"
-                          borderColor="border"
-                          borderRadius="xl"
-                          shadow="xl"
+                  <Checkbox.HiddenInput />
+                  <Checkbox.Control />
+                  <Checkbox.Label>Fill product details from Takealot</Checkbox.Label>
+                </Checkbox.Root>
+                {!takealotConfigured && (
+                  <FieldDescription>Configure Takealot API credentials in Settings to search offers.</FieldDescription>
+                )}
+                {fillByTakealot && (
+                  <>
+                    <FieldLabel mt="3">Find Takealot offer</FieldLabel>
+                    <div className="grid grid-cols-[130px_minmax(0,1fr)] gap-2">
+                      <NativeSelect.Root size="sm" disabled={!takealotConfigured}>
+                        <NativeSelect.Field
+                          value={lookupType}
+                          onChange={(event) => setLookupType(event.target.value as TakealotLookupType)}
                         >
-                          {suggestionsLoading && <Text px="3" py="2" fontSize="sm" color="fg.muted">Searching Takealot…</Text>}
-                          {suggestionsError && <Text px="3" py="2" fontSize="sm" color="fg.error">{suggestionsError}</Text>}
-                          {!suggestionsLoading && !suggestionsError && suggestions.length === 0 && <Text px="3" py="2" fontSize="sm" color="fg.muted">No matching offer found.</Text>}
-                          {suggestions.map((suggestion) => (
+                          <option value="BARCODE">Barcode</option>
+                          <option value="SKU">SKU</option>
+                          <option value="OFFER_ID">Offer ID</option>
+                        </NativeSelect.Field>
+                      </NativeSelect.Root>
+                      <Box position="relative">
+                        <Input
+                          disabled={!takealotConfigured}
+                          value={lookupValue}
+                          onChange={(event) => {
+                            const nextValue = event.target.value
+                            setLookupValue(nextValue)
+                            if (nextValue.trim() !== form.takealotProductId) {
+                              set('takealotProductId', null)
+                              set('takealotSync', false)
+                            }
+                          }}
+                          placeholder="Enter barcode, SKU, or offer ID"
+                          autoComplete="off"
+                        />
+                        {takealotConfigured &&
+                          lookupValue.trim().length >= 3 &&
+                          (suggestionsLoading || suggestions.length > 0 || suggestionsError) && (
                             <Box
-                              key={suggestion.offerId || suggestion.barcode || suggestion.sku}
-                              overflow="hidden"
+                              position="absolute"
+                              top="calc(100% + 8px)"
+                              right="0"
+                              zIndex="popover"
+                              w="min(480px, calc(100vw - 2rem))"
+                              maxH="96"
+                              overflowY="auto"
+                              p="2"
+                              bg="bg"
                               borderWidth="1px"
                               borderColor="border"
-                              borderRadius="lg"
-                              bg="bg"
+                              borderRadius="xl"
+                              shadow="xl"
                             >
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                w="full"
-                                h="auto"
-                                p="3"
-                                display="flex"
-                                alignItems="stretch"
-                                justifyContent="flex-start"
-                                whiteSpace="normal"
-                                textAlign="left"
-                                _hover={{ bg: 'bg.muted' }}
-                                onClick={() => void selectTakealotSuggestion(suggestion)}
-                              >
+                              {suggestionsLoading && (
+                                <Text px="3" py="2" fontSize="sm" color="fg.muted">
+                                  Searching Takealot…
+                                </Text>
+                              )}
+                              {suggestionsError && (
+                                <Text px="3" py="2" fontSize="sm" color="fg.error">
+                                  {suggestionsError}
+                                </Text>
+                              )}
+                              {!suggestionsLoading && !suggestionsError && suggestions.length === 0 && (
+                                <Text px="3" py="2" fontSize="sm" color="fg.muted">
+                                  No matching offer found.
+                                </Text>
+                              )}
+                              {suggestions.map((suggestion) => (
                                 <Box
-                                  display="grid"
-                                  w="full"
-                                  minW="0"
-                                  gridTemplateColumns="80px minmax(0, 1fr)"
-                                  alignItems="start"
-                                  gap="3"
+                                  key={suggestion.offerId || suggestion.barcode || suggestion.sku}
+                                  overflow="hidden"
+                                  borderWidth="1px"
+                                  borderColor="border"
+                                  borderRadius="lg"
+                                  bg="bg"
                                 >
-                                  <Box
-                                    boxSize="20"
-                                    display="grid"
-                                    flexShrink="0"
-                                    placeItems="center"
-                                    overflow="hidden"
-                                    borderWidth="1px"
-                                    borderColor="border"
-                                    borderRadius="md"
-                                    bg="white"
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    w="full"
+                                    h="auto"
+                                    p="3"
+                                    display="flex"
+                                    alignItems="stretch"
+                                    justifyContent="flex-start"
+                                    whiteSpace="normal"
+                                    textAlign="left"
+                                    _hover={{ bg: 'bg.muted' }}
+                                    onClick={() => void selectTakealotSuggestion(suggestion)}
                                   >
-                                    {suggestion.imageUrl
-                                      ? <Image src={suggestion.imageUrl} alt="" w="full" h="full" p="1" objectFit="contain" />
-                                      : <ImageIcon size={22} />}
-                                  </Box>
-                                  <Stack align="stretch" gap="2" minW="0">
-                                    <Text fontSize="sm" fontWeight="semibold" lineClamp={2} whiteSpace="normal">
-                                      {suggestion.title || 'Takealot offer'}
-                                    </Text>
-                                    <Stack gap="1" minW="0">
-                                      <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
-                                        <Box as="span" fontWeight="medium" color="fg">Barcode</Box>
-                                        {': '}{suggestion.barcode || 'Unavailable'}
-                                      </Text>
-                                      <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
-                                        <Box as="span" fontWeight="medium" color="fg">SKU</Box>
-                                        {': '}{suggestion.sku || 'Unavailable'}
-                                      </Text>
-                                      <Text fontSize="xs" color="fg.muted">
-                                        <Box as="span" fontWeight="medium" color="fg">Offer</Box>
-                                        {': '}{suggestion.offerId || 'Unavailable'}
-                                      </Text>
-                                    </Stack>
-                                    <HStack justify="space-between" gap="2" flexWrap="wrap">
-                                      <Text fontSize="sm" fontWeight="bold" color="fg">
-                                        {suggestion.price === null ? 'Price unavailable' : formatCurrency(suggestion.price)}
-                                      </Text>
+                                    <Box
+                                      display="grid"
+                                      w="full"
+                                      minW="0"
+                                      gridTemplateColumns="80px minmax(0, 1fr)"
+                                      alignItems="start"
+                                      gap="3"
+                                    >
                                       <Box
-                                        px="2"
-                                        py="0.5"
-                                        borderRadius="full"
-                                        bg={suggestion.stock === null ? 'bg.muted' : suggestion.stock > 0 ? 'green.subtle' : 'orange.subtle'}
-                                        color={suggestion.stock === null ? 'fg.muted' : suggestion.stock > 0 ? 'green.fg' : 'orange.fg'}
-                                        fontSize="xs"
-                                        fontWeight="medium"
-                                        whiteSpace="nowrap"
+                                        boxSize="20"
+                                        display="grid"
+                                        flexShrink="0"
+                                        placeItems="center"
+                                        overflow="hidden"
+                                        borderWidth="1px"
+                                        borderColor="border"
+                                        borderRadius="md"
+                                        bg="white"
                                       >
-                                        {suggestion.stock === null ? 'Stock unavailable' : `${suggestion.stock} in stock`}
+                                        {suggestion.imageUrl ? (
+                                          <Image
+                                            src={suggestion.imageUrl}
+                                            alt=""
+                                            w="full"
+                                            h="full"
+                                            p="1"
+                                            objectFit="contain"
+                                          />
+                                        ) : (
+                                          <ImageIcon size={22} />
+                                        )}
                                       </Box>
-                                    </HStack>
-                                  </Stack>
-                                </Box>
-                              </Button>
-                              <HStack
-                                justify="space-between"
-                                px="3"
-                                py="2"
-                                borderTopWidth="1px"
-                                borderColor="border"
-                                bg="bg.subtle"
-                              >
-                                <Text fontSize="xs" color="fg.muted">Click card to fill product details</Text>
-                                {suggestion.offerUrl && (
-                                  <a
-                                    href={suggestion.offerUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    onClick={(event) => event.stopPropagation()}
-                                    className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                      <Stack align="stretch" gap="2" minW="0">
+                                        <Text fontSize="sm" fontWeight="semibold" lineClamp={2} whiteSpace="normal">
+                                          {suggestion.title || 'Takealot offer'}
+                                        </Text>
+                                        <Stack gap="1" minW="0">
+                                          <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                                            <Box as="span" fontWeight="medium" color="fg">
+                                              Barcode
+                                            </Box>
+                                            {': '}
+                                            {suggestion.barcode || 'Unavailable'}
+                                          </Text>
+                                          <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                                            <Box as="span" fontWeight="medium" color="fg">
+                                              SKU
+                                            </Box>
+                                            {': '}
+                                            {suggestion.sku || 'Unavailable'}
+                                          </Text>
+                                          <Text fontSize="xs" color="fg.muted">
+                                            <Box as="span" fontWeight="medium" color="fg">
+                                              Offer
+                                            </Box>
+                                            {': '}
+                                            {suggestion.offerId || 'Unavailable'}
+                                          </Text>
+                                        </Stack>
+                                        <HStack justify="space-between" gap="2" flexWrap="wrap">
+                                          <Text fontSize="sm" fontWeight="bold" color="fg">
+                                            {suggestion.price === null
+                                              ? 'Price unavailable'
+                                              : formatCurrency(suggestion.price)}
+                                          </Text>
+                                          <Box
+                                            px="2"
+                                            py="0.5"
+                                            borderRadius="full"
+                                            bg={
+                                              suggestion.stock === null
+                                                ? 'bg.muted'
+                                                : suggestion.stock > 0
+                                                  ? 'green.subtle'
+                                                  : 'orange.subtle'
+                                            }
+                                            color={
+                                              suggestion.stock === null
+                                                ? 'fg.muted'
+                                                : suggestion.stock > 0
+                                                  ? 'green.fg'
+                                                  : 'orange.fg'
+                                            }
+                                            fontSize="xs"
+                                            fontWeight="medium"
+                                            whiteSpace="nowrap"
+                                          >
+                                            {suggestion.stock === null
+                                              ? 'Stock unavailable'
+                                              : `${suggestion.stock} in stock`}
+                                          </Box>
+                                        </HStack>
+                                      </Stack>
+                                    </Box>
+                                  </Button>
+                                  <HStack
+                                    justify="space-between"
+                                    px="3"
+                                    py="2"
+                                    borderTopWidth="1px"
+                                    borderColor="border"
+                                    bg="bg.subtle"
                                   >
-                                    View offer <ExternalLink size={12} />
-                                  </a>
-                                )}
-                              </HStack>
+                                    <Text fontSize="xs" color="fg.muted">
+                                      Click card to fill product details
+                                    </Text>
+                                    {suggestion.offerUrl && (
+                                      <a
+                                        href={suggestion.offerUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        onClick={(event) => event.stopPropagation()}
+                                        className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                      >
+                                        View offer <ExternalLink size={12} />
+                                      </a>
+                                    )}
+                                  </HStack>
+                                </Box>
+                              ))}
                             </Box>
-                          ))}
-                        </Box>
-                      )}
-                    </Box>
-                  </div>
-                  {form.takealotProductId && <FieldDescription>Takealot barcode saved: {form.takealotProductId}</FieldDescription>}
-                </>
-              )}
-              <Checkbox.Root
-                mt="2"
-                checked={Boolean(form.takealotSync)}
-                disabled={!takealotConfigured}
-                onCheckedChange={(details) => set('takealotSync', details.checked === true)}
-              >
-                <Checkbox.HiddenInput />
-                <Checkbox.Control />
-                <Checkbox.Label>Sync stock levels with Takealot</Checkbox.Label>
-              </Checkbox.Root>
-            </Field>
-            <Field>
-              <FieldLabel>Category</FieldLabel>
-              <SearchableSelect
-                options={categories.map((item) => ({ value: item.id, label: item.name }))}
-                value={form.categoryId}
-                onChange={(value) => set('categoryId', value)}
-                placeholder="Search and select a category"
-                emptyMessage="No categories found."
-              />
-            </Field>
-            <Field>
-              <FieldLabel>Brand</FieldLabel>
-              <SearchableSelect
-                options={[
-                  { value: '__none__', label: 'No brand' },
-                  ...brands.map((item) => ({ value: item.id, label: item.name })),
-                ]}
-                value={form.brandId ?? ''}
-                onChange={(value) => set('brandId', value && value !== '__none__' ? value : null)}
-                placeholder="Search and select a brand (optional)"
-                emptyMessage="No brands found."
-              />
-            </Field>
-            <Field>
-              <FieldLabel>Supplier</FieldLabel>
-              <SearchableSelect
-                options={[
-                  { value: '__none__', label: 'No supplier' },
-                  ...suppliers.map((item) => ({ value: item.id, label: item.name })),
-                ]}
-                value={form.supplierId ?? ''}
-                onChange={(value) => set('supplierId', value && value !== '__none__' ? value : null)}
-                placeholder="Search and select a supplier (optional)"
-                emptyMessage="No suppliers found."
-              />
-            </Field>
-          </div>
-          <Field>
-            <FieldLabel>Description</FieldLabel>
-            <Textarea
-              value={form.description ?? ''}
-              onChange={(e) => set('description', e.target.value)}
-              placeholder="Short product description"
-            />
-          </Field>
-          <Separator />
-          <div>
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-medium">
-              <Package />
-              Pricing and stock
-            </h3>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field>
-                <FieldLabel>RRP</FieldLabel>
-                <Input type="number" min="0" value={form.rrp} onChange={(e) => set('rrp', Number(e.target.value))} />
+                          )}
+                      </Box>
+                    </div>
+                    {form.takealotProductId && (
+                      <FieldDescription>Takealot barcode saved: {form.takealotProductId}</FieldDescription>
+                    )}
+                  </>
+                )}
+                <Checkbox.Root
+                  mt="2"
+                  checked={Boolean(form.takealotSync)}
+                  disabled={!takealotConfigured}
+                  onCheckedChange={(details) => set('takealotSync', details.checked === true)}
+                >
+                  <Checkbox.HiddenInput />
+                  <Checkbox.Control />
+                  <Checkbox.Label>Sync stock levels with Takealot</Checkbox.Label>
+                </Checkbox.Root>
               </Field>
               <Field>
-                <FieldLabel>Selling price</FieldLabel>
-                <Input
-                  type="number"
-                  min="0"
-                  value={form.sellingPrice}
-                  onChange={(e) => set('sellingPrice', Number(e.target.value))}
-                />
-              </Field>{' '}
-              <Field>
-                <FieldLabel>Purchase cost</FieldLabel>
-                <Input
-                  type="number"
-                  min="0"
-                  value={form.purchaseCost}
-                  onChange={(e) => set('purchaseCost', Number(e.target.value))}
+                <FieldLabel>Category</FieldLabel>
+                <SearchableSelect
+                  options={categories.map((item) => ({ value: item.id, label: item.name }))}
+                  value={form.categoryId}
+                  onChange={(value) => set('categoryId', value)}
+                  placeholder="Search and select a category"
+                  emptyMessage="No categories found."
                 />
               </Field>
               <Field>
-                <FieldLabel>Initial stock count</FieldLabel>
-                <Input
-                  type="number"
-                  min="0"
-                  value={form.stockQuantity ?? 0}
-                  onChange={(e) => set('stockQuantity', Number(e.target.value))}
+                <FieldLabel>Brand</FieldLabel>
+                <SearchableSelect
+                  options={[
+                    { value: '__none__', label: 'No brand' },
+                    ...brands.map((item) => ({ value: item.id, label: item.name })),
+                  ]}
+                  value={form.brandId ?? ''}
+                  onChange={(value) => set('brandId', value && value !== '__none__' ? value : null)}
+                  placeholder="Search and select a brand (optional)"
+                  emptyMessage="No brands found."
                 />
               </Field>
               <Field>
-                <FieldLabel>Low-stock threshold</FieldLabel>
-                <Input
-                  type="number"
-                  min="0"
-                  value={form.lowStockThreshold}
-                  onChange={(e) => set('lowStockThreshold', Number(e.target.value))}
+                <FieldLabel>Supplier</FieldLabel>
+                <SearchableSelect
+                  options={[
+                    { value: '__none__', label: 'No supplier' },
+                    ...suppliers.map((item) => ({ value: item.id, label: item.name })),
+                  ]}
+                  value={form.supplierId ?? ''}
+                  onChange={(value) => set('supplierId', value && value !== '__none__' ? value : null)}
+                  placeholder="Search and select a supplier (optional)"
+                  emptyMessage="No suppliers found."
                 />
-                <FieldDescription>Stock is managed through inventory.</FieldDescription>
               </Field>
             </div>
-          </div>
-          <Separator />
-          {takealotImageLoading && (
-            <Box display="flex" alignItems="center" gap="3" rounded="lg" borderWidth="1px" p="3">
-              <Image src={takealotImagePreview} alt="" boxSize="16" objectFit="contain" rounded="md" bg="bg.muted" />
-              <Stack gap="1">
-                <Text fontSize="sm" fontWeight="medium">Importing Takealot image</Text>
-                <Text fontSize="xs" color="fg.muted">The image is being prepared for your product. You can continue editing the form.</Text>
-              </Stack>
-            </Box>
-          )}
-          <QrImageUploader
-            label="Product images"
-            description="Upload product photos directly or scan the QR code to upload from phone."
-            purpose="PRODUCT_IMAGE"
-            multiple
-            isNewEntity={!initial}
-            initialKeys={initial?.imageKeys ?? []}
-            value={[...existingImages, ...stagedKeys].map((key, i) => ({
-              key,
-              previewUrl: imageUrls[i] || '',
-            }))}
-            onChange={(images) => {
-              setExistingImages(images.map((img) => img.key))
-              setImageUrls(images.map((img) => img.previewUrl))
-              setStagedKeys([])
-            }}
-            onRemove={(idx) => {
-              const allKeys = [...existingImages, ...stagedKeys]
-              const removedKey = allKeys[idx]
-              setExistingImages((prev) => prev.filter((k) => k !== removedKey))
-              setStagedKeys((prev) => prev.filter((k) => k !== removedKey))
-              setImageUrls((prev) => prev.filter((_, i) => i !== idx))
-            }}
-            onManualFileSelect={(selected) => {
-              void handleFiles(Array.from(selected))
-            }}
-            isUploadingManual={uploading}
-          />
-          {error && <FieldError>{error}</FieldError>}
-        </FieldSet>
-        <DialogFooter>
-          {' '}
-          <Button
-            variant="outline"
-            className="transition-all hover:-translate-y-0.5 hover:bg-muted"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            className="bg-foreground text-background transition-all hover:-translate-y-0.5 hover:bg-foreground/80 hover:shadow-md"
-            onClick={submit}
-            disabled={saving || uploading}
-          >
-            {saving ? 'Saving…' : initial ? 'Save product' : 'Create product'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+            <Field>
+              <FieldLabel>Description</FieldLabel>
+              <Textarea
+                value={form.description ?? ''}
+                onChange={(e) => set('description', e.target.value)}
+                placeholder="Short product description"
+              />
+            </Field>
+            <Separator />
+            <div>
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-medium">
+                <Package />
+                Pricing and stock
+              </h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel>RRP</FieldLabel>
+                  <Input type="number" min="0" value={form.rrp} onChange={(e) => set('rrp', Number(e.target.value))} />
+                </Field>
+                <Field>
+                  <FieldLabel>Selling price</FieldLabel>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={form.sellingPrice}
+                    onChange={(e) => set('sellingPrice', Number(e.target.value))}
+                  />
+                </Field>{' '}
+                <Field>
+                  <FieldLabel>Purchase cost</FieldLabel>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={form.purchaseCost}
+                    onChange={(e) => set('purchaseCost', Number(e.target.value))}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Initial stock count</FieldLabel>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={form.stockQuantity ?? 0}
+                    onChange={(e) => set('stockQuantity', Number(e.target.value))}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Low-stock threshold</FieldLabel>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={form.lowStockThreshold}
+                    onChange={(e) => set('lowStockThreshold', Number(e.target.value))}
+                  />
+                  <FieldDescription>Stock is managed through inventory.</FieldDescription>
+                </Field>
+              </div>
+            </div>
+            <Separator />
+            {takealotImageLoading && (
+              <Box display="flex" alignItems="center" gap="3" rounded="lg" borderWidth="1px" p="3">
+                <Image src={takealotImagePreview} alt="" boxSize="16" objectFit="contain" rounded="md" bg="bg.muted" />
+                <Stack gap="1">
+                  <Text fontSize="sm" fontWeight="medium">
+                    Importing Takealot image
+                  </Text>
+                  <Text fontSize="xs" color="fg.muted">
+                    The image is being prepared for your product. You can continue editing the form.
+                  </Text>
+                </Stack>
+              </Box>
+            )}
+            <QrImageUploader
+              label="Product images"
+              description="Upload product photos directly or scan the QR code to upload from phone."
+              purpose="PRODUCT_IMAGE"
+              multiple
+              isNewEntity={!initial}
+              initialKeys={initial?.imageKeys ?? []}
+              value={[...existingImages, ...stagedKeys].map((key, i) => ({
+                key,
+                previewUrl: imageUrls[i] || '',
+              }))}
+              onChange={(images) => {
+                setExistingImages(images.map((img) => img.key))
+                setImageUrls(images.map((img) => img.previewUrl))
+                setStagedKeys([])
+              }}
+              onRemove={(idx) => {
+                const allKeys = [...existingImages, ...stagedKeys]
+                const removedKey = allKeys[idx]
+                setExistingImages((prev) => prev.filter((k) => k !== removedKey))
+                setStagedKeys((prev) => prev.filter((k) => k !== removedKey))
+                setImageUrls((prev) => prev.filter((_, i) => i !== idx))
+              }}
+              onManualFileSelect={(selected) => {
+                void handleFiles(Array.from(selected))
+              }}
+              isUploadingManual={uploading}
+            />
+            {error && <FieldError>{error}</FieldError>}
+          </FieldSet>
+          <DialogFooter>
+            {' '}
+            <Button
+              variant="outline"
+              className="transition-all hover:-translate-y-0.5 hover:bg-muted"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-foreground text-background transition-all hover:-translate-y-0.5 hover:bg-foreground/80 hover:shadow-md"
+              onClick={submit}
+              disabled={saving || uploading}
+            >
+              {saving ? 'Saving…' : initial ? 'Save product' : 'Create product'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
       <BarcodeCameraScanner
         open={barcodeScannerOpen}
@@ -1193,7 +1333,36 @@ function ConfirmDelete({
   )
 }
 
-function Actions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+function Actions({ onEdit, onDelete, onPrint }: { onEdit: () => void; onDelete: () => void; onPrint?: () => void }) {
+  if (onPrint) {
+    return (
+      <Menu.Root positioning={{ placement: 'bottom-end' }}>
+        <Menu.Trigger asChild>
+          <Button variant="ghost" size="icon-xs" aria-label="More product actions">
+            <MoreHorizontal size={15} />
+          </Button>
+        </Menu.Trigger>
+        <Portal>
+          <Menu.Positioner zIndex="popover">
+            <Menu.Content>
+              <Menu.Item value="edit" onClick={onEdit}>
+                <Pencil size={14} />
+                Edit
+              </Menu.Item>
+              <Menu.Item value="print-barcode" onClick={onPrint}>
+                <Printer size={14} />
+                Print barcode
+              </Menu.Item>
+              <Menu.Item value="delete" onClick={onDelete} color="fg.error">
+                <Trash2 size={14} />
+                Delete
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Positioner>
+        </Portal>
+      </Menu.Root>
+    )
+  }
   return (
     <HStack gap="1" justify="flex-end">
       <Button variant="ghost" size="icon-xs" aria-label="Edit" onClick={onEdit}>
@@ -1265,6 +1434,7 @@ function ProductsSection() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [dialog, setDialog] = useState<{ open: boolean; item?: CatalogProduct }>({ open: false })
+  const [printProduct, setPrintProduct] = useState<CatalogProduct | null>(null)
   const [remove, setRemove] = useState<CatalogProduct>()
   const load = () => {
     setLoading(true)
@@ -1430,7 +1600,11 @@ function ProductsSection() {
                         </TableCell>
                         <TableCell>{item.supplier?.name ?? '—'}</TableCell>
                         <TableCell className="sticky right-0 z-10 bg-background">
-                          <Actions onEdit={() => setDialog({ open: true, item })} onDelete={() => setRemove(item)} />
+                          <Actions
+                            onEdit={() => setDialog({ open: true, item })}
+                            onDelete={() => setRemove(item)}
+                            onPrint={() => setPrintProduct(item)}
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1440,19 +1614,25 @@ function ProductsSection() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4 text-xs text-muted-foreground">
             Showing {items.length} of {totalProducts} products
             <span className="flex flex-wrap items-center gap-3">
-              <PageSizeControl value={pageSize} onChange={(value) => { setPageSize(value); setPage(1) }} />
+              <PageSizeControl
+                value={pageSize}
+                onChange={(value) => {
+                  setPageSize(value)
+                  setPage(1)
+                }}
+              />
               <span className="flex gap-2">
-              <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
-                Previous
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page >= totalPages}
-                onClick={() => setPage((value) => value + 1)}
-              >
-                Next
-              </Button>
+                <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
+                  Previous
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((value) => value + 1)}
+                >
+                  Next
+                </Button>
               </span>
             </span>
           </div>
@@ -1474,6 +1654,7 @@ function ProductsSection() {
           }
         }}
       />
+      <BarcodePrintDialog product={printProduct} open={printProduct !== null} onClose={() => setPrintProduct(null)} />
       <ConfirmDelete
         target={remove ? { type: 'product', name: remove.name } : undefined}
         onOpenChange={(open) => !open && setRemove(undefined)}

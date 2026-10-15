@@ -25,6 +25,8 @@ export function AgentPanel({
   const {
     messages,
     isStreaming,
+    isLoadingConversation,
+    isCreatingConversation,
     activeConversationId,
     loadConversation,
     createNewConversation,
@@ -121,12 +123,14 @@ export function AgentPanel({
         messages={messages}
         conversationId={activeConversationId || 'conv_active'}
         isStreaming={isStreaming}
+        isLoading={isLoadingConversation || isCreatingConversation}
         onRespond={handleInteraction}
         onSuggestionClick={(prompt) => sendMessage(prompt)}
       />
 
       <AgentComposer
         isStreaming={isStreaming}
+        disabled={isLoadingConversation || isCreatingConversation}
         onSend={(text) => sendMessage(text)}
         onStop={stopStream}
       />

@@ -1,66 +1,72 @@
-import { useState } from 'react'
-import { Box, Button, HStack, Textarea } from '@chakra-ui/react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { Box, Button, Flex, Textarea } from '@chakra-ui/react'
 import { Send, Square } from 'lucide-react'
+
+const MAX_HEIGHT = 180
 
 export function AgentComposer({
   isStreaming,
+  disabled = false,
   onSend,
   onStop,
 }: {
   isStreaming: boolean
+  disabled?: boolean
   onSend: (text: string) => void
   onStop: () => void
 }) {
   const [input, setInput] = useState('')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`
+    el.style.overflowY = el.scrollHeight > MAX_HEIGHT ? 'auto' : 'hidden'
+  }, [input])
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault()
-    if (!input.trim() || isStreaming) return
+    if (!input.trim() || isStreaming || disabled) return
     onSend(input.trim())
     setInput('')
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       handleSubmit()
-    }
-  }
-
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const text = e.clipboardData.getData('text/plain')
-    if (text) {
-      e.preventDefault()
-      const target = e.currentTarget
-      const start = target.selectionStart || 0
-      const end = target.selectionEnd || 0
-      const newValue = input.slice(0, start) + text + input.slice(end)
-      setInput(newValue)
-      setTimeout(() => {
-        target.selectionStart = target.selectionEnd = start + text.length
-      }, 0)
     }
   }
 
   return (
     <Box p="3" bg="surface" borderTopWidth="1px" borderColor="border">
       <form onSubmit={handleSubmit}>
-        <HStack gap="2" align="flex-end">
+        <Flex gap="2" align="flex-end">
           <Textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
             placeholder="Ask AI Assistant..."
+            aria-label="Message the AI assistant"
             rows={1}
             resize="none"
             size="sm"
-            borderRadius="md"
-            className="text-xs py-2 px-3 focus:ring-1 focus:ring-blue-500 min-h-[38px] max-h-[140px] overflow-y-auto"
+            borderRadius="lg"
+            minH="40px"
+            lineHeight="1.5"
+            fontSize="sm"
+            px="3"
+            py="2"
+            flex="1"
+            overflowY="hidden"
           />
           {isStreaming ? (
             <Button
               size="sm"
+              h="40px"
               colorPalette="red"
               variant="subtle"
               onClick={onStop}
@@ -74,15 +80,18 @@ export function AgentComposer({
             <Button
               type="submit"
               size="sm"
-              colorScheme="blue"
-              disabled={!input.trim()}
+              h="40px"
+              bg="#2563EB"
+              color="#FFFFFF"
+              _hover={{ bg: '#1D4ED8' }}
+              disabled={!input.trim() || disabled}
               aria-label="Send message"
               px="3.5"
             >
-              <Send size={14} />
+              <Send size={15} />
             </Button>
           )}
-        </HStack>
+        </Flex>
       </form>
     </Box>
   )
