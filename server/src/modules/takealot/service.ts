@@ -237,13 +237,20 @@ const catalogUnitCosts = async (companyId: string, sales: TakealotSale[]) => {
 			select: { sku: true, averageCost: true },
 		}));
 	}
-	return new Map(products.flatMap((product) => {
+	const costs = new Map<string, number>();
+	for (const product of products) {
 		const averageCost = Number(product.averageCost);
-		return Number.isFinite(averageCost) && averageCost >= 0 ? [[product.sku, averageCost]] : [];
-	}));
+		if (Number.isFinite(averageCost) && averageCost > 0) costs.set(product.sku, averageCost);
+	}
+	// The SKU-encoded cost (e.g. R35-... or C35-...) takes precedence over the catalog.
+	for (const sku of skus) {
+		const match = /[CR](\d+)(?!\d)/i.exec(sku.trim());
+		if (match) costs.set(sku, Number(match[1]));
+	}
+	return costs;
 };
 
-const summarizeProductSales = (sales: TakealotSale[], unitCosts: Map<string, number>) => {
+const summarizeProductSales = (sales: TakealotSale[], unitCosts: Map<string, number>, allowPartialCost = false) => {
 	let revenue = 0;
 	let units = 0;
 	let totalFee = 0;
@@ -298,7 +305,8 @@ const summarizeProductSales = (sales: TakealotSale[], unitCosts: Map<string, num
 
 	const roundedRevenue = roundMoney(revenue);
 	const roundedTotalFee = feesAvailable && sales.length > 0 ? roundMoney(totalFee) : null;
-	const roundedTotalCost = sales.length > 0 && uncostedUnits === 0 ? roundMoney(totalCost) : null;
+	// Partial totals are returned with uncostedUnits so the UI can flag incomplete coverage.
+	const roundedTotalCost = sales.length > 0 && (allowPartialCost || uncostedUnits === 0) ? roundMoney(totalCost) : null;
 	const profit = roundedTotalFee === null || roundedTotalCost === null
 		? null
 		: roundMoney(roundedRevenue - roundedTotalCost - roundedTotalFee);
@@ -586,8 +594,8 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 		const feePerUnit = totalFee === null || product.units === 0
 			? null
 			: roundMoney(totalFee / product.units);
-		const totalCost = roundMoney(product.totalCost);
-		const profit = totalFee === null || product.uncostedUnits > 0
+		const totalCost = product.uncostedUnits > 0 ? null : roundMoney(product.totalCost);
+		const profit = totalFee === null || totalCost === null
 			? null
 			: roundMoney(revenue - totalCost - totalFee);
 		const profitPerUnit = profit === null || product.units === 0
@@ -621,7 +629,7 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 	return {
 		products: ranked.slice(start, start + input.limit).map(({ stableId: _stableId, ...product }) => product),
 		pagination: pageResult(input.page, input.limit, ranked.length),
-		summary: summarizeProductSales(sales, unitCosts),
+		summary: summarizeProductSales(sales, unitCosts, true),
 		revenueDefinition,
 		profitDefinition,
 	};

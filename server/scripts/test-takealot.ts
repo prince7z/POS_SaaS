@@ -356,10 +356,18 @@ const main = async (): Promise<void> => {
 			"a2b8e672-7f09-4783-81ba-51a572205b71",
 			"sales_summary",
 			{ from: "2026-10-01", to: "2026-10-02" },
-		) as { profit: number | null; costCoverage: number };
+		) as { totalCost: number | null; profit: number | null; costCoverage: number };
+		assert.equal(incompleteSummary.totalCost, null);
 		assert.equal(incompleteSummary.profit, null);
 		assert.equal(incompleteSummary.costCoverage, 0.5);
-		logPass("Takealot agent operation returns estimated profit only with complete fee and catalog-cost coverage");
+		const incompleteProducts = await request("/takealot/products/performance?from=2026-10-01&to=2026-10-02&sortBy=revenue&order=desc&page=1&limit=10");
+		assert.equal(incompleteProducts.status, 200);
+		const uncostedProduct = (dataOf(incompleteProducts).products as Array<Record<string, unknown>>)
+			.find((product) => product.sku === "SKU-B");
+		assert.ok(uncostedProduct);
+		assert.equal(uncostedProduct.totalCost, null);
+		assert.equal(uncostedProduct.uncostedUnits, 3);
+		logPass("Takealot profit and product cost are withheld when catalog-cost coverage is incomplete");
 
 		const orders = await request("/takealot/orders?from=2026-10-01&to=2026-10-02&sku=SKU-A&orderId=10&page=1&limit=2");
 		assert.equal(orders.status, 200);

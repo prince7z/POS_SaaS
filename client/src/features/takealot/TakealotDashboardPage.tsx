@@ -1015,7 +1015,7 @@ function ProductPanel({
             </Flex>
           </Card.Root>
           <Text fontSize="xs" color="fg.muted">
-            {productData.revenueDefinition} Estimated profit / loss uses the C&lt;amount&gt; in the SKU as unit cost and calculates (average selling price - unit cost) × units; it excludes Takealot fees and other costs. Rows without that SKU pattern have no profit estimate.
+            {productData.revenueDefinition} Profit / loss = sales value - total item cost - Takealot fees, calculated by the backend. Unit cost comes from the C/R&lt;amount&gt; in the SKU (or the catalog cost); rows without a cost have no profit.
           </Text>
         </>
       )}
