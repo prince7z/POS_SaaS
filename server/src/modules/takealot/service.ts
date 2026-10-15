@@ -408,7 +408,7 @@ const aggregateSales = (sales: TakealotSale[]) => {
 };
 
 const revenueDefinition = "Gross sales value is the sum of Takealot selling_price values per sales row; quantity is summed separately. All returned sale_status values are included because the API documentation does not define their business meaning; this is not net revenue or profit.";
-const profitDefinition = "Estimated merchandise profit is gross sales value minus Takealot total_fee and quantity multiplied by the current averageCost of an exact-SKU match in this company's product catalog. It is unavailable unless every sold unit has a catalog cost match and every sales row has total_fee. It is not historical-cost accounting profit and excludes other expenses, taxes, and unreported fees.";
+const profitDefinition = "Estimated merchandise profit is gross sales value minus Takealot total_fee and the known product cost (unit cost multiplied by quantity). Unit cost uses a C/R amount encoded in the SKU first, then the current averageCost of an exact-SKU match in this company's product catalog. If some units have no cost, totalCost and profit include only costed units; uncostedUnits and costCoverage show the incomplete coverage, so these partial estimates overstate profit. Profit is unavailable if any sales row lacks total_fee. This is not historical-cost accounting profit and excludes other expenses, taxes, and unreported fees.";
 
 export const overview = async (apiKey: string, input: z.infer<typeof overviewSchema>) => {
 	const [salesSummary, stockCounts, stockHealth] = await Promise.all([
@@ -487,7 +487,7 @@ export const salesSummary = async (companyId: string, apiKey: string, input: z.i
 	return {
 		range: { from: input.from, to: input.to },
 		salesRows: sales.length,
-		...summarizeProductSales(sales, costs),
+		...summarizeProductSales(sales, costs, true),
 		revenueDefinition,
 		profitDefinition,
 	};
