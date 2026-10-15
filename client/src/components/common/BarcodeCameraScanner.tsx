@@ -10,16 +10,15 @@ export function BarcodeCameraScanner({
   onClose: () => void
   onDetected: (barcode: string) => void
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
   const onDetectedRef = useRef(onDetected)
   onDetectedRef.current = onDetected
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
-    if (!open) return
-    const video = videoRef.current
-    if (!video) return
+    if (!open || !videoElement) return
 
     let active = true
     let detected = false
@@ -34,6 +33,9 @@ export function BarcodeCameraScanner({
           import('@zxing/library'),
         ])
         if (!active) return
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Camera access requires HTTPS or localhost and a browser with camera support.')
+        }
         const hints = new Map([
           [
             DecodeHintType.POSSIBLE_FORMATS,
@@ -47,30 +49,37 @@ export function BarcodeCameraScanner({
           ],
         ])
         const reader = new BrowserMultiFormatReader(hints)
-        const scanControls = await reader.decodeFromVideoDevice(undefined, video, (result, scanError, scanControlsForFrame) => {
-          controls = scanControlsForFrame
-          if (!active || detected) return
-          if (result) {
-            detected = true
-            const barcode = result.getText()
-            scanControlsForFrame.stop()
-            if (barcode) onDetectedRef.current(barcode)
-            return
-          }
-          if (scanError && scanError.name !== 'NotFoundException') {
-            setError('The camera could not read a barcode. Adjust the lighting and try again.')
-          }
-        })
+        const scanControls = await reader.decodeFromConstraints(
+          { audio: false, video: { facingMode: { ideal: 'environment' } } },
+          videoElement,
+          (result, scanError, scanControlsForFrame) => {
+            controls = scanControlsForFrame
+            if (!active || detected) return
+            if (result) {
+              detected = true
+              const barcode = result.getText()
+              scanControlsForFrame.stop()
+              if (barcode) onDetectedRef.current(barcode)
+              return
+            }
+            if (scanError && scanError.name !== 'NotFoundException') {
+              setError('The camera could not read a barcode. Adjust the lighting and try again.')
+            }
+          },
+        )
         controls = scanControls
         if (active) setStarting(false)
         else scanControls.stop()
       } catch (cause: unknown) {
         if (!active) return
         setStarting(false)
+        const detail = cause instanceof Error ? `${cause.name}: ${cause.message}` : ''
         setError(
-          cause instanceof Error && /permission|denied|notallowed/i.test(cause.name + cause.message)
-            ? 'Camera access was denied. Allow camera permission in your browser and try again.'
-            : 'No usable camera was found. Connect a camera or use a hardware scanner.',
+          /permission|denied|notallowed/i.test(detail)
+            ? 'Camera permission was denied. Allow camera access for this site in your browser’s site settings, then retry.'
+            : /secure|https|localhost/i.test(detail)
+              ? detail
+              : 'The camera could not be started. Check browser permission, close other apps using the camera, or use a hardware scanner.',
         )
       }
     }
@@ -80,7 +89,7 @@ export function BarcodeCameraScanner({
       active = false
       controls?.stop()
     }
-  }, [open])
+  }, [attempt, open, videoElement])
 
   return (
     <Dialog.Root open={open} onOpenChange={(event) => !event.open && onClose()}>
@@ -103,7 +112,7 @@ export function BarcodeCameraScanner({
                 placeItems="center"
               >
                 <video
-                  ref={videoRef}
+                  ref={setVideoElement}
                   aria-label="Live barcode scanner camera"
                   autoPlay
                   muted
@@ -113,7 +122,7 @@ export function BarcodeCameraScanner({
                 {starting && (
                   <HStack color="white" position="absolute">
                     <Spinner size="sm" />
-                    <Text>Starting camera…</Text>
+                    <Text>Requesting camera permission…</Text>
                   </HStack>
                 )}
               </Box>
@@ -123,6 +132,9 @@ export function BarcodeCameraScanner({
                   <Alert.Content>
                     <Alert.Description>{error}</Alert.Description>
                   </Alert.Content>
+                  <Button size="xs" variant="outline" onClick={() => setAttempt((value) => value + 1)}>
+                    Retry
+                  </Button>
                 </Alert.Root>
               ) : (
                 <Text color="fg.muted" fontSize="sm">
