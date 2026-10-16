@@ -5,7 +5,7 @@ export interface TakealotCacheEntry<T> {
 
 const databaseName = 'pos-takealot-dashboard'
 const storeName = 'responses'
-export const TAKEALOT_CACHE_TTL = 24 * 60 * 60 * 1000
+export const TAKEALOT_CACHE_TTL = 60 * 60 * 1000 // 1hr
 
 let databasePromise: Promise<IDBDatabase> | undefined
 
