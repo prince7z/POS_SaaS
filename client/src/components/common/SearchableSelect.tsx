@@ -31,8 +31,7 @@ export function SearchableSelect({
     initialItems: options,
     itemToString: (option) => option.label,
     itemToValue: (option) => option.value,
-    filter: (itemText, filterText) =>
-      itemText.toLocaleLowerCase().includes(filterText.toLocaleLowerCase()),
+    filter: (itemText, filterText) => itemText.toLocaleLowerCase().includes(filterText.toLocaleLowerCase()),
   })
 
   useEffect(() => {
