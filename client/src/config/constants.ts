@@ -39,6 +39,9 @@ export const MOBILE_BREAKPOINT = 768
 export const STORAGE_KEYS = {
   THEME: 'pos-theme',
   SIDEBAR_STATE: 'pos-sidebar-collapsed',
+  INTERACTION_SOUND: 'pos-interaction-sound',
+  INTERACTION_SOUND_PREFERENCES: 'pos-interaction-sound-preferences',
+  INTERACTION_SOUND_VOLUME: 'pos-interaction-sound-volume',
   AUTH_TOKEN: 'pos-auth-token',
   PERMISSIONS: 'pos-permissions',
 } as const

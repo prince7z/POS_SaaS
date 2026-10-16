@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   Avatar,
@@ -20,7 +20,7 @@ import {
   Text,
   VStack,
 } from '@chakra-ui/react'
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   Building2,
   CalendarDays,
@@ -43,6 +43,7 @@ import {
   Trash2,
   UserCog,
   Users,
+  Volume2,
   X,
 } from 'lucide-react'
 import { changePassword, switchCompany } from '@/api/endpoints/auth'
@@ -74,9 +75,21 @@ import { PageSizeControl } from '@/components/common/PageSizeControl'
 import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 import { SearchableSelect } from '@/components/common/SearchableSelect'
 import { TakealotIntegrationsSection } from './TakealotIntegrationsSection'
+import { STORAGE_KEYS } from '@/config/constants'
+import {
+  INTERACTION_SOUND_OPTIONS,
+  isSoundPreset,
+  previewSavedInteractionSound,
+  previewInteractionSound,
+  readInteractionSoundPreferences,
+  readInteractionSoundVolume,
+  type InteractionSoundPreferences,
+  type SoundActivity,
+} from '@/lib/interaction-sounds'
 
 const MotionBox = motion(Box)
-type Section = 'general' | 'business' | 'users' | 'invoice' | 'tax' | 'integrations' | 'security' | 'registration'
+type Section =
+  'general' | 'business' | 'users' | 'invoice' | 'tax' | 'integrations' | 'preferences' | 'security' | 'registration'
 type CompanyRegistrationAssignment = {
   id: string
   userId?: string
@@ -95,6 +108,7 @@ const sections: Array<{ id: Section; label: string; description: string; icon: t
   { id: 'invoice', label: 'Invoice Settings', description: 'Invoice defaults', icon: FileText },
   { id: 'tax', label: 'Tax & GST', description: 'Default tax rate', icon: CircleDollarSign },
   { id: 'integrations', label: 'Integrations', description: 'Takealot connection', icon: ShoppingBag },
+  { id: 'preferences', label: 'Sound & motion', description: 'Interaction feedback', icon: Volume2 },
   { id: 'security', label: 'Security / System', description: 'Change your password', icon: ShieldCheck },
 ]
 const roles = ['Admin', 'Manager', 'Cashier', 'Inventory Manager']
@@ -374,10 +388,10 @@ function ToggleRow({
   onChange: (value: boolean) => void
 }) {
   return (
-    <HStack justify="space-between" align="center" py="3">
-      <HStack>
+    <HStack justify="space-between" align="center" gap="3" py="3" w="full">
+      <HStack align="start" minW="0" flex="1">
         <Icon size={17} />
-        <Box>
+        <Box minW="0">
           <Text fontSize="sm" fontWeight="600">
             {title}
           </Text>
@@ -925,10 +939,7 @@ function SimpleCompanySection({
               businessHours: form.businessHours,
             }
       const updated = await updateCompany(payload)
-      showSuccess(
-        'Settings updated',
-        `${section === 'tax' ? 'Tax' : 'Invoice'} preferences saved successfully.`,
-      )
+      showSuccess('Settings updated', `${section === 'tax' ? 'Tax' : 'Invoice'} preferences saved successfully.`)
       onSaved(updated)
     } catch (cause) {
       showError('Failed to save settings', cause)
@@ -1173,8 +1184,142 @@ function Security() {
   )
 }
 
+function InteractionPreferences() {
+  const volumePreviewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [soundsEnabled, setSoundsEnabled] = useState(
+    () => localStorage.getItem(STORAGE_KEYS.INTERACTION_SOUND) === 'true',
+  )
+  const [soundPreferences, setSoundPreferences] = useState(readInteractionSoundPreferences)
+  const [soundVolume, setSoundVolume] = useState(readInteractionSoundVolume)
+
+  const setInteractionSounds = (enabled: boolean) => {
+    localStorage.setItem(STORAGE_KEYS.INTERACTION_SOUND, String(enabled))
+    setSoundsEnabled(enabled)
+  }
+
+  const setActivitySound = (activity: SoundActivity, preset: string) => {
+    if (!isSoundPreset(preset)) {
+      showError('Invalid interaction sound', new Error('Choose one of the available sound options.'))
+      return
+    }
+    const next: InteractionSoundPreferences = {
+      ...soundPreferences,
+      [activity]: preset,
+    }
+    localStorage.setItem(STORAGE_KEYS.INTERACTION_SOUND_PREFERENCES, JSON.stringify(next))
+    setSoundPreferences(next)
+  }
+
+  const setVolume = (volume: number) => {
+    localStorage.setItem(STORAGE_KEYS.INTERACTION_SOUND_VOLUME, String(volume))
+    setSoundVolume(volume)
+    if (volumePreviewTimer.current) clearTimeout(volumePreviewTimer.current)
+    volumePreviewTimer.current = setTimeout(() => {
+      if (localStorage.getItem(STORAGE_KEYS.INTERACTION_SOUND) === 'true') {
+        previewSavedInteractionSound('button')
+      }
+    }, 140)
+  }
+
+  useEffect(
+    () => () => {
+      if (volumePreviewTimer.current) clearTimeout(volumePreviewTimer.current)
+    },
+    [],
+  )
+
+  const activitySettings: Array<{ activity: SoundActivity; label: string; description: string }> = [
+    { activity: 'button', label: 'Buttons and actions', description: 'Save, submit, and other button interactions.' },
+    { activity: 'navigation', label: 'Page navigation', description: 'Moving between pages using navigation links.' },
+    { activity: 'selection', label: 'Selections', description: 'Changing tabs, menu options, and checkboxes.' },
+  ]
+
+  return (
+    <VStack align="stretch" gap="5">
+      <Box>
+        <Heading size="sm">Sound & motion</Heading>
+        <Text fontSize="sm" color="secondary">
+          Choose whether the interface plays a subtle sound when you interact with controls and navigate between pages.
+          Sounds are off by default and are only played after you enable them.
+        </Text>
+      </Box>
+      <ToggleRow
+        icon={Volume2}
+        title="Interaction sounds"
+        description="Enable or disable sounds for all supported interactions."
+        checked={soundsEnabled}
+        onChange={setInteractionSounds}
+      />
+      <Box maxW="xl" opacity={soundsEnabled ? 1 : 0.65}>
+        <Text fontSize="sm" fontWeight="600">
+          Sound volume
+        </Text>
+        <Text fontSize="xs" color="secondary" mb="2">
+          Adjust the volume for interaction sounds. The button sound previews when you pause after adjusting. Set it to
+          0% to mute them.
+        </Text>
+        <HStack gap="3">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            value={soundVolume}
+            disabled={!soundsEnabled}
+            aria-label="Interaction sound volume"
+            onChange={(event) => setVolume(Number(event.target.value))}
+            style={{ flex: 1, accentColor: '#2563eb' }}
+          />
+          <Text fontSize="sm" minW="12" textAlign="right">
+            {soundVolume}%
+          </Text>
+        </HStack>
+      </Box>
+      <VStack align="stretch" gap="4" maxW="xl" opacity={soundsEnabled ? 1 : 0.65}>
+        {activitySettings.map(({ activity, label, description }) => (
+          <Box key={activity}>
+            <Text fontSize="sm" fontWeight="600">
+              {label}
+            </Text>
+            <Text fontSize="xs" color="secondary" mb="2">
+              {description}
+            </Text>
+            <HStack align="end" gap="2">
+              <Box flex="1" minW="0">
+                <SearchableSelect
+                  options={INTERACTION_SOUND_OPTIONS}
+                  value={soundPreferences[activity]}
+                  onChange={(value) => setActivitySound(activity, value)}
+                  onSelectionPreview={(value) => {
+                    if (isSoundPreset(value)) previewInteractionSound(value)
+                  }}
+                  placeholder={`Choose ${label.toLowerCase()} sound`}
+                  disabled={!soundsEnabled}
+                />
+              </Box>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-sound-preview=""
+                aria-label={`Preview ${label.toLowerCase()} sound`}
+                disabled={!soundsEnabled || soundPreferences[activity] === 'off'}
+                onClick={() => previewSavedInteractionSound(activity)}
+              >
+                <Volume2 size={15} />
+                Preview
+              </Button>
+            </HStack>
+          </Box>
+        ))}
+      </VStack>
+    </VStack>
+  )
+}
+
 export function SettingsPage() {
   const location = useLocation()
+  const reducedMotion = useReducedMotion()
   const storedUser = getStoredUser()
   const canRegisterCompanies = storedUser?.email.trim().toLowerCase() === companyRegistrarEmail
   const [section, setSection] = useState<Section>(() =>
@@ -1228,7 +1373,11 @@ export function SettingsPage() {
         setRegistrationUsers(usersResult)
         setAvailableRegistrationAccesses(accessesResult)
       })
-      .catch((cause) => setRegistrationError(cause instanceof Error ? cause.message : 'Company registration options could not be loaded.'))
+      .catch((cause) =>
+        setRegistrationError(
+          cause instanceof Error ? cause.message : 'Company registration options could not be loaded.',
+        ),
+      )
       .finally(() => setRegistrationLoading(false))
   }, [section, canRegisterCompanies])
   const handleCompanySaved = (updated: Company) => {
@@ -1257,19 +1406,36 @@ export function SettingsPage() {
       }
       setRegistrationAssignments((current) => [
         ...current,
-        { id: user.id, userId: user.id, fullName: user.fullName, email: user.email, roleName: registrationRole, accesses: registrationAccesses },
+        {
+          id: user.id,
+          userId: user.id,
+          fullName: user.fullName,
+          email: user.email,
+          roleName: registrationRole,
+          accesses: registrationAccesses,
+        },
       ])
       setSelectedRegistrationUserId('')
     } else {
-      if (!newRegistrationUser.fullName.trim() || !newRegistrationUser.email.trim() || newRegistrationUser.password.length < 8) {
+      if (
+        !newRegistrationUser.fullName.trim() ||
+        !newRegistrationUser.email.trim() ||
+        newRegistrationUser.password.length < 8
+      ) {
         setRegistrationError('Enter the user name, email, and a password of at least 8 characters.')
         return
       }
-      if (registrationUsers.some((user) => user.email.toLowerCase() === newRegistrationUser.email.trim().toLowerCase())) {
+      if (
+        registrationUsers.some((user) => user.email.toLowerCase() === newRegistrationUser.email.trim().toLowerCase())
+      ) {
         setRegistrationError('This account already exists. Select it from the system users list instead.')
         return
       }
-      if (registrationAssignments.some((item) => item.email.toLowerCase() === newRegistrationUser.email.trim().toLowerCase())) {
+      if (
+        registrationAssignments.some(
+          (item) => item.email.toLowerCase() === newRegistrationUser.email.trim().toLowerCase(),
+        )
+      ) {
         setRegistrationError('This email has already been added.')
         return
       }
@@ -1339,7 +1505,15 @@ export function SettingsPage() {
     }
   }
   const visibleSections = canRegisterCompanies
-    ? [...sections, { id: 'registration' as const, label: 'Register company', description: 'Create a company and assign users', icon: Building2 }]
+    ? [
+        ...sections,
+        {
+          id: 'registration' as const,
+          label: 'Register company',
+          description: 'Create a company and assign users',
+          icon: Building2,
+        },
+      ]
     : sections
 
   return (
@@ -1354,16 +1528,23 @@ export function SettingsPage() {
       ) : error && !company ? (
         <Text color="danger">{error}</Text>
       ) : company ? (
-        <Grid templateColumns={{ base: '1fr', lg: '260px minmax(0, 1fr)' }} gap="6" alignItems="start">
-          <Card.Root variant="outline" position={{ lg: 'sticky' }} top="4">
+        <Grid templateColumns={{ base: 'minmax(0, 1fr)', lg: '260px minmax(0, 1fr)' }} gap="6" alignItems="start">
+          <Card.Root variant="outline" position={{ lg: 'sticky' }} top="4" minW="0">
             <Card.Body p="2">
-              <VStack align="stretch" gap="1">
+              <VStack
+                align="stretch"
+                gap="1"
+                flexDirection={{ base: 'row', lg: 'column' }}
+                overflowX={{ base: 'auto', lg: 'visible' }}
+              >
                 {visibleSections.map(({ id, label, description, icon: Icon }) => (
                   <Button
                     key={id}
                     variant={section === id ? 'subtle' : 'ghost'}
                     justifyContent="flex-start"
                     minW="0"
+                    flexShrink="0"
+                    maxW={{ base: '240px', lg: 'full' }}
                     w="full"
                     h="auto"
                     py="3"
@@ -1395,10 +1576,11 @@ export function SettingsPage() {
           <AnimatePresence mode="wait">
             <MotionBox
               key={section}
-              initial={{ opacity: 0, y: 5 }}
+              minW="0"
+              initial={reducedMotion ? false : { opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              transition={{ duration: 0.16 }}
+              exit={reducedMotion ? undefined : { opacity: 0, y: -5 }}
+              transition={{ duration: reducedMotion ? 0 : 0.16 }}
             >
               <Card.Root variant="outline">
                 <Card.Body p={{ base: '4', md: '6' }}>
@@ -1410,7 +1592,8 @@ export function SettingsPage() {
                       <Box>
                         <Heading size="sm">Register a company</Heading>
                         <Text fontSize="sm" color="secondary">
-                          The creator is added as an Admin by default. Add your own account below if you want to choose its role and permissions.
+                          The creator is added as an Admin by default. Add your own account below if you want to choose
+                          its role and permissions.
                         </Text>
                       </Box>
                       {registeredCompany && (
@@ -1419,9 +1602,15 @@ export function SettingsPage() {
                             <HStack justify="space-between" flexWrap="wrap" gap="3">
                               <Box>
                                 <Text fontWeight="semibold">{registeredCompany.name} is ready</Text>
-                                <Text fontSize="sm" color="secondary">Switch to this company to manage its settings.</Text>
+                                <Text fontSize="sm" color="secondary">
+                                  Switch to this company to manage its settings.
+                                </Text>
                               </Box>
-                              <Button size="sm" loading={switchingToRegisteredCompany} onClick={switchToRegisteredCompany}>
+                              <Button
+                                size="sm"
+                                loading={switchingToRegisteredCompany}
+                                onClick={switchToRegisteredCompany}
+                              >
                                 Switch company
                               </Button>
                             </HStack>
@@ -1430,10 +1619,15 @@ export function SettingsPage() {
                       )}
                       <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap="4">
                         <Field.Root required>
-                          <Field.Label>Company name<FormLabelIndicator required /></Field.Label>
+                          <Field.Label>
+                            Company name
+                            <FormLabelIndicator required />
+                          </Field.Label>
                           <Input
                             value={registrationCompany.name}
-                            onChange={(event) => setRegistrationCompany({ ...registrationCompany, name: event.target.value })}
+                            onChange={(event) =>
+                              setRegistrationCompany({ ...registrationCompany, name: event.target.value })
+                            }
                             placeholder="Company name"
                           />
                         </Field.Root>
@@ -1442,7 +1636,9 @@ export function SettingsPage() {
                           <Input
                             type="email"
                             value={registrationCompany.email}
-                            onChange={(event) => setRegistrationCompany({ ...registrationCompany, email: event.target.value })}
+                            onChange={(event) =>
+                              setRegistrationCompany({ ...registrationCompany, email: event.target.value })
+                            }
                             placeholder="Optional"
                           />
                         </Field.Root>
@@ -1450,7 +1646,9 @@ export function SettingsPage() {
                           <Field.Label>Company phone</Field.Label>
                           <Input
                             value={registrationCompany.phone}
-                            onChange={(event) => setRegistrationCompany({ ...registrationCompany, phone: event.target.value })}
+                            onChange={(event) =>
+                              setRegistrationCompany({ ...registrationCompany, phone: event.target.value })
+                            }
                             placeholder="Optional"
                           />
                         </Field.Root>
@@ -1459,14 +1657,23 @@ export function SettingsPage() {
                       <Box>
                         <Heading size="sm">Users and permissions</Heading>
                         <Text fontSize="sm" color="secondary">
-                          Choose existing accounts or create a new account, then select the role and access it should receive.
+                          Choose existing accounts or create a new account, then select the role and access it should
+                          receive.
                         </Text>
                       </Box>
                       <HStack>
-                        <Button size="xs" variant={registrationMode === 'existing' ? 'subtle' : 'outline'} onClick={() => setRegistrationMode('existing')}>
+                        <Button
+                          size="xs"
+                          variant={registrationMode === 'existing' ? 'subtle' : 'outline'}
+                          onClick={() => setRegistrationMode('existing')}
+                        >
                           Select system user
                         </Button>
-                        <Button size="xs" variant={registrationMode === 'new' ? 'subtle' : 'outline'} onClick={() => setRegistrationMode('new')}>
+                        <Button
+                          size="xs"
+                          variant={registrationMode === 'new' ? 'subtle' : 'outline'}
+                          onClick={() => setRegistrationMode('new')}
+                        >
                           Create new user
                         </Button>
                       </HStack>
@@ -1475,7 +1682,9 @@ export function SettingsPage() {
                           <Field.Label>System user</Field.Label>
                           <SearchableSelect
                             options={registrationUsers
-                              .filter((user) => !registrationAssignments.some((assignment) => assignment.userId === user.id))
+                              .filter(
+                                (user) => !registrationAssignments.some((assignment) => assignment.userId === user.id),
+                              )
                               .map((user) => ({ value: user.id, label: `${user.fullName} (${user.email})` }))}
                             value={selectedRegistrationUserId}
                             onChange={setSelectedRegistrationUserId}
@@ -1488,19 +1697,41 @@ export function SettingsPage() {
                         <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap="3">
                           <Field.Root required>
                             <Field.Label>Full name</Field.Label>
-                            <Input value={newRegistrationUser.fullName} onChange={(event) => setNewRegistrationUser({ ...newRegistrationUser, fullName: event.target.value })} />
+                            <Input
+                              value={newRegistrationUser.fullName}
+                              onChange={(event) =>
+                                setNewRegistrationUser({ ...newRegistrationUser, fullName: event.target.value })
+                              }
+                            />
                           </Field.Root>
                           <Field.Root required>
                             <Field.Label>Email</Field.Label>
-                            <Input type="email" value={newRegistrationUser.email} onChange={(event) => setNewRegistrationUser({ ...newRegistrationUser, email: event.target.value })} />
+                            <Input
+                              type="email"
+                              value={newRegistrationUser.email}
+                              onChange={(event) =>
+                                setNewRegistrationUser({ ...newRegistrationUser, email: event.target.value })
+                              }
+                            />
                           </Field.Root>
                           <Field.Root>
                             <Field.Label>Phone</Field.Label>
-                            <Input value={newRegistrationUser.phone} onChange={(event) => setNewRegistrationUser({ ...newRegistrationUser, phone: event.target.value })} />
+                            <Input
+                              value={newRegistrationUser.phone}
+                              onChange={(event) =>
+                                setNewRegistrationUser({ ...newRegistrationUser, phone: event.target.value })
+                              }
+                            />
                           </Field.Root>
                           <Field.Root required>
                             <Field.Label>Password (8 characters minimum)</Field.Label>
-                            <Input type="password" value={newRegistrationUser.password} onChange={(event) => setNewRegistrationUser({ ...newRegistrationUser, password: event.target.value })} />
+                            <Input
+                              type="password"
+                              value={newRegistrationUser.password}
+                              onChange={(event) =>
+                                setNewRegistrationUser({ ...newRegistrationUser, password: event.target.value })
+                              }
+                            />
                           </Field.Root>
                         </Grid>
                       )}
@@ -1515,7 +1746,9 @@ export function SettingsPage() {
                           />
                         </Field.Root>
                         <Box>
-                          <Text fontSize="sm" fontWeight="medium" mb="2">Permissions</Text>
+                          <Text fontSize="sm" fontWeight="medium" mb="2">
+                            Permissions
+                          </Text>
                           <Grid templateColumns={{ base: '1fr', sm: 'repeat(2, 1fr)' }} gap="2">
                             {availableRegistrationAccesses.map((access) => (
                               <Checkbox.Root
@@ -1546,16 +1779,24 @@ export function SettingsPage() {
                                 <HStack justify="space-between" align="start">
                                   <Box>
                                     <HStack>
-                                      <Text fontSize="sm" fontWeight="medium">{assignment.fullName}</Text>
+                                      <Text fontSize="sm" fontWeight="medium">
+                                        {assignment.fullName}
+                                      </Text>
                                       <Badge>{assignment.roleName}</Badge>
                                     </HStack>
-                                    <Text fontSize="xs" color="secondary">{assignment.email} · {assignment.accesses.length} permissions</Text>
+                                    <Text fontSize="xs" color="secondary">
+                                      {assignment.email} · {assignment.accesses.length} permissions
+                                    </Text>
                                   </Box>
                                   <IconButton
                                     size="xs"
                                     variant="ghost"
                                     aria-label={`Remove ${assignment.fullName}`}
-                                    onClick={() => setRegistrationAssignments((current) => current.filter((item) => item.id !== assignment.id))}
+                                    onClick={() =>
+                                      setRegistrationAssignments((current) =>
+                                        current.filter((item) => item.id !== assignment.id),
+                                      )
+                                    }
                                   >
                                     <X size={14} />
                                   </IconButton>
@@ -1565,10 +1806,19 @@ export function SettingsPage() {
                           ))}
                         </VStack>
                       )}
-                      {registrationLoading && <Text fontSize="sm" color="secondary">Loading system users…</Text>}
+                      {registrationLoading && (
+                        <Text fontSize="sm" color="secondary">
+                          Loading system users…
+                        </Text>
+                      )}
                       <ErrorText message={registrationError} />
                       <HStack justify="flex-end">
-                        <Button size="sm" loading={registrationSaving} disabled={registrationLoading} onClick={createRegisteredCompany}>
+                        <Button
+                          size="sm"
+                          loading={registrationSaving}
+                          disabled={registrationLoading}
+                          onClick={createRegisteredCompany}
+                        >
                           <Building2 size={15} />
                           Register company
                         </Button>
@@ -1581,9 +1831,8 @@ export function SettingsPage() {
                   {section === 'tax' && (
                     <SimpleCompanySection section="tax" company={company} onSaved={handleCompanySaved} />
                   )}
-                  {section === 'integrations' && (
-                    <TakealotIntegrationsSection />
-                  )}
+                  {section === 'integrations' && <TakealotIntegrationsSection />}
+                  {section === 'preferences' && <InteractionPreferences />}
                   {section === 'security' && <Security />}
                 </Card.Body>
               </Card.Root>

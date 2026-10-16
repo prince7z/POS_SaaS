@@ -64,11 +64,19 @@ html {
 
 body {
   margin: 0;
+  overflow-x: hidden;
 }
 
 button,
 input {
   font: inherit;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
 }
 
 ::selection {
@@ -147,6 +155,28 @@ input {
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+
+  @media (max-width: 767px) {
+    [data-scope='table'][data-part='root'] {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0 !important;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 
   @media print {

@@ -16,6 +16,7 @@ export function SearchableSelect({
   emptyMessage = 'No matching options.',
   width = 'full',
   onSearch,
+  onSelectionPreview,
 }: {
   options: SearchableSelectOption[]
   value: string
@@ -25,6 +26,7 @@ export function SearchableSelect({
   emptyMessage?: string
   width?: string
   onSearch?: (value: string) => void
+  onSelectionPreview?: (value: string) => void
 }) {
   const optionsSignature = JSON.stringify(options)
   const { collection, filter, set } = useListCollection({
@@ -42,7 +44,11 @@ export function SearchableSelect({
     <Combobox.Root
       collection={collection}
       value={value ? [value] : []}
-      onValueChange={(details) => onChange(details.value[0] ?? '')}
+      onValueChange={(details) => {
+        const selectedValue = details.value[0] ?? ''
+        onChange(selectedValue)
+        onSelectionPreview?.(selectedValue)
+      }}
       onOpenChange={(details) => {
         if (details.open) {
           filter('')
@@ -92,6 +98,7 @@ export function SearchableSelect({
                 px="3"
                 py="2"
                 cursor="pointer"
+                data-sound-preview={onSelectionPreview ? '' : undefined}
                 _highlighted={{ bg: 'bg.subtle' }}
               >
                 <Combobox.ItemText>{option.label}</Combobox.ItemText>
