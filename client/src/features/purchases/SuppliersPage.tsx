@@ -54,6 +54,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 import { PageSizeControl } from '@/components/common/PageSizeControl'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 
 const money = (value = 0) => formatCurrency(value)
 const date = (value: string) =>
@@ -141,6 +142,7 @@ function SupplierForm({
             <Text fontSize="xs" mb="1" color="secondary">
               <Icon size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
               {label}
+              <FormLabelIndicator required={key === 'name'} />
             </Text>
             <Input
               placeholder={label}
@@ -153,6 +155,7 @@ function SupplierForm({
           <Text fontSize="xs" mb="1" color="secondary">
             <CalendarDays size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
             Payment terms
+            <FormLabelIndicator />
           </Text>
           <Input
             type="number"
@@ -171,6 +174,7 @@ function SupplierForm({
           <Text fontSize="xs" mb="1" color="secondary">
             <CreditCard size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
             Credit limit
+            <FormLabelIndicator />
           </Text>
           <Input
             type="number"
@@ -683,22 +687,28 @@ export function SuppliersPage() {
             {pagination.total} suppliers
           </Text>
           <HStack flexWrap="wrap" gap="3">
-            <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+            <PageSizeControl
+              value={limit}
+              onChange={(value) => {
+                setLimit(value)
+                setPage(1)
+              }}
+            />
             <HStack>
-            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
-              Previous
-            </Button>
-            <Text fontSize="sm">
-              Page {page} of {pagination.totalPages}
-            </Text>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={page >= pagination.totalPages}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              Next
-            </Button>
+              <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
+                Previous
+              </Button>
+              <Text fontSize="sm">
+                Page {page} of {pagination.totalPages}
+              </Text>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page >= pagination.totalPages}
+                onClick={() => setPage((value) => value + 1)}
+              >
+                Next
+              </Button>
             </HStack>
           </HStack>
         </Card.Footer>

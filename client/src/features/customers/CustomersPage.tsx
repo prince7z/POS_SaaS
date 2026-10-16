@@ -57,6 +57,7 @@ import { QrImageUploader } from '@/components/common/QrImageUploader'
 import { PageHeader } from '@/components/common/PageHeader'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageSizeControl } from '@/components/common/PageSizeControl'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 
 function getInitials(name: string) {
   return (
@@ -229,7 +230,11 @@ function CustomerForm({
         multiple={false}
         isNewEntity={!initial}
         initialKeys={initial?.profileImageKey ? [initial.profileImageKey] : []}
-        value={profilePreview ? [{ key: (form as any).profileImageKey || initial?.profileImageKey || '', previewUrl: profilePreview }] : []}
+        value={
+          profilePreview
+            ? [{ key: (form as any).profileImageKey || initial?.profileImageKey || '', previewUrl: profilePreview }]
+            : []
+        }
         onChange={(images) => {
           if (images[0]) {
             setForm((prev) => ({ ...prev, profileImageKey: images[0].key }))
@@ -258,6 +263,7 @@ function CustomerForm({
             <Text fontSize="xs" mb="1" color="secondary">
               <Icon size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
               {label}
+              <FormLabelIndicator required={key === 'name'} />
             </Text>
             <Input
               type={type}
@@ -271,6 +277,7 @@ function CustomerForm({
           <Text fontSize="xs" mb="1" color="secondary">
             <WalletCards size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
             Credit limit
+            <FormLabelIndicator />
           </Text>
           <Input
             type="number"
@@ -870,19 +877,30 @@ export function CustomersPage() {
                 Page {page} of {pages}
               </Text>
               <HStack flexWrap="wrap" gap="3">
-                <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+                <PageSizeControl
+                  value={limit}
+                  onChange={(value) => {
+                    setLimit(value)
+                    setPage(1)
+                  }}
+                />
                 <HStack>
-                <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
-                  Previous
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page >= pages}
-                  onClick={() => setPage((value) => value + 1)}
-                >
-                  Next
-                </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page <= 1}
+                    onClick={() => setPage((value) => value - 1)}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page >= pages}
+                    onClick={() => setPage((value) => value + 1)}
+                  >
+                    Next
+                  </Button>
                 </HStack>
               </HStack>
             </HStack>
@@ -933,7 +951,9 @@ export function CustomersPage() {
                             : prev,
                         )
                       } else {
-                        setCustomers((prev) => prev.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)))
+                        setCustomers((prev) =>
+                          prev.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)),
+                        )
                       }
                     }}
                     onCancel={() => setEditing(undefined)}

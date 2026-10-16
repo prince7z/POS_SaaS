@@ -51,6 +51,7 @@ import { formatCurrency } from '@/lib/formatters'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 import { PageSizeControl } from '@/components/common/PageSizeControl'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 
 const money = (value: number) => formatCurrency(value)
 const date = (value: string) =>
@@ -62,11 +63,22 @@ const initials = (value: string) =>
     .slice(0, 2)
     .join('')
     .toUpperCase()
-function Label({ icon: Icon, children }: { icon: typeof Search; children: string }) {
+function Label({
+  icon: Icon,
+  children,
+  required,
+  optional = false,
+}: {
+  icon: typeof Search
+  children: string
+  required?: boolean
+  optional?: boolean
+}) {
   return (
     <Text fontSize="xs" mb="1" color="secondary">
       <Icon size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
       {children}
+      {(required || optional) && <FormLabelIndicator required={required} />}
     </Text>
   )
 }
@@ -212,7 +224,9 @@ function CreateReturn({ open, onClose, onCreated }: { open: boolean; onClose: ()
           <Drawer.Body>
             <VStack align="stretch" gap="4">
               <Box position="relative">
-                <Label icon={Hash}>Invoice number</Label>
+                <Label icon={Hash} required>
+                  Invoice number
+                </Label>
                 <Input
                   value={invoice}
                   onChange={(e) => {
@@ -269,6 +283,7 @@ function CreateReturn({ open, onClose, onCreated }: { open: boolean; onClose: ()
                     <Text fontSize="sm" fontWeight="600" mb="2">
                       <Package size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
                       Select items to return
+                      <FormLabelIndicator required />
                     </Text>
                     <VStack align="stretch" gap="2">
                       {sale.items.map((item) => (
@@ -307,7 +322,9 @@ function CreateReturn({ open, onClose, onCreated }: { open: boolean; onClose: ()
                             </Box>
                           </HStack>
                           <Box w="90px">
-                            <Label icon={Receipt}>Return qty</Label>
+                            <Label icon={Receipt} optional>
+                              Return qty
+                            </Label>
                             <Input
                               size="sm"
                               type="number"
@@ -331,7 +348,9 @@ function CreateReturn({ open, onClose, onCreated }: { open: boolean; onClose: ()
                   </Box>
                   <Separator />
                   <Box>
-                    <Label icon={ListFilter}>Reason</Label>
+                    <Label icon={ListFilter} required>
+                      Reason
+                    </Label>
                     <NativeSelect.Root>
                       <NativeSelect.Field value={reason} onChange={(e) => setReason(e.target.value)}>
                         <option value="">Select return reason</option>
@@ -343,7 +362,9 @@ function CreateReturn({ open, onClose, onCreated }: { open: boolean; onClose: ()
                     </NativeSelect.Root>
                   </Box>
                   <Box>
-                    <Label icon={FileText}>Notes</Label>
+                    <Label icon={FileText} optional>
+                      Notes
+                    </Label>
                     <Textarea
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
@@ -352,7 +373,9 @@ function CreateReturn({ open, onClose, onCreated }: { open: boolean; onClose: ()
                     />
                   </Box>
                   <Box>
-                    <Label icon={WalletCards}>Refund type</Label>
+                    <Label icon={WalletCards} required>
+                      Refund type
+                    </Label>
                     <HStack>
                       <Button
                         size="sm"
@@ -722,27 +745,24 @@ export function ReturnsPage() {
                   {pagination.total} return{pagination.total === 1 ? '' : 's'}
                 </Text>
                 <HStack flexWrap="wrap" gap="3">
-                  <PageSizeControl
-                    value={filters.limit ?? 10}
-                    onChange={(limit) => setFilter({ limit })}
-                  />
+                  <PageSizeControl value={filters.limit ?? 10} onChange={(limit) => setFilter({ limit })} />
                   <HStack>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={pagination.page <= 1}
-                    onClick={() => setFilter({ page: pagination.page - 1 })}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={pagination.page >= pagination.totalPages}
-                    onClick={() => setFilter({ page: pagination.page + 1 })}
-                  >
-                    Next
-                  </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={pagination.page <= 1}
+                      onClick={() => setFilter({ page: pagination.page - 1 })}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={pagination.page >= pagination.totalPages}
+                      onClick={() => setFilter({ page: pagination.page + 1 })}
+                    >
+                      Next
+                    </Button>
                   </HStack>
                 </HStack>
               </HStack>

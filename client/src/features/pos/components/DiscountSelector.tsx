@@ -46,6 +46,7 @@ export function DiscountSelector({
         size="sm"
         type="number"
         min="0"
+        aria-label="Discount amount (optional)"
         placeholder={discountType === 'PERCENT' ? 'e.g. 10%' : 'e.g. 5.00'}
         value={discountType ? discountValue : ''}
         disabled={!discountType}

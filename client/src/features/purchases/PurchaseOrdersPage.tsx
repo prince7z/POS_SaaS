@@ -55,6 +55,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 import { PageSizeControl } from '@/components/common/PageSizeControl'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 import { SearchableSelect } from '@/components/common/SearchableSelect'
 
 const money = (value = 0) => formatCurrency(value)
@@ -125,6 +126,7 @@ function OrderForm({
           <Text fontSize="xs" mb="1">
             <Truck size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
             Supplier
+            <FormLabelIndicator required />
           </Text>
           <SearchableSelect
             options={suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))}
@@ -138,6 +140,7 @@ function OrderForm({
           <Text fontSize="xs" mb="1">
             <CalendarDays size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
             Expected delivery date
+            <FormLabelIndicator />
           </Text>
           <Input type="date" value={expectedDate} onChange={(event) => setExpectedDate(event.target.value)} />
         </Box>
@@ -145,6 +148,7 @@ function OrderForm({
           <Text fontSize="xs" mb="1">
             <Package size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
             Product
+            <FormLabelIndicator required />
           </Text>
           <SearchableSelect
             options={products.map((product) => ({
@@ -164,6 +168,7 @@ function OrderForm({
         <Box>
           <Text fontSize="xs" mb="1">
             Quantity
+            <FormLabelIndicator required />
           </Text>
           <Input
             type="number"
@@ -181,6 +186,7 @@ function OrderForm({
           <Text fontSize="xs" mb="1">
             <CreditCard size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
             Unit cost
+            <FormLabelIndicator required />
           </Text>
           <Input
             type="number"
@@ -197,6 +203,7 @@ function OrderForm({
         <Box>
           <Text fontSize="xs" mb="1">
             Tax rate (%)
+            <FormLabelIndicator />
           </Text>
           <Input
             type="number"
@@ -211,6 +218,7 @@ function OrderForm({
       <Box>
         <Text fontSize="xs" mb="1">
           Notes
+          <FormLabelIndicator />
         </Text>
         <Textarea
           placeholder="Delivery or supplier notes"
@@ -420,7 +428,8 @@ function OrderDetails({ id, onClose, onChanged }: { id?: string; onClose: () => 
                       size={13}
                       style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }}
                     />
-                    Add payment
+                    Payment amount
+                    <FormLabelIndicator required />
                   </Text>
                   <HStack>
                     <Input
@@ -650,14 +659,24 @@ export function PurchaseOrdersPage() {
         </Card.Body>
       </Card.Root>
       <HStack justify="space-between" flexWrap="wrap" gap="3">
-        <Text fontSize="sm" color="secondary">{pagination.total} purchase orders</Text>
+        <Text fontSize="sm" color="secondary">
+          {pagination.total} purchase orders
+        </Text>
         <HStack flexWrap="wrap" gap="3">
-          <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+          <PageSizeControl
+            value={limit}
+            onChange={(value) => {
+              setLimit(value)
+              setPage(1)
+            }}
+          />
           <HStack>
             <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
               Previous
             </Button>
-            <Text fontSize="sm">Page {page} of {pagination.totalPages}</Text>
+            <Text fontSize="sm">
+              Page {page} of {pagination.totalPages}
+            </Text>
             <Button
               size="sm"
               variant="outline"

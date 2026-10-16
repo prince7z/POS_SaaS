@@ -1,21 +1,10 @@
 import { useState } from 'react'
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  Container,
-  Heading,
-  HStack,
-  IconButton,
-  Input,
-  Text,
-  VStack,
-} from '@chakra-ui/react'
+import { Alert, Box, Button, Card, Container, Heading, HStack, IconButton, Input, Text, VStack } from '@chakra-ui/react'
 import { motion } from 'motion/react'
 import { CheckCircle2, Eye, EyeOff, Lock, ShieldCheck } from 'lucide-react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { resetPassword } from '@/api/endpoints/auth'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 
 const MotionCard = motion.create(Card.Root)
 const MotionBox = motion.create(Box)
@@ -154,6 +143,7 @@ export function ResetPasswordPage() {
                 <Box>
                   <Text fontSize="sm" fontWeight="600" mb="1.5">
                     New Password
+                    <FormLabelIndicator required />
                   </Text>
                   <HStack
                     gap="2"
@@ -191,6 +181,7 @@ export function ResetPasswordPage() {
                 <Box>
                   <Text fontSize="sm" fontWeight="600" mb="1.5">
                     Confirm New Password
+                    <FormLabelIndicator required />
                   </Text>
                   <HStack
                     gap="2"

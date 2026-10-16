@@ -55,6 +55,7 @@ import { EChart } from '@/components/charts/EChart'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 import { PageSizeControl } from '@/components/common/PageSizeControl'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 
 const money = (value = 0) => formatCurrency(value)
 const date = (value: string) =>
@@ -111,6 +112,7 @@ function ExpenseForm({ initial, onSaved, onCancel }: { initial?: Expense; onSave
           <Text fontSize="xs" mb="1" color="secondary">
             <CalendarDays size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
             Expense date
+            <FormLabelIndicator required />
           </Text>
           <Input type="date" value={form.expenseDate} onChange={(event) => set('expenseDate', event.target.value)} />
         </Box>
@@ -118,6 +120,7 @@ function ExpenseForm({ initial, onSaved, onCancel }: { initial?: Expense; onSave
           <Text fontSize="xs" mb="1" color="secondary">
             <Receipt size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
             Category
+            <FormLabelIndicator required />
           </Text>
           <NativeSelect.Root>
             <NativeSelect.Field
@@ -136,6 +139,7 @@ function ExpenseForm({ initial, onSaved, onCancel }: { initial?: Expense; onSave
           <Box>
             <Text fontSize="xs" mb="1" color="secondary">
               Custom category name
+              <FormLabelIndicator required />
             </Text>
             <Input
               value={form.otherCategoryName ?? ''}
@@ -148,6 +152,7 @@ function ExpenseForm({ initial, onSaved, onCancel }: { initial?: Expense; onSave
           <Text fontSize="xs" mb="1" color="secondary">
             <WalletCards size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />
             Amount
+            <FormLabelIndicator required />
           </Text>
           <Input
             type="number"
@@ -162,6 +167,7 @@ function ExpenseForm({ initial, onSaved, onCancel }: { initial?: Expense; onSave
       <Box>
         <Text fontSize="xs" mb="1" color="secondary">
           Description
+          <FormLabelIndicator required />
         </Text>
         <Input
           value={form.description}
@@ -172,6 +178,7 @@ function ExpenseForm({ initial, onSaved, onCancel }: { initial?: Expense; onSave
       <Box>
         <Text fontSize="xs" mb="1" color="secondary">
           Notes
+          <FormLabelIndicator />
         </Text>
         <Textarea
           value={form.notes ?? ''}
@@ -609,27 +616,24 @@ export function ExpensesPage() {
                 {pagination.total} expense{pagination.total === 1 ? '' : 's'}
               </Text>
               <HStack flexWrap="wrap" gap="3">
-                <PageSizeControl
-                  value={filters.limit ?? 10}
-                  onChange={(limit) => setFilter({ limit })}
-                />
+                <PageSizeControl value={filters.limit ?? 10} onChange={(limit) => setFilter({ limit })} />
                 <HStack>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={pagination.page <= 1}
-                  onClick={() => setFilter({ page: pagination.page - 1 })}
-                >
-                  Previous
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={pagination.page >= pagination.totalPages}
-                  onClick={() => setFilter({ page: pagination.page + 1 })}
-                >
-                  Next
-                </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={pagination.page <= 1}
+                    onClick={() => setFilter({ page: pagination.page - 1 })}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={pagination.page >= pagination.totalPages}
+                    onClick={() => setFilter({ page: pagination.page + 1 })}
+                  >
+                    Next
+                  </Button>
                 </HStack>
               </HStack>
             </HStack>

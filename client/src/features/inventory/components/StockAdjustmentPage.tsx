@@ -18,6 +18,7 @@ import {
 import { Search, Trash2 } from 'lucide-react'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 import { getInventory, getProductInventory, adjustStock, type InventoryItem } from '@/api/endpoints/inventory'
 import { InventoryProductDetails, InventoryProductIdentity } from './InventoryProductIdentity'
 
@@ -240,7 +241,10 @@ export function StockAdjustmentPage() {
         )}
         <Card.Root variant="outline" size="sm">
           <Card.Header>
-            <Heading size="sm">Products to adjust</Heading>
+            <Heading size="sm">
+              Products to adjust
+              <FormLabelIndicator required />
+            </Heading>
           </Card.Header>
           <Card.Body>
             {rows.length ? (
@@ -250,11 +254,23 @@ export function StockAdjustmentPage() {
                     <Table.Row>
                       <Table.ColumnHeader>Product</Table.ColumnHeader>
                       <Table.ColumnHeader>Current stock</Table.ColumnHeader>
-                      <Table.ColumnHeader>Action</Table.ColumnHeader>
-                      <Table.ColumnHeader>Quantity</Table.ColumnHeader>
+                      <Table.ColumnHeader>
+                        Action
+                        <FormLabelIndicator required />
+                      </Table.ColumnHeader>
+                      <Table.ColumnHeader>
+                        Quantity
+                        <FormLabelIndicator required />
+                      </Table.ColumnHeader>
                       <Table.ColumnHeader>New stock</Table.ColumnHeader>
-                      <Table.ColumnHeader>Unit cost</Table.ColumnHeader>
-                      <Table.ColumnHeader>Reason</Table.ColumnHeader>
+                      <Table.ColumnHeader>
+                        Unit cost
+                        <FormLabelIndicator />
+                      </Table.ColumnHeader>
+                      <Table.ColumnHeader>
+                        Reason
+                        <FormLabelIndicator />
+                      </Table.ColumnHeader>
                       <Table.ColumnHeader>Actions</Table.ColumnHeader>
                     </Table.Row>
                   </Table.Header>

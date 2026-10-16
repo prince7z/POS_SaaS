@@ -45,6 +45,7 @@ const MotionBox = motion.create(Box)
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PageHeader } from '@/components/common/PageHeader'
 import { PageSizeControl } from '@/components/common/PageSizeControl'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 import { getCompany, type Company } from '@/api/endpoints/company'
 import type { Customer } from '@/api/endpoints/customers'
 import type { CatalogProduct } from '@/api/endpoints/catalog'
@@ -173,10 +174,7 @@ function InvoicePreview({
             </Text>
             <Text fontWeight="600">{customer?.name ?? invoice?.customer?.name ?? 'Walk-in customer'}</Text>
             <Text fontSize="sm" color="secondary">
-              {[
-                customer?.email || invoice?.customer?.email,
-                customer?.phone || invoice?.customer?.phone,
-              ]
+              {[customer?.email || invoice?.customer?.email, customer?.phone || invoice?.customer?.phone]
                 .filter(Boolean)
                 .join(' · ') || 'No contact details'}
             </Text>
@@ -247,11 +245,10 @@ function InvoicePreview({
               </VStack>
             </Box>
           ) : null}
-         <Box textAlign="center" pt="3">
-          <Separator mb="3" />
-              <Text fontWeight="400">Thank you for shopping with {company?.name? company.name : 'our store'}.</Text>
-
-            </Box>
+          <Box textAlign="center" pt="3">
+            <Separator mb="3" />
+            <Text fontWeight="400">Thank you for shopping with {company?.name ? company.name : 'our store'}.</Text>
+          </Box>
         </VStack>
       </Card.Body>
     </Card.Root>
@@ -438,6 +435,7 @@ function InvoiceEditor({
                   <Text fontSize="sm" fontWeight="600" mb="1">
                     <User size={14} style={{ display: 'inline', marginRight: 5 }} />
                     Customer
+                    <FormLabelIndicator />
                   </Text>
                   <Input
                     value={customerSearch}
@@ -481,6 +479,7 @@ function InvoiceEditor({
                   <Text fontSize="sm" fontWeight="600" mb="1">
                     <Package size={14} style={{ display: 'inline', marginRight: 5 }} />
                     Add products
+                    <FormLabelIndicator required />
                   </Text>
                   <Input
                     value={productSearch}
@@ -522,7 +521,10 @@ function InvoiceEditor({
                   <Table.Header>
                     <Table.Row>
                       <Table.ColumnHeader>Product</Table.ColumnHeader>
-                      <Table.ColumnHeader>Qty</Table.ColumnHeader>
+                      <Table.ColumnHeader>
+                        Qty
+                        <FormLabelIndicator required />
+                      </Table.ColumnHeader>
                       <Table.ColumnHeader>Price</Table.ColumnHeader>
                       <Table.ColumnHeader />
                     </Table.Row>
@@ -563,7 +565,10 @@ function InvoiceEditor({
                 </Table.Root>
                 <Grid templateColumns="1fr 1fr" gap="3">
                   <Box>
-                    <Text fontSize="sm">Tax rate (%)</Text>
+                    <Text fontSize="sm">
+                      Tax rate (%)
+                      <FormLabelIndicator />
+                    </Text>
                     <Input
                       type="number"
                       min={0}
@@ -572,7 +577,10 @@ function InvoiceEditor({
                     />
                   </Box>
                   <Box>
-                    <Text fontSize="sm">Discount</Text>
+                    <Text fontSize="sm">
+                      Discount
+                      <FormLabelIndicator />
+                    </Text>
                     <HStack>
                       <NativeSelect.Root>
                         <NativeSelect.Field
@@ -597,6 +605,7 @@ function InvoiceEditor({
                 <Box>
                   <Text fontSize="sm" fontWeight="600" mb="1">
                     Notes
+                    <FormLabelIndicator />
                   </Text>
                   <Textarea
                     value={notes}
@@ -708,7 +717,7 @@ function SendInvoiceModal({
 
   const handleSend = async () => {
     if (!invoice?.id) return
-    const targetEmail = recipientType === 'OTHER' ? otherEmail.trim() : (customerEmail || undefined)
+    const targetEmail = recipientType === 'OTHER' ? otherEmail.trim() : customerEmail || undefined
     if (recipientType === 'OTHER' && !targetEmail) {
       setError('Please enter a valid recipient email address.')
       return
@@ -811,6 +820,7 @@ function SendInvoiceModal({
                     <Box>
                       <Text fontSize="xs" fontWeight="600" color="secondary" mb="1.5">
                         Select Recipient Type
+                        <FormLabelIndicator required />
                       </Text>
                       <HStack gap="2">
                         <Button
@@ -853,6 +863,7 @@ function SendInvoiceModal({
                       <Box>
                         <Text fontSize="xs" fontWeight="600" color="secondary" mb="1.5">
                           Recipient Email Address
+                          <FormLabelIndicator required />
                         </Text>
                         <HStack
                           gap="2"
@@ -887,7 +898,13 @@ function SendInvoiceModal({
                 <Button variant="outline" size="sm" onClick={onClose}>
                   Cancel
                 </Button>
-                <Button colorPalette="blue" size="sm" loading={sending} disabled={Boolean(success)} onClick={handleSend}>
+                <Button
+                  colorPalette="blue"
+                  size="sm"
+                  loading={sending}
+                  disabled={Boolean(success)}
+                  onClick={handleSend}
+                >
                   <Send size={14} />
                   Send Invoice
                 </Button>
@@ -1247,22 +1264,22 @@ export function InvoicePage() {
                   onChange={(limit) => setFilters((current) => ({ ...current, limit, page: 1 }))}
                 />
                 <HStack>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={pagination.page <= 1}
-                  onClick={() => setFilters((current) => ({ ...current, page: pagination.page - 1 }))}
-                >
-                  Previous
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={pagination.page >= pagination.totalPages}
-                  onClick={() => setFilters((current) => ({ ...current, page: pagination.page + 1 }))}
-                >
-                  Next
-                </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={pagination.page <= 1}
+                    onClick={() => setFilters((current) => ({ ...current, page: pagination.page - 1 }))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={pagination.page >= pagination.totalPages}
+                    onClick={() => setFilters((current) => ({ ...current, page: pagination.page + 1 }))}
+                  >
+                    Next
+                  </Button>
                 </HStack>
               </HStack>
             </HStack>

@@ -67,6 +67,7 @@ import { PageContainer } from '@/components/layout/PageContainer'
 import { QrImageUploader } from '@/components/common/QrImageUploader'
 import { PageHeader } from '@/components/common/PageHeader'
 import { PageSizeControl } from '@/components/common/PageSizeControl'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 import { SearchableSelect } from '@/components/common/SearchableSelect'
 
 const MotionBox = motion(Box)
@@ -102,11 +103,20 @@ const inputIcon: Record<string, typeof Mail> = {
   postalCode: MapPin,
 }
 
-function Label({ children, icon: Icon }: { children: string; icon?: typeof Mail }) {
+function Label({
+  children,
+  icon: Icon,
+  required = false,
+}: {
+  children: string
+  icon?: typeof Mail
+  required?: boolean
+}) {
   return (
     <Text fontSize="xs" mb="1" color="secondary">
       {Icon && <Icon size={13} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 5 }} />}
       {children}
+      <FormLabelIndicator required={required} />
     </Text>
   )
 }
@@ -249,7 +259,10 @@ function General({ company, onSaved }: { company: Company; onSaved: (company: Co
       </Box>
       <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap="4">
         <Field.Root required>
-          <Field.Label>Company name</Field.Label>
+          <Field.Label>
+            Company name
+            <FormLabelIndicator required />
+          </Field.Label>
           <Input value={form.name} onChange={(e) => set('name', e.target.value)} />
         </Field.Root>
         <Box>
@@ -272,10 +285,7 @@ function General({ company, onSaved }: { company: Company; onSaved: (company: Co
         {(['addressLine1', 'addressLine2', 'city', 'state', 'postalCode'] as const).map((key) => (
           <Box key={key}>
             <Label icon={inputIcon[key] ?? MapPin}>{fieldLabels[key]}</Label>
-            <Input
-              value={form[key]}
-              onChange={(e) => set(key, e.target.value)}
-            />
+            <Input value={form[key]} onChange={(e) => set(key, e.target.value)} />
           </Box>
         ))}
         <Box>
@@ -607,19 +617,25 @@ function UsersSettings({
           {pagination.total} users
         </Text>
         <HStack flexWrap="wrap" gap="3">
-          <PageSizeControl value={limit} onChange={(value) => { setLimit(value); setPage(1) }} />
+          <PageSizeControl
+            value={limit}
+            onChange={(value) => {
+              setLimit(value)
+              setPage(1)
+            }}
+          />
           <HStack>
-          <Button size="xs" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            Previous
-          </Button>
-          <Button
-            size="xs"
-            variant="outline"
-            disabled={page >= pagination.totalPages}
-            onClick={() => setPage(page + 1)}
-          >
-            Next
-          </Button>
+            <Button size="xs" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              Previous
+            </Button>
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={page >= pagination.totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Next
+            </Button>
           </HStack>
         </HStack>
       </HStack>
@@ -760,11 +776,17 @@ function UserForm({
             <VStack align="stretch" gap="3">
               <Grid templateColumns="repeat(2, 1fr)" gap="3">
                 <Field.Root>
-                  <Field.Label>Full name</Field.Label>
+                  <Field.Label>
+                    Full name
+                    <FormLabelIndicator required />
+                  </Field.Label>
                   <Input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
                 </Field.Root>
                 <Field.Root>
-                  <Field.Label>Email</Field.Label>
+                  <Field.Label>
+                    Email
+                    <FormLabelIndicator required />
+                  </Field.Label>
                   <Input
                     type="email"
                     value={form.email}
@@ -773,12 +795,18 @@ function UserForm({
                   />
                 </Field.Root>
                 <Field.Root>
-                  <Field.Label>Phone</Field.Label>
+                  <Field.Label>
+                    Phone
+                    <FormLabelIndicator />
+                  </Field.Label>
                   <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
                 </Field.Root>
                 {!user && (
                   <Field.Root>
-                    <Field.Label>Password</Field.Label>
+                    <Field.Label>
+                      Password
+                      <FormLabelIndicator required />
+                    </Field.Label>
                     <Input
                       type="password"
                       value={form.password}
@@ -787,7 +815,9 @@ function UserForm({
                   </Field.Root>
                 )}
                 <Box>
-                  <Label icon={UserCog}>Role</Label>
+                  <Label icon={UserCog} required>
+                    Role
+                  </Label>
                   <SearchableSelect
                     options={roles.map((role) => ({ value: role, label: role }))}
                     value={form.roleName}
@@ -799,6 +829,7 @@ function UserForm({
               </Grid>
               <Text fontSize="sm" fontWeight="600">
                 Permissions
+                <FormLabelIndicator required />
               </Text>
               <Grid templateColumns="repeat(2, 1fr)" gap="2">
                 {accesses.map((access) => (
@@ -892,7 +923,7 @@ function SimpleCompanySection({
       const updated = await updateCompany(payload)
       showSuccess(
         'Settings updated',
-        `${section === 'tax' ? 'Tax' : section === 'invoice' ? 'Invoice' : 'Integration'} preferences saved successfully.`
+        `${section === 'tax' ? 'Tax' : section === 'invoice' ? 'Invoice' : 'Integration'} preferences saved successfully.`,
       )
       onSaved(updated)
       setRemoveTakealotApiKey(false)
@@ -1045,7 +1076,9 @@ function SimpleCompanySection({
             <Label icon={KeyRound}>API key</Label>
             <Input
               type="password"
-              placeholder={company.takealotConfigured ? `Saved key · ${company.takealotApiKeyPrefix ?? '•••••'}…` : 'Enter API key'}
+              placeholder={
+                company.takealotConfigured ? `Saved key · ${company.takealotApiKeyPrefix ?? '•••••'}…` : 'Enter API key'
+              }
               value={form.takealotApiKey}
               onChange={(e) => {
                 setRemoveTakealotApiKey(false)
@@ -1168,11 +1201,17 @@ function Security() {
       </Box>
       <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap="4" maxW="xl">
         <Field.Root>
-          <Field.Label>Current password</Field.Label>
+          <Field.Label>
+            Current password
+            <FormLabelIndicator required />
+          </Field.Label>
           <Input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} />
         </Field.Root>
         <Field.Root>
-          <Field.Label>New password</Field.Label>
+          <Field.Label>
+            New password
+            <FormLabelIndicator required />
+          </Field.Label>
           <Input type="password" value={next} onChange={(e) => setNext(e.target.value)} />
         </Field.Root>
       </Grid>
@@ -1289,7 +1328,9 @@ export function SettingsPage() {
                   {section === 'invoice' && (
                     <SimpleCompanySection section="invoice" company={company} onSaved={handleCompanySaved} />
                   )}
-                  {section === 'tax' && <SimpleCompanySection section="tax" company={company} onSaved={handleCompanySaved} />}
+                  {section === 'tax' && (
+                    <SimpleCompanySection section="tax" company={company} onSaved={handleCompanySaved} />
+                  )}
                   {section === 'integrations' && (
                     <SimpleCompanySection section="integrations" company={company} onSaved={handleCompanySaved} />
                   )}

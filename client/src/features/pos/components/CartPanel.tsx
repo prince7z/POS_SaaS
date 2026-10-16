@@ -1,14 +1,5 @@
 import { useState } from 'react'
-import {
-  Box,
-  Button,
-  Card,
-  Flex,
-  HStack,
-  Input,
-  Text,
-  VStack,
-} from '@chakra-ui/react'
+import { Box, Button, Card, Flex, HStack, Input, Text, VStack } from '@chakra-ui/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { Check, Mail, ShoppingCart, Trash2 } from 'lucide-react'
 import type { CartItem as CartItemType, Customer, SaleDiscountType, SalePaymentMethod, SaleTotals } from '../types'
@@ -17,6 +8,7 @@ import { CustomerSelector } from './CustomerSelector'
 import { DiscountSelector } from './DiscountSelector'
 import { PaymentMethodSelector } from './PaymentMethodSelector'
 import { CartSummary } from './CartSummary'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 
 const MotionBox = motion.create(Box)
 
@@ -154,8 +146,15 @@ export function CartPanel({
             <VStack align="stretch" gap="2" pt="2" borderTopWidth="1px" borderColor="border" flexShrink={0}>
               {/* Discount Section */}
               <VStack align="stretch" gap="1">
-                <Text fontSize="10px" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+                <Text
+                  fontSize="10px"
+                  fontWeight="700"
+                  color="fg.subtle"
+                  textTransform="uppercase"
+                  letterSpacing="0.05em"
+                >
                   Discount
+                  <FormLabelIndicator />
                 </Text>
                 <DiscountSelector
                   discountType={discountType}
@@ -167,8 +166,15 @@ export function CartPanel({
 
               {/* Customer Section */}
               <VStack align="stretch" gap="1">
-                <Text fontSize="10px" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+                <Text
+                  fontSize="10px"
+                  fontWeight="700"
+                  color="fg.subtle"
+                  textTransform="uppercase"
+                  letterSpacing="0.05em"
+                >
                   Customer
+                  <FormLabelIndicator />
                 </Text>
                 <CustomerSelector
                   customers={customers}
@@ -179,13 +185,17 @@ export function CartPanel({
 
               {/* Payment Method Section */}
               <VStack align="stretch" gap="1">
-                <Text fontSize="10px" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+                <Text
+                  fontSize="10px"
+                  fontWeight="700"
+                  color="fg.subtle"
+                  textTransform="uppercase"
+                  letterSpacing="0.05em"
+                >
                   Payment Method
+                  <FormLabelIndicator required />
                 </Text>
-                <PaymentMethodSelector
-                  value={paymentMethod}
-                  onChange={onPaymentMethodChange}
-                />
+                <PaymentMethodSelector value={paymentMethod} onChange={onPaymentMethodChange} />
               </VStack>
 
               {/* Email Receipt Option */}
@@ -195,6 +205,7 @@ export function CartPanel({
                     <Mail size={14} color="var(--chakra-colors-blue-500)" />
                     <Text fontSize="xs" fontWeight="600">
                       Email Receipt
+                      <FormLabelIndicator />
                     </Text>
                   </HStack>
                   <Button
@@ -235,13 +246,19 @@ export function CartPanel({
                           </Button>
                         </HStack>
                         {recipientType === 'OTHER' && (
-                          <Input
-                            size="xs"
-                            type="email"
-                            placeholder="Enter recipient email..."
-                            value={customEmail}
-                            onChange={(e) => onCustomEmailChange(e.target.value)}
-                          />
+                          <>
+                            <Text fontSize="xs" color="fg.subtle">
+                              Recipient email
+                              <FormLabelIndicator required />
+                            </Text>
+                            <Input
+                              size="xs"
+                              type="email"
+                              placeholder="Enter recipient email..."
+                              value={customEmail}
+                              onChange={(e) => onCustomEmailChange(e.target.value)}
+                            />
+                          </>
                         )}
                       </VStack>
                     </MotionBox>

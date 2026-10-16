@@ -1,20 +1,10 @@
 import { useState } from 'react'
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  Container,
-  Heading,
-  HStack,
-  Input,
-  Text,
-  VStack,
-} from '@chakra-ui/react'
+import { Alert, Box, Button, Card, Container, Heading, HStack, Input, Text, VStack } from '@chakra-ui/react'
 import { motion } from 'motion/react'
 import { ArrowLeft, CheckCircle2, KeyRound, Mail, Send } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { forgotPassword } from '@/api/endpoints/auth'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 
 const MotionCard = motion.create(Card.Root)
 const MotionBox = motion.create(Box)
@@ -118,6 +108,7 @@ export function ForgotPasswordPage() {
                 <Box>
                   <Text fontSize="sm" fontWeight="600" mb="1.5">
                     Email Address
+                    <FormLabelIndicator required />
                   </Text>
                   <HStack
                     gap="2"

@@ -14,18 +14,10 @@ import {
   Text,
   VStack,
 } from '@chakra-ui/react'
-import {
-  CheckCircle2,
-  QrCode,
-  RefreshCw,
-  Smartphone,
-  Store,
-  Trash2,
-  UploadCloud,
-  X,
-} from 'lucide-react'
+import { CheckCircle2, QrCode, RefreshCw, Smartphone, Store, Trash2, UploadCloud, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import QRCode from 'qrcode'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 
 import {
   createQrUploadSession,
@@ -270,6 +262,7 @@ export function QrImageUploader({
         <HStack justify="space-between" align="center">
           <Text fontSize="sm" fontWeight="600" color="gray.700">
             {label}
+            <FormLabelIndicator />
           </Text>
           {multiple && maxFiles > 1 && (
             <Badge size="sm" variant="subtle" colorPalette="blue">
@@ -282,12 +275,7 @@ export function QrImageUploader({
       {/* Upload UI: Single Image (e.g. Logo/Avatar) vs Multiple Images (e.g. Products) */}
       {!multiple ? (
         <Card.Root variant="outline" p="4" borderRadius="lg" bg="bg.subtle/30">
-          <Flex
-            direction={{ base: 'column', sm: 'row' }}
-            align={{ base: 'start', sm: 'center' }}
-            gap="5"
-            w="full"
-          >
+          <Flex direction={{ base: 'column', sm: 'row' }} align={{ base: 'start', sm: 'center' }} gap="5" w="full">
             {/* Logo Preview Tile / Placeholder */}
             <Box position="relative" flexShrink={0}>
               {value.length > 0 ? (
@@ -303,13 +291,7 @@ export function QrImageUploader({
                   display="grid"
                   placeItems="center"
                 >
-                  <Image
-                    src={value[0].previewUrl}
-                    alt="Logo preview"
-                    w="full"
-                    h="full"
-                    objectFit="contain"
-                  />
+                  <Image src={value[0].previewUrl} alt="Logo preview" w="full" h="full" objectFit="contain" />
                 </Box>
               ) : (
                 <Box
@@ -367,23 +349,13 @@ export function QrImageUploader({
                   </>
                 )}
 
-                <Button
-                  size="sm"
-                  colorPalette="blue"
-                  variant="subtle"
-                  onClick={handleOpenDialog}
-                >
+                <Button size="sm" colorPalette="blue" variant="subtle" onClick={handleOpenDialog}>
                   <QrCode size={15} />
                   <span>Upload via QR Code</span>
                 </Button>
 
                 {value.length > 0 && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    colorPalette="red"
-                    onClick={() => handleRemoveImage(0)}
-                  >
+                  <Button size="sm" variant="ghost" colorPalette="red" onClick={() => handleRemoveImage(0)}>
                     <Trash2 size={15} />
                     <span>Remove</span>
                   </Button>
@@ -397,10 +369,7 @@ export function QrImageUploader({
           <VStack align="stretch" gap="3">
             {/* Previews Grid */}
             {value.length > 0 && (
-              <Grid
-                templateColumns={{ base: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' }}
-                gap="3"
-              >
+              <Grid templateColumns={{ base: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' }} gap="3">
                 <AnimatePresence>
                   {value.map((img, idx) => (
                     <MotionBox
@@ -417,13 +386,7 @@ export function QrImageUploader({
                       aspectRatio="1/1"
                       p="1.5"
                     >
-                      <Image
-                        src={img.previewUrl}
-                        alt={`Image ${idx + 1}`}
-                        objectFit="contain"
-                        w="full"
-                        h="full"
-                      />
+                      <Image src={img.previewUrl} alt={`Image ${idx + 1}`} objectFit="contain" w="full" h="full" />
                       <IconButton
                         aria-label="Remove image"
                         size="xs"
@@ -474,13 +437,7 @@ export function QrImageUploader({
                   </>
                 )}
 
-                <Button
-                  size="sm"
-                  colorPalette="blue"
-                  variant="subtle"
-                  onClick={handleOpenDialog}
-                  flex="1"
-                >
+                <Button size="sm" colorPalette="blue" variant="subtle" onClick={handleOpenDialog} flex="1">
                   <QrCode size={16} />
                   <span>Upload via QR Code</span>
                 </Button>
@@ -536,11 +493,7 @@ export function QrImageUploader({
                 )}
 
                 {status === 'PENDING' && qrDataUrl && (
-                  <MotionBox
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    w="full"
-                  >
+                  <MotionBox initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} w="full">
                     <VStack gap="4" align="center">
                       {/* QR Display Card */}
                       <Box
@@ -588,12 +541,7 @@ export function QrImageUploader({
                 )}
 
                 {status === 'UPLOADED' && (
-                  <MotionBox
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    w="full"
-                    py="4"
-                  >
+                  <MotionBox initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} w="full" py="4">
                     <VStack gap="3" align="center" textStyle="center">
                       <Box p="3" bg="green.100" color="green.600" borderRadius="full">
                         <CheckCircle2 size={42} />

@@ -5,6 +5,7 @@ import { Printer } from 'lucide-react'
 import bwipjs from 'bwip-js/browser'
 import type { CatalogProduct } from '@/api/endpoints/catalog'
 import { formatCurrency } from '@/lib/formatters'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 
 type PrintFormat = 'a4' | 'thermal'
 type ThermalSize = '50x25' | '50x30' | '100x50'
@@ -137,7 +138,7 @@ function Label({
   return (
     <div className="barcode-label">
       {showName && <div className="barcode-product-name">{product.name}</div>}
-            <img className="barcode-graphic" src={`data:image/svg+xml,${encodeURIComponent(svg)}`} alt="" />
+      <img className="barcode-graphic" src={`data:image/svg+xml,${encodeURIComponent(svg)}`} alt="" />
       <div className="barcode-value">{product.barcode}</div>
       {showRrp && rrp !== undefined && showSellingPrice ? (
         <div className="barcode-prices">
@@ -149,7 +150,6 @@ function Label({
       ) : showSellingPrice ? (
         <strong className="barcode-single-price">{formatCurrency(product.sellingPrice)}</strong>
       ) : null}
-
     </div>
   )
 }
@@ -329,7 +329,10 @@ export function BarcodePrintDialog({
               ) : (
                 <Stack gap="5">
                   <Field.Root>
-                    <Field.Label>Number of labels</Field.Label>
+                    <Field.Label>
+                      Number of labels
+                      <FormLabelIndicator required />
+                    </Field.Label>
                     <Input
                       type="number"
                       min={1}
@@ -341,7 +344,10 @@ export function BarcodePrintDialog({
                     <Field.HelperText>Enter a whole number from 1 to {MAX_LABELS}.</Field.HelperText>
                   </Field.Root>
                   <Field.Root>
-                    <Field.Label>Print format</Field.Label>
+                    <Field.Label>
+                      Print format
+                      <FormLabelIndicator />
+                    </Field.Label>
                     <RadioGroup.Root
                       value={format}
                       onValueChange={(event) => updateSetting('format', event.value as PrintFormat)}
@@ -363,7 +369,10 @@ export function BarcodePrintDialog({
                   {format === 'a4' ? (
                     <Stack gap="3">
                       <Field.Root>
-                        <Field.Label>A4 layout preset</Field.Label>
+                        <Field.Label>
+                          A4 layout preset
+                          <FormLabelIndicator />
+                        </Field.Label>
                         <select
                           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
                           value={a4LayoutPreset}
@@ -375,7 +384,10 @@ export function BarcodePrintDialog({
                       </Field.Root>
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                         <Field.Root>
-                          <Field.Label>Width (mm)</Field.Label>
+                          <Field.Label>
+                            Width (mm)
+                            <FormLabelIndicator />
+                          </Field.Label>
                           <Input
                             type="number"
                             min={10}
@@ -385,7 +397,10 @@ export function BarcodePrintDialog({
                           />
                         </Field.Root>
                         <Field.Root>
-                          <Field.Label>Height (mm)</Field.Label>
+                          <Field.Label>
+                            Height (mm)
+                            <FormLabelIndicator />
+                          </Field.Label>
                           <Input
                             type="number"
                             min={10}
@@ -395,7 +410,10 @@ export function BarcodePrintDialog({
                           />
                         </Field.Root>
                         <Field.Root>
-                          <Field.Label>Margin (mm)</Field.Label>
+                          <Field.Label>
+                            Margin (mm)
+                            <FormLabelIndicator />
+                          </Field.Label>
                           <Input
                             type="number"
                             min={0}
@@ -405,7 +423,10 @@ export function BarcodePrintDialog({
                           />
                         </Field.Root>
                         <Field.Root>
-                          <Field.Label>Spacing (mm)</Field.Label>
+                          <Field.Label>
+                            Spacing (mm)
+                            <FormLabelIndicator />
+                          </Field.Label>
                           <Input
                             type="number"
                             min={0}
@@ -415,7 +436,10 @@ export function BarcodePrintDialog({
                           />
                         </Field.Root>
                         <Field.Root>
-                          <Field.Label>Columns</Field.Label>
+                          <Field.Label>
+                            Columns
+                            <FormLabelIndicator />
+                          </Field.Label>
                           <Input
                             type="number"
                             min={1}
@@ -430,7 +454,10 @@ export function BarcodePrintDialog({
                   ) : (
                     <Stack gap="2">
                       <Field.Root>
-                        <Field.Label>Thermal label size</Field.Label>
+                        <Field.Label>
+                          Thermal label size
+                          <FormLabelIndicator />
+                        </Field.Label>
                         <select
                           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
                           value={thermalSize}
@@ -468,7 +495,10 @@ export function BarcodePrintDialog({
                     </Alert.Root>
                   )}
                   <Field.Root>
-                    <Field.Label>Optional label content</Field.Label>
+                    <Field.Label>
+                      Optional label content
+                      <FormLabelIndicator />
+                    </Field.Label>
                     <HStack gap="5" wrap="wrap">
                       <label className="inline-flex cursor-pointer select-none items-center gap-2 text-sm">
                         <input

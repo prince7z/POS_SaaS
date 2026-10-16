@@ -1,22 +1,11 @@
 import { useEffect, useState } from 'react'
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  Container,
-  Heading,
-  HStack,
-  IconButton,
-  Input,
-  Text,
-  VStack,
-} from '@chakra-ui/react'
+import { Alert, Box, Button, Card, Container, Heading, HStack, IconButton, Input, Text, VStack } from '@chakra-ui/react'
 import { motion } from 'motion/react'
 import { Eye, EyeOff, Lock, LogIn, Mail, Sparkles } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { login } from '@/api/endpoints/auth'
 import { setAuthSession } from '@/lib/auth'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 
 const MotionCard = motion.create(Card.Root)
 const MotionBox = motion.create(Box)
@@ -127,6 +116,7 @@ export function LoginPage() {
               <Box>
                 <Text fontSize="sm" fontWeight="600" mb="1.5">
                   Email Address
+                  <FormLabelIndicator required />
                 </Text>
                 <HStack
                   gap="2"
@@ -157,6 +147,7 @@ export function LoginPage() {
               <Box>
                 <Text fontSize="sm" fontWeight="600" mb="1.5">
                   Password
+                  <FormLabelIndicator required />
                 </Text>
                 <HStack
                   gap="2"
@@ -203,14 +194,7 @@ export function LoginPage() {
 
               {/* Demo Credentials Card rendered ONLY if ?demo=true or ?demo=1 is in URL */}
               {isDemoQuery && (
-                <Box
-                  p="3"
-                  borderRadius="md"
-                  bg="zinc.50"
-                  border="1px solid"
-                  borderColor="zinc.200"
-                  fontSize="xs"
-                >
+                <Box p="3" borderRadius="md" bg="zinc.50" border="1px solid" borderColor="zinc.200" fontSize="xs">
                   <HStack justify="space-between" align="center">
                     <HStack gap="2">
                       <Sparkles size={14} color="#18181b" />
@@ -218,12 +202,7 @@ export function LoginPage() {
                         Demo Account Available
                       </Text>
                     </HStack>
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="outline"
-                      onClick={fillDemoCredentials}
-                    >
+                    <Button type="button" size="xs" variant="outline" onClick={fillDemoCredentials}>
                       Auto-Fill Demo
                     </Button>
                   </HStack>

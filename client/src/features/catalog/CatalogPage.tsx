@@ -609,7 +609,7 @@ function ProductDialog({
           <FieldSet className="gap-6">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
-                <FieldLabel>Product name</FieldLabel>
+                <FieldLabel required>Product name</FieldLabel>
                 <Input
                   value={form.name}
                   onChange={(e) => set('name', e.target.value)}
@@ -617,7 +617,7 @@ function ProductDialog({
                 />
               </Field>
               <Field>
-                <FieldLabel>SKU</FieldLabel>
+                <FieldLabel required>SKU</FieldLabel>
                 <Input
                   value={form.sku}
                   onChange={(e) => set('sku', e.target.value)}
@@ -940,7 +940,7 @@ function ProductDialog({
                 </Checkbox.Root>
               </Field>
               <Field>
-                <FieldLabel>Category</FieldLabel>
+                <FieldLabel required>Category</FieldLabel>
                 <SearchableSelect
                   options={categories.map((item) => ({ value: item.id, label: item.name }))}
                   value={form.categoryId}
@@ -992,11 +992,11 @@ function ProductDialog({
               </h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel>RRP</FieldLabel>
+                  <FieldLabel required>RRP</FieldLabel>
                   <Input type="number" min="0" value={form.rrp} onChange={(e) => set('rrp', Number(e.target.value))} />
                 </Field>
                 <Field>
-                  <FieldLabel>Selling price</FieldLabel>
+                  <FieldLabel required>Selling price</FieldLabel>
                   <Input
                     type="number"
                     min="0"
@@ -1005,7 +1005,7 @@ function ProductDialog({
                   />
                 </Field>{' '}
                 <Field>
-                  <FieldLabel>Purchase cost</FieldLabel>
+                  <FieldLabel required>Purchase cost</FieldLabel>
                   <Input
                     type="number"
                     min="0"
@@ -1230,7 +1230,7 @@ function EntityDialog({
         </DialogHeader>
         <FieldSet className="gap-5">
           <Field>
-            <FieldLabel>{kind === 'category' ? 'Category name' : 'Brand name'}</FieldLabel>
+            <FieldLabel required>{kind === 'category' ? 'Category name' : 'Brand name'}</FieldLabel>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
           {kind === 'category' && (

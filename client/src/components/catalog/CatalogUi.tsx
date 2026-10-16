@@ -15,6 +15,7 @@ import {
   Text,
   Textarea as ChakraTextarea,
 } from '@chakra-ui/react'
+import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 
 export const Button = ({ variant = 'solid', size = 'md', ...props }: any) => (
   <ChakraButton
@@ -47,7 +48,16 @@ export const Table = Object.assign((props: any) => <ChakraTable.Root {...props} 
 })
 
 export const Field = ({ children }: { children: ReactNode }) => <ChakraField.Root>{children}</ChakraField.Root>
-export const FieldLabel = (props: any) => <ChakraField.Label {...props} />
+export const FieldLabel = ({
+  required = false,
+  children,
+  ...props
+}: ComponentProps<typeof ChakraField.Label> & { required?: boolean }) => (
+  <ChakraField.Label {...props}>
+    {children}
+    <FormLabelIndicator required={required} />
+  </ChakraField.Label>
+)
 export const FieldDescription = (props: any) => <ChakraField.HelperText {...props} />
 export const FieldError = (props: any) => <ChakraField.ErrorText {...props} />
 export const FieldSet = ({ children, ...props }: any) => (
