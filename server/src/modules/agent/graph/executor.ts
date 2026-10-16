@@ -149,7 +149,6 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 			const req = (step.request && typeof step.request === "object" ? step.request : {}) as {
 				question?: string;
 				options?: Array<{ id?: string; label?: string; value?: string } | string>;
-				allowOther?: boolean;
 			};
 			const questionId = `q_${Date.now()}_${step.id}`;
 			const stepDesc = "description" in step ? (step as { description?: string }).description : undefined;
@@ -171,7 +170,7 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 				questionId,
 				message: questionText,
 				options,
-				allowTextInput: req.allowOther ?? true,
+				allowTextInput: true,
 			});
 
 			humanResponse = userResponse;

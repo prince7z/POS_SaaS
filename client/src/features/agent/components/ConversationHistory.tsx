@@ -14,12 +14,16 @@ export function ConversationHistory({
 }) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const fetchConversations = useCallback(async (forceRefresh = false) => {
     setIsLoading(true)
+    setLoadError(null)
     try {
       const data = await listConversations(forceRefresh)
       setConversations(data)
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Conversation history could not be loaded.')
     } finally {
       setIsLoading(false)
     }
@@ -62,6 +66,10 @@ export function ConversationHistory({
 
       {isLoading && conversations.length === 0 ? (
         <HistorySkeleton />
+      ) : loadError ? (
+        <Text fontSize="xs" color="fg.error" py="2">
+          {loadError}
+        </Text>
       ) : conversations.length === 0 ? (
         <Text fontSize="xs" color="secondary" py="2">
           No previous conversations found.

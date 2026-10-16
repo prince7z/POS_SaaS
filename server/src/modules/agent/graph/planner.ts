@@ -36,7 +36,11 @@ export const createPlan = async (
 	history: Array<{ role: string; content: string }> = [],
 	tracker?: AgentPerfTracker
 ): Promise<Plan> => {
-	const availableTools = plannerToolCatalog(user.permissions);
+	const allTools = plannerToolCatalog(user.permissions);
+	const isTakealotRequest = /\btakealot\b|\bmarketplace\b/i.test(request);
+	const availableTools = isTakealotRequest
+		? allTools.filter((tool) => tool.tool === "takealot_tool")
+		: allTools;
 	const historyContext = history.length > 0
 		? history.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n")
 		: "No previous messages.";
@@ -54,17 +58,8 @@ Return JSON with exactly this shape:
 				currentRequest: request,
 				conversationHistory: historyContext,
 				availableTools,
-				userContext: {
-					userName: user.userName || "Store Manager",
-					companyName: user.companyName || "Jcom",
-					companyLogoUrl: user.companyLogoUrl || null,
-				},
-				instruction: `Create an ordered plan using only available tools or human_input/final steps. Take previous conversation history into full account to understand context.
-Takealot marketplace questions have priority over generic POS tools: for any question specifically about Takealot sales, revenue, fees, profit, orders, seller trends, or stock, use takealot_tool and its sales_summary first for date-range revenue/fees/profit. Do not answer Takealot marketplace questions with sales_tool or finance_tool. Use YYYY-MM-DD from/to dates. If a required date range is unclear, ask one human_input question. Only combine with POS sales/finance tools when the user explicitly asks for a comparison.
-For Takealot cost and profit requests, use the totalCost and profit returned by takealot_tool:sales_summary. Unit cost uses a C/R amount encoded in the SKU first, then current local catalog averageCost matched by exact SKU. When the returned costCoverage is below 1, report the partial totalCost/profit with uncostedUnits and costCoverage, and explain that profit overstates actual profit because uncosted units are excluded. Say profit is unavailable only when the tool returns null, such as when total_fee is incomplete; never infer missing costs or fees. Report total_fee as Takealot-reported fees and do not label it commission or sum fee components as a substitute.
-For expense requests, use finance_tool. Use list_expenses for "what/recent/show/list expenses"; use expense_summary for totals or counts;
-use expense_analytics for trends or category breakdowns; use pnl_dashboard when the request asks about profit or loss.
-Date filters must use YYYY-MM-DD. Always include a final step.`,
+				instruction: `Create an ordered plan using only available tools and human_input/final steps. Use conversation history to resolve references, ask one human_input question when required details are missing, use YYYY-MM-DD date filters, and always include a final step.
+For expense requests, use finance_tool: list_expenses for recent/itemized requests, expense_summary for totals, expense_analytics for trends or categories, and pnl_dashboard for profit/loss.`,
 			}),
 		},
 	];

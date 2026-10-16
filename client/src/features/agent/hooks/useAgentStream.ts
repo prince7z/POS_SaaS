@@ -25,9 +25,7 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
   const [isStreaming, setIsStreaming] = useState(false)
   const [isLoadingConversation, setIsLoadingConversation] = useState(false)
   const [isCreatingConversation, setIsCreatingConversation] = useState(false)
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(
-    initialConversation?.id || null,
-  )
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(initialConversation?.id || null)
 
   const abortControllerRef = useRef<AbortController | null>(null)
 
@@ -42,8 +40,17 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
       } else {
         setMessages([])
       }
-    } catch {
-      setMessages([])
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Conversation could not be loaded.'
+      setMessages([
+        {
+          id: `load-error-${Date.now()}`,
+          role: 'assistant',
+          blocks: [{ type: 'error', message }],
+          status: 'failed',
+          timestamp: Date.now(),
+        },
+      ])
     } finally {
       setIsLoadingConversation(false)
     }
@@ -59,9 +66,18 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
       const newConv = await createConversation()
       setActiveConversationId(newConv.id)
       setMessages([])
-    } catch {
+    } catch (error) {
       setActiveConversationId(null)
-      setMessages([])
+      const message = error instanceof Error ? error.message : 'A new conversation could not be created.'
+      setMessages([
+        {
+          id: `create-error-${Date.now()}`,
+          role: 'assistant',
+          blocks: [{ type: 'error', message }],
+          status: 'failed',
+          timestamp: Date.now(),
+        },
+      ])
     } finally {
       setIsCreatingConversation(false)
     }
@@ -89,9 +105,19 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
           const newConv = await createConversation()
           convId = newConv.id
           setActiveConversationId(convId)
-        } catch {
-          convId = `conv_${Date.now()}`
-          setActiveConversationId(convId)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'A conversation could not be created.'
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `create-error-${Date.now()}`,
+              role: 'assistant',
+              blocks: [{ type: 'error', message }],
+              status: 'failed',
+              timestamp: Date.now(),
+            },
+          ])
+          return
         }
       }
 
@@ -210,11 +236,7 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
         prev.map((msg) => {
           if (msg.role !== 'assistant') return msg
           const updatedBlocks = msg.blocks.map((block) => {
-            if (
-              block.type === 'question' &&
-              payload.questionId &&
-              block.data.questionId === payload.questionId
-            ) {
+            if (block.type === 'question' && payload.questionId && block.data.questionId === payload.questionId) {
               return {
                 ...block,
                 answered: true,
@@ -232,11 +254,7 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
                 approved: Boolean(payload.response.value),
               }
             }
-            if (
-              block.type === 'upload_required' &&
-              payload.uploadId &&
-              block.data.uploadId === payload.uploadId
-            ) {
+            if (block.type === 'upload_required' && payload.uploadId && block.data.uploadId === payload.uploadId) {
               const val = payload.response.value as { key?: string }
               return {
                 ...block,
@@ -244,11 +262,7 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
                 uploadedKey: val?.key || 'uploaded_image',
               }
             }
-            if (
-              block.type === 'email_preview' &&
-              payload.draftId &&
-              block.data.draftId === payload.draftId
-            ) {
+            if (block.type === 'email_preview' && payload.draftId && block.data.draftId === payload.draftId) {
               const val = payload.response.value as { action: 'approve' | 'reject' | 'change'; feedback?: string }
               return {
                 ...block,
@@ -263,8 +277,32 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
         }),
       )
 
-      // 2. Prepare new assistant message to receive graph stream after resume
-      const responseVal = String(payload.response.value || '')
+      const responseVal = String(payload.response.value ?? '')
+      const question = payload.questionId
+        ? messages
+            .flatMap((message) => message.blocks)
+            .find((block) => block.type === 'question' && block.data.questionId === payload.questionId)
+        : undefined
+      const selectedOption =
+        question?.type === 'question'
+          ? question.data.options?.find((option) => option.value === responseVal)
+          : undefined
+      const answerText = selectedOption?.label || responseVal
+      if (payload.questionId && answerText) {
+        const userMessageId = `user_${Date.now()}`
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: userMessageId,
+            role: 'user',
+            blocks: [{ type: 'text', messageId: `txt_${userMessageId}`, content: answerText }],
+            status: 'completed',
+            timestamp: Date.now(),
+          },
+        ])
+      }
+
+      // Prepare a new assistant message to receive the resumed graph stream.
       const assistantMessageId = `asst_${Date.now()}`
       let receivedStreamEvent = false
       setIsStreaming(true)
@@ -298,6 +336,18 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
             const lastIndex = prev.length - 1
             if (lastIndex < 0 || prev[lastIndex].id !== assistantMessageId) return prev
             const currentAsst = prev[lastIndex]
+            if (!receivedStreamEvent) {
+              const list = [...prev]
+              list[lastIndex] = {
+                ...currentAsst,
+                status: 'failed',
+                blocks: [
+                  ...currentAsst.blocks,
+                  { type: 'error', message: 'No response was received from the assistant.' },
+                ],
+              }
+              return list
+            }
             if (currentAsst.status === 'streaming') {
               const list = [...prev]
               list[lastIndex] = { ...currentAsst, status: 'completed' }
@@ -306,16 +356,23 @@ export function useAgentStream(initialConversation?: ConversationSummary | null)
             return prev
           })
         },
+        (error) => {
+          setIsStreaming(false)
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantMessageId
+                ? {
+                    ...message,
+                    status: 'failed',
+                    blocks: [...message.blocks, { type: 'error', message: error.message }],
+                  }
+                : message,
+            ),
+          )
+        },
       )
-
-      // 3. Fallback: if no active graph interrupt received events, process as standard message
-      if (!receivedStreamEvent && responseVal) {
-        setMessages((prev) => prev.filter((m) => m.id !== assistantMessageId))
-        setIsStreaming(false)
-        await sendMessage(responseVal)
-      }
     },
-    [sendMessage],
+    [messages, sendMessage],
   )
 
   const clearMessages = useCallback(() => {

@@ -315,6 +315,7 @@ export const stream: RequestHandler = async (request, response, next) => {
 	const bodyObj = request.body as { requestId?: string; message?: string; conversationId?: string; content?: string };
 	const requestId = (typeof reqHeader === "string" ? reqHeader : bodyObj?.requestId) || `req_${Date.now()}_${randomUUID().slice(0, 6)}`;
 	const tracker = new AgentPerfTracker(requestId);
+	let conversationIdForHistory: string | undefined;
 
 	try {
 		tracker.log({ layer: "backend", module: "controller.ts", operation: "HTTP request received" });
@@ -333,14 +334,16 @@ export const stream: RequestHandler = async (request, response, next) => {
 			const newConv = await createConversation(user.id, user.companyId, content.slice(0, 40));
 			conversationId = newConv.id;
 		}
+		conversationIdForHistory = conversationId;
 		const convDbDurationMs = Math.round((performance.now() - convDbStart) * 100) / 100;
 		tracker.log({ layer: "backend", module: "controller.ts", operation: `after conversation DB lookup (${convDbDurationMs}ms)` });
 
 		tracker.conversationId = conversationId;
+		const history = await getConversationHistory(conversationId, 8);
 		const msgDbStart = performance.now();
 		tracker.log({ layer: "backend", module: "controller.ts", operation: "before addMessage DB query" });
 		await addMessage(conversationId, "user", content);
-		void ensureConversationTitle(conversationId, content);
+		await ensureConversationTitle(conversationId, content);
 		const msgDbDurationMs = Math.round((performance.now() - msgDbStart) * 100) / 100;
 		tracker.log({ layer: "backend", module: "controller.ts", operation: `after addMessage DB query (${msgDbDurationMs}ms)` });
 		const controller = registerRun(runId);
@@ -392,7 +395,6 @@ export const stream: RequestHandler = async (request, response, next) => {
 		};
 
 		tracker.log({ layer: "backend", module: "controller.ts", operation: "LangGraph started" });
-		const history = await getConversationHistory(conversationId, 10);
 		const graph = createAgentGraph(await getAgentCheckpointer());
 		const eventStream = await graph.stream(
 			{ request: content, user, history },
@@ -480,6 +482,8 @@ export const stream: RequestHandler = async (request, response, next) => {
 		if (pendingInterrupts.length > 0) {
 			const activeInterrupt = pendingInterrupts[0];
 			tracker.log({ layer: "backend", module: "controller.ts", operation: "Graph interrupt detected after stream" });
+			const question = questionTextFromInterrupt(activeInterrupt.value);
+			if (question) await addMessage(conversationId, "assistant", question);
 			handleInterruptPayload(response, activeInterrupt.value, tracker);
 			writeAgentEvent(response, { type: "done", data: null }, tracker);
 			response.end();
@@ -508,6 +512,11 @@ export const stream: RequestHandler = async (request, response, next) => {
 		tracker.printTimeline();
 	} catch (error) {
 		if (isGraphInterrupt(error) && response.headersSent) {
+			const interruptValue = (error as { interrupts?: Array<{ value?: unknown }> }).interrupts?.[0]?.value;
+			const question = questionTextFromInterrupt(interruptValue);
+			if (conversationIdForHistory && question) {
+				await addMessage(conversationIdForHistory, "assistant", question);
+			}
 			handleInterrupt(response, error);
 			tracker.printTimeline();
 			return;
@@ -564,6 +573,13 @@ export const respond: RequestHandler = async (request, response, next) => {
 			body.response && typeof body.response === "object" && "value" in body.response
 				? (body.response as { value: unknown }).value
 				: body.response;
+		const graph = createAgentGraph(await getAgentCheckpointer());
+		const priorSnapshot = await graph.getState({ configurable: { thread_id: conversationId } });
+		const activeInterrupt = priorSnapshot.tasks?.flatMap((task) => task.interrupts || [])[0];
+		if (activeInterrupt && questionTextFromInterrupt(activeInterrupt.value)) {
+			const answerText = responseText(resumeValue);
+			if (answerText) await addMessage(conversationId, "user", answerText);
+		}
 
 		const controller = registerRun(runId);
 		startAgentStream(response);
@@ -603,7 +619,6 @@ export const respond: RequestHandler = async (request, response, next) => {
 		};
 
 		tracker.log({ layer: "backend", module: "controller.ts", operation: "LangGraph resume started" });
-		const graph = createAgentGraph(await getAgentCheckpointer());
 		const eventStream = await graph.stream(new Command({ resume: resumeValue }), {
 			configurable: { thread_id: conversationId, onChunk, tracker },
 			signal: controller.signal,
@@ -642,6 +657,8 @@ export const respond: RequestHandler = async (request, response, next) => {
 		if (pendingInterrupts.length > 0) {
 			const activeInterrupt = pendingInterrupts[0];
 			tracker.log({ layer: "backend", module: "controller.ts", operation: "Graph interrupt detected after resume stream" });
+			const question = questionTextFromInterrupt(activeInterrupt.value);
+			if (question) await addMessage(conversationId, "assistant", question);
 			handleInterruptPayload(response, activeInterrupt.value, tracker);
 			writeAgentEvent(response, { type: "done", data: null }, tracker);
 			response.end();
@@ -704,6 +721,19 @@ export const respond: RequestHandler = async (request, response, next) => {
 		finishRun(runId);
 	}
 };
+
+function questionTextFromInterrupt(value: unknown): string | undefined {
+	if (!value || typeof value !== "object" || !("questionId" in value)) return undefined;
+	const message = "message" in value ? value.message : undefined;
+	return typeof message === "string" && message.trim() ? message.trim() : "Please clarify your request.";
+}
+
+function responseText(value: unknown): string {
+	if (typeof value === "string") return value.trim();
+	if (value === null || value === undefined) return "";
+	if (typeof value === "number" || typeof value === "boolean") return String(value);
+	return JSON.stringify(value);
+}
 
 function handleInterrupt(response: Parameters<RequestHandler>[1], error: unknown) {
 	const interruptValue = (error as { interrupts?: Array<{ value?: unknown }> }).interrupts?.[0]?.value;

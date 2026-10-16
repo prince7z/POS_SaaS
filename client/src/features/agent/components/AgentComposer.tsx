@@ -7,11 +7,13 @@ const MAX_HEIGHT = 180
 export function AgentComposer({
   isStreaming,
   disabled = false,
+  placeholder = 'Ask AI Assistant...',
   onSend,
   onStop,
 }: {
   isStreaming: boolean
   disabled?: boolean
+  placeholder?: string
   onSend: (text: string) => void
   onStop: () => void
 }) {
@@ -49,7 +51,7 @@ export function AgentComposer({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask AI Assistant..."
+            placeholder={placeholder}
             aria-label="Message the AI assistant"
             rows={1}
             resize="none"

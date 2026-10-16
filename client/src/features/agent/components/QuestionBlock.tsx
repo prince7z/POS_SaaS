@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, Button, HStack, Input, Stack, Text } from '@chakra-ui/react'
+import { Box, Button, HStack, Stack, Text, Textarea } from '@chakra-ui/react'
 import { HelpCircle, Send } from 'lucide-react'
 import type { InteractionPayload, QuestionBlock as QuestionBlockType } from '../types/agent'
 
@@ -40,7 +40,7 @@ export function QuestionBlock({
     })
   }
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const text = e.clipboardData.getData('text/plain')
     if (text) {
       e.preventDefault()
@@ -71,7 +71,10 @@ export function QuestionBlock({
       {answered ? (
         <Box p="2" bg="background" borderRadius="md" borderWidth="1px">
           <Text fontSize="xs" color="secondary">
-            Selected Answer: <Text as="span" fontWeight="semibold" color="primary">{selectedResponse}</Text>
+            Selected Answer:{' '}
+            <Text as="span" fontWeight="semibold" color="primary">
+              {selectedResponse}
+            </Text>
           </Text>
         </Box>
       ) : (
@@ -92,23 +95,24 @@ export function QuestionBlock({
             </HStack>
           )}
 
-          {data.allowTextInput && (
-            <form onSubmit={handleTextSubmit}>
-              <HStack gap="2" mt="1">
-                <Input
-                  size="xs"
-                  placeholder="Or type custom answer..."
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  onPaste={handlePaste}
-                  disabled={answered}
-                />
-                <Button size="xs" type="submit" disabled={!textInput.trim() || answered} colorScheme="blue">
-                  <Send size={12} />
-                </Button>
-              </HStack>
-            </form>
-          )}
+          <form onSubmit={handleTextSubmit}>
+            <HStack gap="2" mt="1">
+              <Textarea
+                size="sm"
+                rows={2}
+                resize="vertical"
+                aria-label="Type a custom answer"
+                placeholder="Type your own answer..."
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                onPaste={handlePaste}
+                disabled={answered}
+              />
+              <Button size="sm" type="submit" disabled={!textInput.trim() || answered} colorScheme="blue">
+                <Send size={14} />
+              </Button>
+            </HStack>
+          </form>
         </Stack>
       )}
     </Box>

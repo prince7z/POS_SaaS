@@ -35,6 +35,26 @@ export function AgentPanel({
     handleInteraction,
   } = useAgentStream()
 
+  const handlePrompt = useCallback(
+    async (text: string) => {
+      const pendingQuestion = [...messages]
+        .reverse()
+        .flatMap((message) => message.blocks)
+        .find((block) => block.type === 'question' && !block.answered)
+
+      if (pendingQuestion?.type === 'question' && activeConversationId) {
+        await handleInteraction({
+          conversationId: activeConversationId,
+          questionId: pendingQuestion.data.questionId,
+          response: { type: 'text', value: text },
+        })
+        return
+      }
+      await sendMessage(text)
+    },
+    [activeConversationId, handleInteraction, messages, sendMessage],
+  )
+
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault()
@@ -125,13 +145,18 @@ export function AgentPanel({
         isStreaming={isStreaming}
         isLoading={isLoadingConversation || isCreatingConversation}
         onRespond={handleInteraction}
-        onSuggestionClick={(prompt) => sendMessage(prompt)}
+        onSuggestionClick={handlePrompt}
       />
 
       <AgentComposer
         isStreaming={isStreaming}
         disabled={isLoadingConversation || isCreatingConversation}
-        onSend={(text) => sendMessage(text)}
+        placeholder={
+          messages.some((message) => message.blocks.some((block) => block.type === 'question' && !block.answered))
+            ? 'Reply to the clarification above...'
+            : 'Ask AI Assistant...'
+        }
+        onSend={handlePrompt}
         onStop={stopStream}
       />
     </Flex>

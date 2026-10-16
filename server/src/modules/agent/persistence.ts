@@ -26,10 +26,14 @@ export const getConversationHistory = async (conversationId: string, limit = 10)
 	const messages = await prisma.agentMessage.findMany({
 		where: { conversationId },
 		orderBy: { createdAt: "desc" },
-		take: limit,
+		take: Math.min(limit, 8),
 	});
-	return messages.reverse().map((m: { role: string; content: string }) => ({
-		role: m.role,
-		content: m.content,
-	}));
+	let remainingCharacters = 5_000;
+	const recentFirst = messages.flatMap((message: { role: string; content: string }) => {
+		if (remainingCharacters <= 0) return [];
+		const content = message.content.slice(0, Math.min(1_200, remainingCharacters)).trim();
+		remainingCharacters -= content.length;
+		return content ? [{ role: message.role, content }] : [];
+	});
+	return recentFirst.reverse();
 };

@@ -8,12 +8,6 @@ import type {
   StreamAgentOptions,
 } from '../types/agent'
 import { streamAgent } from './agent-stream'
-import {
-  mockGetConversation,
-  mockListConversations,
-  mockStreamAgent,
-  mockSubmitAgentInteraction,
-} from './mock-agent-api'
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? '/api'
 
@@ -52,35 +46,23 @@ export function normalizeConversation(item: any): ConversationSummary {
 }
 
 export async function createConversation(title?: string): Promise<ConversationSummary> {
-  try {
-    const token = localStorage.getItem('pos-auth-token')
-    const response = await fetch(`${baseUrl}/agent/conversations`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ title }),
-    })
-    if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`)
-    }
-    const resBody = await response.json()
-    const rawData = resBody?.data || resBody
-    clearConversationCache()
-    return normalizeConversation(rawData)
-  } catch {
-    const newConv: ConversationSummary = {
-      id: `conv_${Date.now()}`,
-      title: title || 'New Conversation',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      group: 'Today',
-    }
-    clearConversationCache()
-    return newConv
+  const token = localStorage.getItem('pos-auth-token')
+  const response = await fetch(`${baseUrl}/agent/conversations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ title }),
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP error ${response.status}`)
   }
+  const resBody = await response.json()
+  const rawData = resBody?.data || resBody
+  clearConversationCache()
+  return normalizeConversation(rawData)
 }
 
 export async function listConversations(forceRefresh = false): Promise<ConversationSummary[]> {
@@ -88,83 +70,63 @@ export async function listConversations(forceRefresh = false): Promise<Conversat
     return conversationCache
   }
 
-  try {
-    const token = localStorage.getItem('pos-auth-token')
-    const response = await fetch(`${baseUrl}/agent/conversations`, {
-      headers: {
-        Accept: 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    })
-    if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`)
-    }
-    const resBody = await response.json()
-    const rawList = Array.isArray(resBody)
-      ? resBody
-      : Array.isArray(resBody?.data)
-      ? resBody.data
-      : []
-
-    const list: ConversationSummary[] = rawList.map(normalizeConversation)
-    conversationCache = list
-    return list
-  } catch {
-    // Fall back to mock conversations on backend unavailability
-    const mockList = await mockListConversations()
-    conversationCache = mockList
-    return mockList
+  const token = localStorage.getItem('pos-auth-token')
+  const response = await fetch(`${baseUrl}/agent/conversations`, {
+    headers: {
+      Accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP error ${response.status}`)
   }
+  const resBody = await response.json()
+  const rawList = Array.isArray(resBody) ? resBody : Array.isArray(resBody?.data) ? resBody.data : []
+
+  const list: ConversationSummary[] = rawList.map(normalizeConversation)
+  conversationCache = list
+  return list
 }
 
 export async function getConversation(id: string): Promise<DetailedConversation | null> {
-  try {
-    const token = localStorage.getItem('pos-auth-token')
-    const response = await fetch(`${baseUrl}/agent/conversations/${id}`, {
-      headers: {
-        Accept: 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  const token = localStorage.getItem('pos-auth-token')
+  const response = await fetch(`${baseUrl}/agent/conversations/${id}`, {
+    headers: {
+      Accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP error ${response.status}`)
+  }
+  const resBody = await response.json()
+  const rawData = resBody?.data || resBody
+  if (!rawData) return null
+
+  const summary = normalizeConversation(rawData)
+  const rawMessages = Array.isArray(rawData.messages) ? rawData.messages : []
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const messages: AgentMessage[] = rawMessages.map((m: any) => {
+    const blocks: AgentBlock[] = [
+      {
+        type: 'text',
+        messageId: `txt_${m.id || Math.random()}`,
+        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''),
       },
-    })
-    if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`)
-    }
-    const resBody = await response.json()
-    const rawData = resBody?.data || resBody
-    if (!rawData) return null
-
-    const summary = normalizeConversation(rawData)
-    const rawMessages = Array.isArray(rawData.messages) ? rawData.messages : []
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const messages: AgentMessage[] = rawMessages.map((m: any) => {
-      const blocks: AgentBlock[] = [
-        {
-          type: 'text',
-          messageId: `txt_${m.id || Math.random()}`,
-          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''),
-        },
-      ]
-      return {
-        id: String(m.id || `msg_${Math.random()}`),
-        role: m.role === 'user' ? 'user' : 'assistant',
-        blocks,
-        status: 'completed',
-        timestamp: m.createdAt ? new Date(m.createdAt).getTime() : Date.now(),
-      }
-    })
-
+    ]
     return {
-      ...summary,
-      messages,
+      id: String(m.id || `msg_${Math.random()}`),
+      role: m.role === 'user' ? 'user' : 'assistant',
+      blocks,
+      status: 'completed',
+      timestamp: m.createdAt ? new Date(m.createdAt).getTime() : Date.now(),
     }
-  } catch {
-    const mock = await mockGetConversation(id)
-    if (!mock) return null
-    return {
-      ...mock,
-      messages: [],
-    }
+  })
+
+  return {
+    ...summary,
+    messages,
   }
 }
 
@@ -172,67 +134,43 @@ export async function submitAgentInteraction(
   payload: InteractionPayload,
   onEvent?: (event: AgentEvent) => void,
   onComplete?: () => void,
+  onError?: (error: Error) => void,
 ): Promise<{ success: boolean; message: string }> {
-  try {
-    if (onEvent) {
-      await streamAgent({
-        url: `${baseUrl}/agent/respond`,
-        body: payload as unknown as Record<string, unknown>,
-        onEvent,
-        onComplete,
-      })
-      return { success: true, message: 'Interaction processed' }
-    }
-
-    const token = localStorage.getItem('pos-auth-token')
-    const response = await fetch(`${baseUrl}/agent/respond`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream, application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(payload),
+  if (onEvent) {
+    await streamAgent({
+      url: `${baseUrl}/agent/respond`,
+      body: payload as unknown as Record<string, unknown>,
+      onEvent,
+      onComplete,
+      onError,
     })
-    if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`)
-    }
-    return { success: true, message: 'Interaction submitted' }
-  } catch {
-    return mockSubmitAgentInteraction(payload)
+    return { success: true, message: 'Interaction processed' }
   }
+
+  const token = localStorage.getItem('pos-auth-token')
+  const response = await fetch(`${baseUrl}/agent/respond`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream, application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP error ${response.status}`)
+  }
+  return { success: true, message: 'Interaction submitted' }
 }
 
-export async function executeAgentStream(options: StreamAgentOptions & { tracker?: import('./perfTracker').FrontendPerfTracker; requestId?: string }): Promise<void> {
+export async function executeAgentStream(
+  options: StreamAgentOptions & { tracker?: import('./perfTracker').FrontendPerfTracker; requestId?: string },
+): Promise<void> {
   // Invalidate conversation list cache so fresh conversation appears in history
   clearConversationCache()
 
-  let receivedAnyEvent = false
-
-  const handleEvent = (event: Parameters<StreamAgentOptions['onEvent']>[0]) => {
-    receivedAnyEvent = true
-    options.onEvent(event)
-  }
-
-  try {
-    await streamAgent({
-      ...options,
-      url: `${baseUrl}/agent/stream`,
-      onEvent: handleEvent,
-      onError: async (error) => {
-        if (!receivedAnyEvent && !options.signal?.aborted) {
-          await mockStreamAgent(options)
-        } else {
-          options.onError?.(error)
-        }
-      },
-    })
-  } catch (error: unknown) {
-    if (!receivedAnyEvent && !options.signal?.aborted) {
-      await mockStreamAgent(options)
-    } else {
-      const err = error instanceof Error ? error : new Error('Agent stream execution failed')
-      options.onError?.(err)
-    }
-  }
+  await streamAgent({
+    ...options,
+    url: `${baseUrl}/agent/stream`,
+  })
 }
