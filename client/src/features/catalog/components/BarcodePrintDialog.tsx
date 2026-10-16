@@ -9,12 +9,88 @@ import { formatCurrency } from '@/lib/formatters'
 type PrintFormat = 'a4' | 'thermal'
 type ThermalSize = '50x25' | '50x30' | '100x50'
 type LabelContentOption = 'name' | 'rrp' | 'sellingPrice'
+type A4LayoutPreset = 'custom' | '45-labels'
+type BarcodePrintSettings = {
+  format: PrintFormat
+  a4LayoutPreset: A4LayoutPreset
+  labelWidth: number
+  labelHeight: number
+  margin: number
+  spacing: number
+  columns: number
+  thermalSize: ThermalSize
+  labelContent: Record<LabelContentOption, boolean>
+}
 
 const MAX_LABELS = 500
+const BARCODE_PRINT_SETTINGS_KEY = 'pos-barcode-print-settings'
 const thermalDimensions: Record<ThermalSize, { width: number; height: number }> = {
   '50x25': { width: 50, height: 25 },
   '50x30': { width: 50, height: 30 },
   '100x50': { width: 100, height: 50 },
+}
+
+function defaultBarcodePrintSettings(): BarcodePrintSettings {
+  return {
+    format: 'a4',
+    a4LayoutPreset: 'custom',
+    labelWidth: 50,
+    labelHeight: 25,
+    margin: 7,
+    spacing: 2,
+    columns: 3,
+    thermalSize: '50x25',
+    labelContent: { name: true, rrp: false, sellingPrice: true },
+  }
+}
+
+function isBarcodePrintSettings(value: unknown): value is BarcodePrintSettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const settings = value as Record<string, unknown>
+  const content = settings.labelContent
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return false
+  const labelContent = content as Record<string, unknown>
+  return (
+    (settings.format === 'a4' || settings.format === 'thermal') &&
+    (settings.a4LayoutPreset === 'custom' || settings.a4LayoutPreset === '45-labels') &&
+    typeof settings.labelWidth === 'number' &&
+    Number.isFinite(settings.labelWidth) &&
+    settings.labelWidth >= 10 &&
+    settings.labelWidth <= 200 &&
+    typeof settings.labelHeight === 'number' &&
+    Number.isFinite(settings.labelHeight) &&
+    settings.labelHeight >= 10 &&
+    settings.labelHeight <= 280 &&
+    typeof settings.margin === 'number' &&
+    Number.isFinite(settings.margin) &&
+    settings.margin >= 0 &&
+    settings.margin <= 50 &&
+    typeof settings.spacing === 'number' &&
+    Number.isFinite(settings.spacing) &&
+    settings.spacing >= 0 &&
+    settings.spacing <= 30 &&
+    typeof settings.columns === 'number' &&
+    Number.isInteger(settings.columns) &&
+    settings.columns >= 1 &&
+    settings.columns <= 20 &&
+    (settings.thermalSize === '50x25' || settings.thermalSize === '50x30' || settings.thermalSize === '100x50') &&
+    typeof labelContent.name === 'boolean' &&
+    typeof labelContent.rrp === 'boolean' &&
+    typeof labelContent.sellingPrice === 'boolean'
+  )
+}
+
+function readBarcodePrintSettings(): BarcodePrintSettings {
+  try {
+    const saved = window.localStorage.getItem(BARCODE_PRINT_SETTINGS_KEY)
+    if (!saved) return defaultBarcodePrintSettings()
+    const parsed: unknown = JSON.parse(saved)
+    if (isBarcodePrintSettings(parsed)) return parsed
+    console.warn('Saved barcode print settings are invalid; using defaults.')
+  } catch (cause) {
+    console.error('Unable to read saved barcode print settings.', cause)
+  }
+  return defaultBarcodePrintSettings()
 }
 
 function checksumMatches(value: string, firstWeight: number, secondWeight: number): boolean {
@@ -61,6 +137,8 @@ function Label({
   return (
     <div className="barcode-label">
       {showName && <div className="barcode-product-name">{product.name}</div>}
+            <img className="barcode-graphic" src={`data:image/svg+xml,${encodeURIComponent(svg)}`} alt="" />
+      <div className="barcode-value">{product.barcode}</div>
       {showRrp && rrp !== undefined && showSellingPrice ? (
         <div className="barcode-prices">
           <span className="barcode-rrp">{formatCurrency(rrp)}</span>
@@ -71,8 +149,7 @@ function Label({
       ) : showSellingPrice ? (
         <strong className="barcode-single-price">{formatCurrency(product.sellingPrice)}</strong>
       ) : null}
-      <img className="barcode-graphic" src={`data:image/svg+xml,${encodeURIComponent(svg)}`} alt="" />
-      <div className="barcode-value">{product.barcode}</div>
+
     </div>
   )
 }
@@ -86,35 +163,53 @@ export function BarcodePrintDialog({
   open: boolean
   onClose: () => void
 }) {
-  const [format, setFormat] = useState<PrintFormat>('a4')
+  const [settings, setSettings] = useState<BarcodePrintSettings>(readBarcodePrintSettings)
   const [quantity, setQuantity] = useState(1)
-  const [labelWidth, setLabelWidth] = useState(50)
-  const [labelHeight, setLabelHeight] = useState(25)
-  const [margin, setMargin] = useState(7)
-  const [spacing, setSpacing] = useState(2)
-  const [columns, setColumns] = useState(3)
-  const [thermalSize, setThermalSize] = useState<ThermalSize>('50x25')
-  const [labelContent, setLabelContent] = useState({
-    name: true,
-    rrp: false,
-    sellingPrice: true,
-  })
+  const { format, a4LayoutPreset, labelWidth, labelHeight, margin, spacing, columns, thermalSize, labelContent } =
+    settings
+
+  const updateSetting = <Key extends keyof BarcodePrintSettings>(key: Key, value: BarcodePrintSettings[Key]) => {
+    setSettings((current) => ({ ...current, [key]: value }))
+  }
+
+  const applyA4LayoutPreset = (preset: A4LayoutPreset) => {
+    setSettings((current) =>
+      preset === '45-labels'
+        ? {
+            ...current,
+            a4LayoutPreset: preset,
+            labelWidth: 37.6,
+            labelHeight: 29.6,
+            margin: 7,
+            spacing: 2,
+            columns: 5,
+          }
+        : { ...current, a4LayoutPreset: preset },
+    )
+  }
+
+  const updateA4Dimension = <Key extends 'labelWidth' | 'labelHeight' | 'margin' | 'spacing' | 'columns'>(
+    key: Key,
+    value: BarcodePrintSettings[Key],
+  ) => {
+    setSettings((current) => ({ ...current, [key]: value, a4LayoutPreset: 'custom' }))
+  }
 
   useEffect(() => {
     if (!open) return
     setQuantity(1)
-    setFormat('a4')
-    setLabelWidth(50)
-    setLabelHeight(25)
-    setMargin(7)
-    setSpacing(2)
-    setColumns(3)
-    setThermalSize('50x25')
-    setLabelContent({ name: true, rrp: false, sellingPrice: true })
   }, [open, product?.id])
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(BARCODE_PRINT_SETTINGS_KEY, JSON.stringify(settings))
+    } catch (cause) {
+      console.error('Unable to save barcode print settings.', cause)
+    }
+  }, [settings])
+
   const updateLabelContent = (option: LabelContentOption, checked: boolean) => {
-    setLabelContent((current) => ({ ...current, [option]: checked }))
+    updateSetting('labelContent', { ...labelContent, [option]: checked })
   }
 
   useEffect(() => {
@@ -247,7 +342,10 @@ export function BarcodePrintDialog({
                   </Field.Root>
                   <Field.Root>
                     <Field.Label>Print format</Field.Label>
-                    <RadioGroup.Root value={format} onValueChange={(event) => setFormat(event.value as PrintFormat)}>
+                    <RadioGroup.Root
+                      value={format}
+                      onValueChange={(event) => updateSetting('format', event.value as PrintFormat)}
+                    >
                       <HStack gap="5" wrap="wrap">
                         <RadioGroup.Item value="a4">
                           <RadioGroup.ItemHiddenInput />
@@ -263,59 +361,72 @@ export function BarcodePrintDialog({
                     </RadioGroup.Root>
                   </Field.Root>
                   {format === 'a4' ? (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                    <Stack gap="3">
                       <Field.Root>
-                        <Field.Label>Width (mm)</Field.Label>
-                        <Input
-                          type="number"
-                          min={10}
-                          max={200}
-                          value={labelWidth}
-                          onChange={(e) => setLabelWidth(Number(e.target.value))}
-                        />
+                        <Field.Label>A4 layout preset</Field.Label>
+                        <select
+                          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                          value={a4LayoutPreset}
+                          onChange={(event) => applyA4LayoutPreset(event.target.value as A4LayoutPreset)}
+                        >
+                          <option value="custom">Custom</option>
+                          <option value="45-labels">45 labels per sheet (5 columns × 9 rows)</option>
+                        </select>
                       </Field.Root>
-                      <Field.Root>
-                        <Field.Label>Height (mm)</Field.Label>
-                        <Input
-                          type="number"
-                          min={10}
-                          max={280}
-                          value={labelHeight}
-                          onChange={(e) => setLabelHeight(Number(e.target.value))}
-                        />
-                      </Field.Root>
-                      <Field.Root>
-                        <Field.Label>Margin (mm)</Field.Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={50}
-                          value={margin}
-                          onChange={(e) => setMargin(Number(e.target.value))}
-                        />
-                      </Field.Root>
-                      <Field.Root>
-                        <Field.Label>Spacing (mm)</Field.Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={30}
-                          value={spacing}
-                          onChange={(e) => setSpacing(Number(e.target.value))}
-                        />
-                      </Field.Root>
-                      <Field.Root>
-                        <Field.Label>Columns</Field.Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={20}
-                          step={1}
-                          value={columns}
-                          onChange={(e) => setColumns(Number(e.target.value))}
-                        />
-                      </Field.Root>
-                    </div>
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                        <Field.Root>
+                          <Field.Label>Width (mm)</Field.Label>
+                          <Input
+                            type="number"
+                            min={10}
+                            max={200}
+                            value={labelWidth}
+                            onChange={(e) => updateA4Dimension('labelWidth', Number(e.target.value))}
+                          />
+                        </Field.Root>
+                        <Field.Root>
+                          <Field.Label>Height (mm)</Field.Label>
+                          <Input
+                            type="number"
+                            min={10}
+                            max={280}
+                            value={labelHeight}
+                            onChange={(e) => updateA4Dimension('labelHeight', Number(e.target.value))}
+                          />
+                        </Field.Root>
+                        <Field.Root>
+                          <Field.Label>Margin (mm)</Field.Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={50}
+                            value={margin}
+                            onChange={(e) => updateA4Dimension('margin', Number(e.target.value))}
+                          />
+                        </Field.Root>
+                        <Field.Root>
+                          <Field.Label>Spacing (mm)</Field.Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={30}
+                            value={spacing}
+                            onChange={(e) => updateA4Dimension('spacing', Number(e.target.value))}
+                          />
+                        </Field.Root>
+                        <Field.Root>
+                          <Field.Label>Columns</Field.Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={20}
+                            step={1}
+                            value={columns}
+                            onChange={(e) => updateA4Dimension('columns', Number(e.target.value))}
+                          />
+                        </Field.Root>
+                      </div>
+                    </Stack>
                   ) : (
                     <Stack gap="2">
                       <Field.Root>
@@ -323,7 +434,7 @@ export function BarcodePrintDialog({
                         <select
                           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
                           value={thermalSize}
-                          onChange={(event) => setThermalSize(event.target.value as ThermalSize)}
+                          onChange={(event) => updateSetting('thermalSize', event.target.value as ThermalSize)}
                         >
                           <option value="50x25">50 × 25 mm</option>
                           <option value="50x30">50 × 30 mm</option>
