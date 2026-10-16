@@ -117,6 +117,7 @@ import { showSuccess, showError } from '@/components/feedback/notifications'
 import { formatCurrency } from '@/lib/formatters'
 import { generateInternalBarcodeCandidate } from '@/lib/barcode'
 import { BarcodePrintDialog } from './components/BarcodePrintDialog'
+import { getIntegrations, type Integration } from '@/api/endpoints/integrations'
 
 type Section = 'products' | 'categories' | 'brands'
 type IdentifierStatus = 'idle' | 'tooShort' | 'checking' | 'available' | 'taken' | 'error'
@@ -263,9 +264,10 @@ function ProductDialog({
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [takealotConfigured, setTakealotConfigured] = useState(
-    () => localStorage.getItem('takealotapiexist') === 'true',
-  )
+  const [takealotIntegrations, setTakealotIntegrations] = useState<Integration[]>([])
+  const [takealotConfigured, setTakealotConfigured] = useState(false)
+  const [takealotIntegrationId, setTakealotIntegrationId] = useState('')
+  const [takealotIntegrationError, setTakealotIntegrationError] = useState('')
   const [fillByTakealot, setFillByTakealot] = useState(false)
   const [takealotImageLoading, setTakealotImageLoading] = useState(false)
   const [takealotImagePreview, setTakealotImagePreview] = useState('')
@@ -288,10 +290,37 @@ function ProductDialog({
   const barcodeRequest = useRef(0)
 
   useEffect(() => {
-    const onCompanyUpdated = () => setTakealotConfigured(localStorage.getItem('takealotapiexist') === 'true')
-    window.addEventListener('pos-company-updated', onCompanyUpdated)
-    return () => window.removeEventListener('pos-company-updated', onCompanyUpdated)
-  }, [])
+    if (!open) return
+    let active = true
+    const loadIntegrations = async () => {
+      try {
+        const result = (await getIntegrations()).filter(
+          (integration) => integration.type === 'TAKEALOT' && integration.configured && integration.isActive,
+        )
+        if (!active) return
+        setTakealotIntegrations(result)
+        setTakealotConfigured(result.length > 0)
+        setTakealotIntegrationError('')
+        setTakealotIntegrationId((current) => (
+          result.some((integration) => integration.id === current)
+            ? current
+            : result.length === 1 ? result[0].id : ''
+        ))
+      } catch (cause) {
+        if (!active) return
+        setTakealotIntegrations([])
+        setTakealotConfigured(false)
+        setTakealotIntegrationError(cause instanceof Error ? cause.message : 'Takealot connections could not be loaded.')
+      }
+    }
+    const refreshIntegrations = () => void loadIntegrations()
+    refreshIntegrations()
+    window.addEventListener('pos-integrations-updated', refreshIntegrations)
+    return () => {
+      active = false
+      window.removeEventListener('pos-integrations-updated', refreshIntegrations)
+    }
+  }, [open])
 
   useEffect(() => {
     setForm({
@@ -402,7 +431,7 @@ function ProductDialog({
   useEffect(() => {
     const requestId = ++lookupRequest.current
     const normalizedQuery = lookupValue.trim()
-    if (!open || !fillByTakealot || !takealotConfigured || normalizedQuery.length < 3) {
+    if (!open || !fillByTakealot || !takealotConfigured || !takealotIntegrationId || normalizedQuery.length < 3) {
       setSuggestions([])
       setSuggestionsLoading(false)
       setSuggestionsError('')
@@ -412,7 +441,7 @@ function ProductDialog({
     const timer = window.setTimeout(() => {
       setSuggestionsLoading(true)
       setSuggestionsError('')
-      getTakealotOfferSuggestions(lookupType, normalizedQuery)
+      getTakealotOfferSuggestions(lookupType, normalizedQuery, takealotIntegrationId)
         .then((result) => {
           if (requestId === lookupRequest.current) setSuggestions(result ? [result] : [])
         })
@@ -428,7 +457,7 @@ function ProductDialog({
     }, 1000)
 
     return () => window.clearTimeout(timer)
-  }, [lookupType, lookupValue, takealotConfigured, fillByTakealot, open])
+  }, [lookupType, lookupValue, takealotConfigured, takealotIntegrationId, fillByTakealot, open])
 
   const skuStatus = getIdentifierStatus(form.sku, debouncedSku, skuCheck, skuCheckError)
   const barcodeStatus = getIdentifierStatus(form.barcode ?? '', debouncedBarcode, barcodeCheck, barcodeCheckError)
@@ -712,13 +741,32 @@ function ProductDialog({
                   <Checkbox.Label>Fill product details from Takealot</Checkbox.Label>
                 </Checkbox.Root>
                 {!takealotConfigured && (
-                  <FieldDescription>Configure Takealot API credentials in Settings to search offers.</FieldDescription>
+                  <FieldDescription>
+                    {takealotIntegrationError || 'Add an active Takealot connection in Settings to search offers.'}
+                  </FieldDescription>
                 )}
                 {fillByTakealot && (
                   <>
                     <FieldLabel mt="3">Find Takealot offer</FieldLabel>
+                    {takealotIntegrations.length > 1 && (
+                      <NativeSelect.Root size="sm" mb="2">
+                        <NativeSelect.Field
+                          aria-label="Takealot connection"
+                          value={takealotIntegrationId}
+                          onChange={(event) => {
+                            setTakealotIntegrationId(event.target.value)
+                            setSuggestions([])
+                          }}
+                        >
+                          <option value="">Select a Takealot connection</option>
+                          {takealotIntegrations.map((integration) => (
+                            <option key={integration.id} value={integration.id}>{integration.name}</option>
+                          ))}
+                        </NativeSelect.Field>
+                      </NativeSelect.Root>
+                    )}
                     <div className="grid grid-cols-[130px_minmax(0,1fr)] gap-2">
-                      <NativeSelect.Root size="sm" disabled={!takealotConfigured}>
+                      <NativeSelect.Root size="sm" disabled={!takealotConfigured || !takealotIntegrationId}>
                         <NativeSelect.Field
                           value={lookupType}
                           onChange={(event) => setLookupType(event.target.value as TakealotLookupType)}
@@ -730,7 +778,7 @@ function ProductDialog({
                       </NativeSelect.Root>
                       <Box position="relative">
                         <Input
-                          disabled={!takealotConfigured}
+                          disabled={!takealotConfigured || !takealotIntegrationId}
                           value={lookupValue}
                           onChange={(event) => {
                             const nextValue = event.target.value

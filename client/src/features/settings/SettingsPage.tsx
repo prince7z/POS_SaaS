@@ -31,7 +31,6 @@ import {
   FileText,
   Globe2,
   ImagePlus,
-  KeyRound,
   Mail,
   MapPin,
   Pencil,
@@ -74,6 +73,7 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { PageSizeControl } from '@/components/common/PageSizeControl'
 import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 import { SearchableSelect } from '@/components/common/SearchableSelect'
+import { TakealotIntegrationsSection } from './TakealotIntegrationsSection'
 
 const MotionBox = motion(Box)
 type Section = 'general' | 'business' | 'users' | 'invoice' | 'tax' | 'integrations' | 'security' | 'registration'
@@ -891,7 +891,7 @@ function SimpleCompanySection({
 }: {
   company: Company
   onSaved: (company: Company) => void
-  section: 'invoice' | 'tax' | 'integrations'
+  section: 'invoice' | 'tax'
 }) {
   const [form, setForm] = useState({
     dateFormat: company.dateFormat,
@@ -899,8 +899,6 @@ function SimpleCompanySection({
     autoGenerateInvoiceNumber: company.autoGenerateInvoiceNumber,
     autoPrintInvoice: company.autoPrintInvoice,
     defaultTaxRate: String(company.defaultTaxRate),
-    takealotSellerId: company.takealotSellerId ?? '',
-    takealotApiKey: '',
     invoiceTerms: company.invoiceTerms ?? [],
     businessHours: company.businessHours ?? {
       weekdays: { open: '08:00', close: '16:00' },
@@ -911,7 +909,6 @@ function SimpleCompanySection({
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [removeTakealotApiKey, setRemoveTakealotApiKey] = useState(false)
   const save = async () => {
     setSaving(true)
     setError('')
@@ -919,31 +916,20 @@ function SimpleCompanySection({
       const payload =
         section === 'tax'
           ? { defaultTaxRate: Math.max(0, Number(form.defaultTaxRate) || 0) }
-          : section === 'invoice'
-            ? {
-                dateFormat: form.dateFormat,
-                timeFormat: form.timeFormat,
-                autoGenerateInvoiceNumber: form.autoGenerateInvoiceNumber,
-                autoPrintInvoice: form.autoPrintInvoice,
-                invoiceTerms: form.invoiceTerms.filter((term) => term.trim()),
-                businessHours: form.businessHours,
-              }
-            : {
-                takealotSellerId: form.takealotSellerId,
-                ...(removeTakealotApiKey
-                  ? { takealotApiKey: null }
-                  : form.takealotApiKey
-                    ? { takealotApiKey: form.takealotApiKey }
-                    : {}),
-              }
+          : {
+              dateFormat: form.dateFormat,
+              timeFormat: form.timeFormat,
+              autoGenerateInvoiceNumber: form.autoGenerateInvoiceNumber,
+              autoPrintInvoice: form.autoPrintInvoice,
+              invoiceTerms: form.invoiceTerms.filter((term) => term.trim()),
+              businessHours: form.businessHours,
+            }
       const updated = await updateCompany(payload)
       showSuccess(
         'Settings updated',
-        `${section === 'tax' ? 'Tax' : section === 'invoice' ? 'Invoice' : 'Integration'} preferences saved successfully.`,
+        `${section === 'tax' ? 'Tax' : 'Invoice'} preferences saved successfully.`,
       )
       onSaved(updated)
-      setRemoveTakealotApiKey(false)
-      setForm((current) => ({ ...current, takealotApiKey: '' }))
     } catch (cause) {
       showError('Failed to save settings', cause)
       setError(cause instanceof Error ? cause.message : 'Settings could not be saved.')
@@ -1065,62 +1051,6 @@ function SimpleCompanySection({
             ))}
           </VStack>
         </Box>
-        <ErrorText message={error} />
-        <HStack justify="flex-end">
-          <SaveButton saving={saving} onClick={save} />
-        </HStack>
-      </VStack>
-    )
-  if (section === 'integrations')
-    return (
-      <VStack align="stretch" gap="5">
-        <Box>
-          <Heading size="sm">Takealot Integration</Heading>
-          <Text fontSize="sm" color="secondary">
-            Connect this store using the credentials supplied by Takealot.
-          </Text>
-        </Box>
-        <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap="4">
-          <Box>
-            <Label icon={ShoppingBag}>Seller ID</Label>
-            <Input
-              value={form.takealotSellerId}
-              onChange={(e) => setForm({ ...form, takealotSellerId: e.target.value })}
-            />
-          </Box>
-          <Box>
-            <Label icon={KeyRound}>API key</Label>
-            <Input
-              type="password"
-              placeholder={
-                company.takealotConfigured ? `Saved key · ${company.takealotApiKeyPrefix ?? '•••••'}…` : 'Enter API key'
-              }
-              value={form.takealotApiKey}
-              onChange={(e) => {
-                setRemoveTakealotApiKey(false)
-                setForm({ ...form, takealotApiKey: e.target.value })
-              }}
-            />
-          </Box>
-        </Grid>
-        {company.takealotConfigured && (
-          <HStack justify="space-between">
-            <Text fontSize="sm" color="secondary">
-              Connected key prefix: {company.takealotApiKeyPrefix ?? '•••••'}…
-            </Text>
-            <Button
-              size="xs"
-              variant={removeTakealotApiKey ? 'solid' : 'outline'}
-              colorPalette={removeTakealotApiKey ? 'red' : undefined}
-              onClick={() => {
-                setRemoveTakealotApiKey((current) => !current)
-                setForm((current) => ({ ...current, takealotApiKey: '' }))
-              }}
-            >
-              {removeTakealotApiKey ? 'Key will be removed' : 'Remove API key'}
-            </Button>
-          </HStack>
-        )}
         <ErrorText message={error} />
         <HStack justify="flex-end">
           <SaveButton saving={saving} onClick={save} />
@@ -1652,7 +1582,7 @@ export function SettingsPage() {
                     <SimpleCompanySection section="tax" company={company} onSaved={handleCompanySaved} />
                   )}
                   {section === 'integrations' && (
-                    <SimpleCompanySection section="integrations" company={company} onSaved={handleCompanySaved} />
+                    <TakealotIntegrationsSection />
                   )}
                   {section === 'security' && <Security />}
                 </Card.Body>

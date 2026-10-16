@@ -53,8 +53,6 @@ export interface AuthResponse {
     currencyCode: string
     countryCode: string
     defaultTaxRate?: number
-    takealotConfigured?: boolean
-    takealotApiKeyPrefix?: string | null
   }
   companies?: CompanyOption[]
   accessToken: string

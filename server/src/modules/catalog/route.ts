@@ -3,9 +3,9 @@ import { Access } from "@prisma/client";
 
 import { requireAccess } from "../../middleware/access";
 import { requireAuth } from "../../middleware/auth";
-import { requireTakealotApiKey } from "../../middleware/takealot";
 import { sendMessage, sendSuccess } from "../../utils/apiResponse";
 import { unauthorized, validationError } from "../../utils/errors";
+import { getTakealotApiKey, parseIntegrationId } from "../integrations/service";
 import * as service from "./service";
 
 const router = Router();
@@ -116,10 +116,11 @@ router.get("/takealot/offers/image", ...productAccess, async (request, response)
 	response.setHeader("Cache-Control", "no-store");
 	return response.send(image.body);
 });
-router.get("/takealot/offers", ...productAccess, requireTakealotApiKey, async (request, response) => {
+router.get("/takealot/offers", ...productAccess, async (request, response) => {
 	const input = service.parse(service.takealotOfferLookupSchema, request.query);
-	if (!request.takealotApiKey) throw validationError("Takealot API key is required for offer lookup");
-	return sendSuccess(response, await service.findTakealotOffers(request.takealotApiKey, input));
+	const integrationId = parseIntegrationId(request.query.integrationId);
+	const apiKey = await getTakealotApiKey(authContext(request).companyId, integrationId);
+	return sendSuccess(response, await service.findTakealotOffers(apiKey, input));
 });
 router.post("/media/upload-urls", ...productAccess, async (request, response) => {
 	const auth = authContext(request);

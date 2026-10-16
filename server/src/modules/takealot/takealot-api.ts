@@ -77,6 +77,15 @@ export interface TakealotSalesFilters {
 	promotion?: boolean;
 }
 
+export interface TakealotOffersPage {
+	page_summary: {
+		page_size: number;
+		page_number: number;
+		total_results: number;
+	};
+	offers: Record<string, unknown>[];
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -164,7 +173,47 @@ const parseObject = (value: unknown): Record<string, unknown> => {
 	return value;
 };
 
+const parseOffersPage = (value: unknown): TakealotOffersPage => {
+	const root = parseObject(value);
+	const data = isRecord(root.data) ? root.data : root;
+	const summaryValue = isRecord(data.page_summary)
+		? data.page_summary
+		: isRecord(data.pagination)
+			? data.pagination
+			: isRecord(root.page_summary)
+				? root.page_summary
+				: root;
+	const offersValue = data.offers ?? data.results ?? root.offers;
+	if (!summaryValue || !Array.isArray(offersValue) || !offersValue.every(isRecord)) return invalidResponse();
+	const pageNumber = summaryValue.page_number;
+	const pageSize = summaryValue.page_size;
+	const totalResults = summaryValue.total_results ?? summaryValue.total;
+	if (
+		typeof pageNumber !== "number" ||
+		typeof pageSize !== "number" ||
+		typeof totalResults !== "number" ||
+		!Number.isSafeInteger(pageNumber) ||
+		!Number.isSafeInteger(pageSize) ||
+		!Number.isSafeInteger(totalResults) ||
+		pageNumber < 1 ||
+		pageSize < 1 ||
+		totalResults < 0
+	) return invalidResponse();
+	return {
+		page_summary: { page_number: pageNumber, page_size: pageSize, total_results: totalResults },
+		offers: offersValue,
+	};
+};
+
 export const takealotApi = {
+	async getOffers(apiKey: string, pageNumber: number, pageSize: number) {
+		const response = await takealotClient.request<unknown>(apiKey, "/v2/offers", {
+			page_number: pageNumber,
+			page_size: pageSize,
+		});
+		return parseOffersPage(response);
+	},
+
 	async getSales(apiKey: string, filters: TakealotSalesFilters, pageNumber: number, pageSize: number) {
 		const apiFilters: string[] = [];
 		if (filters.from) apiFilters.push(`start_date:${filters.from}`);

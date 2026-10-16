@@ -3,7 +3,7 @@ import { Drawer, VStack, Box, HStack, Text, CloseButton, Button } from '@chakra-
 import { AnimatePresence, motion } from 'motion/react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { ChevronDown } from 'lucide-react'
-import { useFilteredNavigation } from '@/config/navigation'
+import { isNavigationItemActive, useFilteredNavigation } from '@/config/navigation'
 import { Logo } from '@/components/common/Logo'
 import type { NavItem } from '@/types/navigation'
 
@@ -17,7 +17,11 @@ export function MobileNavigation({ open, onClose }: { open: boolean; onClose: ()
   useEffect(() => {
     const activeParentIds = filteredGroups
       .flatMap((group) => group.items)
-      .filter((item) => item.children?.some((child) => child.path === location.pathname))
+      .filter(
+        (item) =>
+          item.children?.some((child) => isNavigationItemActive(child, location.pathname, location.search)) ||
+          (item.path !== '#' && item.path === location.pathname),
+      )
       .map((item) => item.id)
     setExpandedItems(new Set(activeParentIds))
   }, [location.pathname, filteredGroups])
@@ -32,8 +36,11 @@ export function MobileNavigation({ open, onClose }: { open: boolean; onClose: ()
   }
 
   const renderItem = (item: NavItem, depth = 0) => {
-    const active = location.pathname === item.path
     const hasChildren = Boolean(item.children?.length)
+    const active =
+      item.id !== 'takealot-dashboard' &&
+      !hasChildren &&
+      isNavigationItemActive(item, location.pathname, location.search)
     const expanded = expandedItems.has(item.id)
 
     return (
@@ -45,7 +52,18 @@ export function MobileNavigation({ open, onClose }: { open: boolean; onClose: ()
           bg={active ? 'blue.50' : 'transparent'}
           color={active ? 'primary' : 'secondary'}
         >
-          <NavLink to={item.path} onClick={onClose} style={{ flex: 1 }}>
+          <NavLink
+            to={item.path}
+            onClick={(event) => {
+              if (hasChildren) {
+                event.preventDefault()
+                toggleItem(item.id)
+              } else {
+                onClose()
+              }
+            }}
+            style={{ flex: 1 }}
+          >
             <HStack gap="3">
               <item.icon size={17} />
               <Text fontSize="sm">{item.label}</Text>

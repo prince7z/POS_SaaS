@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import type { NavItem } from '@/types/navigation'
 import { NavLink, useLocation } from 'react-router-dom'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useFilteredNavigation } from '@/config/navigation'
+import { isNavigationItemActive, useFilteredNavigation } from '@/config/navigation'
 import { Logo } from '@/components/common/Logo'
 import { UserMenu } from '@/components/common/UserMenu'
 
@@ -18,7 +18,11 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   useEffect(() => {
     const activeParentIds = filteredGroups
       .flatMap((group) => group.items)
-      .filter((item) => item.children?.some((child) => child.path === location.pathname))
+      .filter(
+        (item) =>
+          item.children?.some((child) => isNavigationItemActive(child, location.pathname, location.search)) ||
+          (item.path !== '#' && item.path === location.pathname),
+      )
       .map((item) => item.id)
 
     setExpandedItems(new Set(activeParentIds))
@@ -35,7 +39,10 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
 
   const renderItem = (item: NavItem, depth = 0) => {
     const hasChildren = Boolean(item.children?.length)
-    const active = !hasChildren && location.pathname === item.path
+    const active =
+      item.id !== 'takealot-dashboard' &&
+      !hasChildren &&
+      isNavigationItemActive(item, location.pathname, location.search)
     const expanded = expandedItems.has(item.id)
 
     return (
@@ -46,17 +53,17 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           aria-expanded={hasChildren ? expanded : undefined}
           px={collapsed ? '0' : depth ? '4' : '3'}
           py="2"
-          justify={collapsed ? 'center' : 'flex-start'}
+          justify={collapsed ? 'center' : hasChildren ? 'space-between' : 'flex-start'}
           align="center"
           gap="3"
           borderRadius="md"
           color={active ? 'blue.600' : 'gray.600'}
           bg={active ? 'blue.50/70' : 'transparent'}
-          position="relative"
           _hover={{ bg: active ? 'blue.50/70' : 'gray.50', color: active ? 'blue.600' : 'gray.900' }}
           transition="background 140ms ease, color 140ms ease"
           h={collapsed ? '40px' : 'auto'}
           w="full"
+          minW="0"
         >
           {hasChildren ? (
             <HStack gap="3" flex="1" justify={collapsed ? 'center' : 'flex-start'}>
@@ -91,21 +98,14 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
             </NavLink>
           )}
           {!collapsed && hasChildren && (
-            <Button
-              aria-label={`${expanded ? 'Collapse' : 'Expand'} ${item.label}`}
-              variant="ghost"
-              size="xs"
-              minW="auto"
-              p="1"
-              onClick={(event) => {
-                event.stopPropagation()
-                toggleItem(item.id)
-              }}
+            <motion.span
+              aria-hidden="true"
+              animate={{ rotate: expanded ? 180 : 0 }}
+              transition={{ duration: 0.18 }}
+              style={{ display: 'flex', flexShrink: 0 }}
             >
-              <motion.span animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.18 }}>
-                <ChevronDown size={14} />
-              </motion.span>
-            </Button>
+              <ChevronDown size={14} />
+            </motion.span>
           )}
         </HStack>
         <AnimatePresence initial={false}>
@@ -216,7 +216,15 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         {filteredGroups.map((group) => (
           <Box key={group.id} w="full">
             {!collapsed && (
-              <Text color="gray.400" px="3" mb="1.5" fontSize="10.5px" fontWeight="400" textTransform="uppercase" letterSpacing="0.05em">
+              <Text
+                color="gray.400"
+                px="3"
+                mb="1.5"
+                fontSize="10.5px"
+                fontWeight="400"
+                textTransform="uppercase"
+                letterSpacing="0.05em"
+              >
                 {group.label}
               </Text>
             )}

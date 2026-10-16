@@ -12,11 +12,13 @@ import salesRouter from "./modules/sales/route";
 import agentRouter from "./modules/agent/route";
 import qrUploadRouter from "./modules/qr-upload/route";
 import takealotRouter from "./modules/takealot/route";
+import integrationsRouter from "./modules/integrations/route";
 
 const router = Router();
 
 router.use("/auth", authRouter);
 router.use("/company", companyRouter);
+router.use("/integrations", integrationsRouter);
 router.use("/catalog", catalogRouter);
 router.use("/customers", customersRouter);
 router.use("/inventory", inventoryRouter);
@@ -26,6 +28,6 @@ router.use("/purchases", purchasesRouter);
 router.use("/reports", reportsRouter);
 router.use("/agent", agentRouter);
 router.use("/qr-upload", qrUploadRouter);
-router.use("/takealot", takealotRouter);
+router.use("/integrations/:integrationId/takealot", takealotRouter);
 
 export default router;

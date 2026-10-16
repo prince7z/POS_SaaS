@@ -43,8 +43,6 @@ export const companyUpdateSchema = z.object({
 		sundayClosed: z.boolean(),
 		publicHolidaysClosed: z.boolean(),
 	}).optional(),
-	takealotSellerId: optionalText(150),
-	takealotApiKey: optionalText(500),
 });
 
 export const createUserSchema = z.object({
@@ -290,8 +288,8 @@ export const updateCompany = async (companyId: string, actorUserId: string, inpu
 			action: "COMPANY_UPDATED",
 			entityType: "Company",
 			entityId: companyId,
-			beforeData: safeAudit({ name: before.name, email: before.email, timezone: before.timezone, takealotSellerId: before.takealotSellerId }),
-			afterData: safeAudit({ name: company.name, email: company.email, timezone: company.timezone, takealotSellerId: company.takealotSellerId }),
+			beforeData: safeAudit({ name: before.name, email: before.email, timezone: before.timezone }),
+			afterData: safeAudit({ name: company.name, email: company.email, timezone: company.timezone }),
 		});
 		return company;
 	});

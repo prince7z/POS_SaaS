@@ -29,9 +29,6 @@ export interface Company {
     sundayClosed: boolean
     publicHolidaysClosed: boolean
   } | null
-  takealotSellerId: string | null
-  takealotConfigured: boolean
-  takealotApiKeyPrefix: string | null
 }
 export interface CompanyUser {
   id: string

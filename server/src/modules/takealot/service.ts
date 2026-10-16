@@ -228,8 +228,8 @@ const assertSaleMetrics = (sale: TakealotSale) => {
 	}
 };
 
-const catalogUnitCosts = async (companyId: string, sales: TakealotSale[]) => {
-	const skus = [...new Set(sales.flatMap((sale) => sale.sku ? [sale.sku] : []))];
+export const resolveTakealotUnitCosts = async (companyId: string, skuValues: string[]) => {
+	const skus = [...new Set(skuValues.filter((sku) => sku.trim()).map((sku) => sku.trim()))];
 	const products: Array<{ sku: string; averageCost: Prisma.Decimal }> = [];
 	for (let offset = 0; offset < skus.length; offset += 500) {
 		products.push(...await prisma.product.findMany({
@@ -244,8 +244,9 @@ const catalogUnitCosts = async (companyId: string, sales: TakealotSale[]) => {
 	}
 	// The SKU-encoded cost (e.g. R35-... or C35-...) takes precedence over the catalog.
 	for (const sku of skus) {
-		const match = /[CR](\d+)(?!\d)/i.exec(sku.trim());
-		if (match) costs.set(sku, Number(match[1]));
+		const match = /(?:^|[^A-Z0-9])(?:[CR]\s*(\d+(?:[.,]\d+)?)|(\d+(?:[.,]\d+)?)\s*[CR])(?=$|[^A-Z0-9])/i.exec(sku.trim());
+		const encodedCost = match?.[1] ?? match?.[2];
+		if (encodedCost) costs.set(sku, Number(encodedCost.replace(",", ".")));
 	}
 	return costs;
 };
@@ -483,7 +484,7 @@ export const salesSummary = async (companyId: string, apiKey: string, input: z.i
 		saleStatus: input.saleStatus,
 		promotion: input.promotion,
 	});
-	const costs = await catalogUnitCosts(companyId, sales);
+	const costs = await resolveTakealotUnitCosts(companyId, sales.flatMap((sale) => sale.sku ? [sale.sku] : []));
 	return {
 		range: { from: input.from, to: input.to },
 		salesRows: sales.length,
@@ -536,7 +537,7 @@ export const productPerformance = async (companyId: string, apiKey: string, inpu
 		productTitle: input.productTitle,
 		tsin: input.tsin,
 	});
-	const unitCosts = await catalogUnitCosts(companyId, sales);
+	const unitCosts = await resolveTakealotUnitCosts(companyId, sales.flatMap((sale) => sale.sku ? [sale.sku] : []));
 	const products = new Map<string, {
 		stableId: string;
 		sku?: string;
@@ -648,7 +649,7 @@ export const listOrders = async (apiKey: string, input: z.infer<typeof ordersSch
 	};
 };
 
-export const inventorySummary = async (companyId: string, apiKey: string) => {
+export const inventorySummary = async (companyId: string, integrationId: string, apiKey: string) => {
 	const [stockCounts, stockHealth] = await Promise.all([
 		takealotApi.getStockCounts(apiKey),
 		takealotApi.getStockHealthStats(apiKey),
@@ -657,6 +658,7 @@ export const inventorySummary = async (companyId: string, apiKey: string) => {
 	await prisma.takealotInventorySnapshot.create({
 		data: {
 			companyId,
+			integrationId,
 			capturedAt,
 			stockCounts: JSON.parse(JSON.stringify(stockCounts)) as Prisma.InputJsonValue,
 			stockHealth: JSON.parse(JSON.stringify(stockHealth)) as Prisma.InputJsonValue,
@@ -676,11 +678,15 @@ const snapshotBucket = (date: Date, interval: "day" | "week" | "month"): string 
 	return utcDate.toISOString().slice(0, 10);
 };
 
-export const inventorySnapshots = async (companyId: string, input: z.infer<typeof inventorySnapshotsSchema>) => {
+export const inventorySnapshots = async (
+	companyId: string,
+	integrationId: string,
+	input: z.infer<typeof inventorySnapshotsSchema>,
+) => {
 	const from = new Date(`${input.from}T00:00:00.000Z`);
 	const to = new Date(`${input.to}T23:59:59.999Z`);
 	const snapshots = await prisma.takealotInventorySnapshot.findMany({
-		where: { companyId, capturedAt: { gte: from, lte: to } },
+		where: { companyId, integrationId, capturedAt: { gte: from, lte: to } },
 		orderBy: { capturedAt: "asc" },
 		select: { capturedAt: true, stockCounts: true, stockHealth: true },
 	});

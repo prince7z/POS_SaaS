@@ -8,7 +8,7 @@
     "build": "prisma generate && tsc",
     "typecheck": "tsc --noEmit",
     "start": "node dist/server.js",
-    "dev": "tsx watch --ignore node_modules --ignore dist --ignore .git --ignore .vscode --ignore scripts --ignore prisma --ignore .env src/server.ts",
+    "dev": "prisma generate && tsx watch --ignore node_modules --ignore dist --ignore .git --ignore .vscode --ignore scripts --ignore prisma --ignore .env src/server.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "seed:demo:reset": "tsx scripts/seed-demo.ts --reset",
     "seed:demo:timings": "tsx scripts/update-demo-timings.ts",

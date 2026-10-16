@@ -135,11 +135,7 @@ export interface ProductIdentifierAvailability {
   skuAvailable: boolean | null
   barcodeAvailable: boolean | null
 }
-export function checkProductIdentifierAvailability(input: {
-  sku?: string
-  barcode?: string
-  excludeId?: string
-}) {
+export function checkProductIdentifierAvailability(input: { sku?: string; barcode?: string; excludeId?: string }) {
   return apiRequest<ProductIdentifierAvailability>('/catalog/products/check-identifiers', {
     method: 'POST',
     body: JSON.stringify(input),
@@ -157,8 +153,8 @@ export interface TakealotOfferSuggestion {
   offerUrl: string | null
   stock: number | null
 }
-export function getTakealotOfferSuggestions(type: TakealotLookupType, query: string) {
-  const params = new URLSearchParams({ type, query })
+export function getTakealotOfferSuggestions(type: TakealotLookupType, query: string, integrationId: string) {
+  const params = new URLSearchParams({ type, query, integrationId })
   return apiRequest<TakealotOfferSuggestion | null>(`/catalog/takealot/offers?${params}`)
 }
 export function downloadTakealotOfferImage(imageUrl: string) {

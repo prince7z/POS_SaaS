@@ -21,19 +21,14 @@ const main = async (): Promise<void> => {
 	if (!companyId) throw new Error("Set TAKEALOT_COMPANY_ID to the seller company to verify.");
 
 	const { prisma } = await import("../src/lib/prisma");
+	const { getDefaultTakealotIntegrationId, getTakealotApiKey } = await import("../src/modules/integrations/service");
 	const { takealotApi } = await import("../src/modules/takealot/takealot-api");
 	const { takealotClient } = await import("../src/integrations/takealot/client");
 
 	try {
-		const company = await prisma.company.findFirst({
-			where: { id: companyId, deletedAt: null },
-			select: { takealotApiKey: true },
-		});
-		if (!company?.takealotApiKey) {
-			throw new Error("The selected company does not have a configured Takealot API key.");
-		}
-
-		const apiKey = company.takealotApiKey;
+		const integrationId = process.env.TAKEALOT_INTEGRATION_ID?.trim()
+			|| await getDefaultTakealotIntegrationId(companyId);
+		const apiKey = await getTakealotApiKey(companyId, integrationId);
 		const today = new Date().toISOString().slice(0, 10);
 		console.log(`\nLive Takealot API smoke test (company ${companyId})`);
 

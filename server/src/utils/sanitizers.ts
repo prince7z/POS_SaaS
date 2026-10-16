@@ -59,9 +59,6 @@ export const sanitizeCompany = (company: Company) => ({
 	autoPrintInvoice: company.autoPrintInvoice,
 	invoiceTerms: company.invoiceTerms,
 	businessHours: company.businessHours,
-	takealotSellerId: company.takealotSellerId,
-	takealotConfigured: Boolean(company.takealotApiKey),
-	takealotApiKeyPrefix: company.takealotApiKey?.slice(0, 5) ?? null,
 	createdAt: company.createdAt,
 	updatedAt: company.updatedAt,
 });

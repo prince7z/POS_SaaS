@@ -89,9 +89,8 @@ export function getStoredCompany(): AuthResponse['company'] | null {
 export function setStoredCompany(company: AuthResponse['company']) {
   if (company) {
     localStorage.setItem('pos-company', JSON.stringify(company))
-    localStorage.setItem('takealotapiexist', String(Boolean(company.takealotConfigured)))
-    if (company.takealotApiKeyPrefix) localStorage.setItem('takealotapi', company.takealotApiKeyPrefix.slice(0, 5))
-    else localStorage.removeItem('takealotapi')
+    localStorage.removeItem('takealotapiexist')
+    localStorage.removeItem('takealotapi')
     window.dispatchEvent(new CustomEvent('pos-company-updated', { detail: company }))
   }
 }

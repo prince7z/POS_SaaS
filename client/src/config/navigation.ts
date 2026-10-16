@@ -19,6 +19,8 @@ import {
 import { ROUTES } from './constants'
 import type { NavGroup, NavItem } from '@/types/navigation'
 import { getStoredPermissions } from '@/lib/auth'
+import { getIntegrations } from '@/api/endpoints/integrations'
+import { showError } from '@/components/feedback/notifications'
 
 export const navigationConfig: NavGroup[] = [
   {
@@ -44,6 +46,7 @@ export const navigationConfig: NavGroup[] = [
         path: ROUTES.TAKEALOT,
         icon: ChartNoAxesCombined,
         permissions: ['TAKEALOT'],
+        children: [],
       },
     ],
   },
@@ -70,8 +73,20 @@ export const navigationConfig: NavGroup[] = [
         icon: Warehouse,
         permissions: ['INVENTORY'],
         children: [
-          { id: 'inventory-dashboard', label: 'Dashboard', path: ROUTES.INVENTORY, icon: LayoutDashboard, permissions: ['INVENTORY'] },
-          { id: 'stock-movements', label: 'Stock Movements', path: ROUTES.STOCK_MOVEMENTS, icon: ArrowDownUp, permissions: ['INVENTORY'] },
+          {
+            id: 'inventory-dashboard',
+            label: 'Dashboard',
+            path: ROUTES.INVENTORY,
+            icon: LayoutDashboard,
+            permissions: ['INVENTORY'],
+          },
+          {
+            id: 'stock-movements',
+            label: 'Stock Movements',
+            path: ROUTES.STOCK_MOVEMENTS,
+            icon: ArrowDownUp,
+            permissions: ['INVENTORY'],
+          },
           {
             id: 'stock-adjustments',
             label: 'Stock Adjustments',
@@ -102,7 +117,13 @@ export const navigationConfig: NavGroup[] = [
         permissions: ['PURCHASES', 'SUPPLIERS'],
         children: [
           { id: 'suppliers', label: 'Suppliers', path: ROUTES.SUPPLIERS, icon: Truck, permissions: ['SUPPLIERS'] },
-          { id: 'purchase-orders', label: 'Purchase Orders', path: ROUTES.PURCHASE_ORDERS, icon: Truck, permissions: ['PURCHASES'] },
+          {
+            id: 'purchase-orders',
+            label: 'Purchase Orders',
+            path: ROUTES.PURCHASE_ORDERS,
+            icon: Truck,
+            permissions: ['PURCHASES'],
+          },
         ],
       },
       {
@@ -139,7 +160,13 @@ export const navigationConfig: NavGroup[] = [
         icon: BarChart3,
         permissions: ['REPORT_SALES', 'REPORT_INVENTORY_CUSTOMER', 'REPORT_PROFIT_LOSS'],
         children: [
-          { id: 'sales-report', label: 'Sales', path: ROUTES.SALES_REPORT, icon: BarChart3, permissions: ['REPORT_SALES'] },
+          {
+            id: 'sales-report',
+            label: 'Sales',
+            path: ROUTES.SALES_REPORT,
+            icon: BarChart3,
+            permissions: ['REPORT_SALES'],
+          },
           {
             id: 'inventory-customers-report',
             label: 'Inventory & Customers',
@@ -147,7 +174,13 @@ export const navigationConfig: NavGroup[] = [
             icon: BarChart3,
             permissions: ['REPORT_INVENTORY_CUSTOMER'],
           },
-          { id: 'profit-loss-report', label: 'Profit & Loss', path: ROUTES.PROFIT_LOSS_REPORT, icon: BarChart3, permissions: ['REPORT_PROFIT_LOSS'] },
+          {
+            id: 'profit-loss-report',
+            label: 'Profit & Loss',
+            path: ROUTES.PROFIT_LOSS_REPORT,
+            icon: BarChart3,
+            permissions: ['REPORT_PROFIT_LOSS'],
+          },
         ],
       },
     ],
@@ -167,10 +200,7 @@ export const navigationConfig: NavGroup[] = [
   },
 ]
 
-export function filterNavigationByPermissions(
-  groups: NavGroup[],
-  permissions: string[]
-): NavGroup[] {
+export function filterNavigationByPermissions(groups: NavGroup[], permissions: string[]): NavGroup[] {
   const permSet = new Set(permissions)
 
   return groups
@@ -208,6 +238,7 @@ export function filterNavigationByPermissions(
 
 export function useFilteredNavigation(): NavGroup[] {
   const [permissions, setPermissions] = useState<string[]>(() => getStoredPermissions())
+  const [takealotItems, setTakealotItems] = useState<NavItem[]>([])
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -223,8 +254,65 @@ export function useFilteredNavigation(): NavGroup[] {
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    const loadTakealotItems = async () => {
+      try {
+        const integrations = (await getIntegrations()).filter(
+          (integration) =>
+            integration.type === 'TAKEALOT' &&
+            integration.configured &&
+            integration.isActive &&
+            integration.name.trim().toLowerCase() !== 'dashboard',
+        )
+        if (cancelled) return
+        setTakealotItems(
+          integrations.map((integration) => ({
+            id: `takealot-integration-${integration.id}`,
+            label: integration.name,
+            path: `${ROUTES.TAKEALOT}?integrationId=${encodeURIComponent(integration.id)}`,
+            icon: ChartNoAxesCombined,
+            permissions: ['TAKEALOT'],
+          })),
+        )
+      } catch (cause) {
+        if (!cancelled) showError('Unable to load Takealot connections', cause)
+      }
+    }
+    void loadTakealotItems()
+
+    const reload = () => void loadTakealotItems()
+    window.addEventListener('pos-company-updated', reload)
+    window.addEventListener('pos-integrations-updated', reload)
+    window.addEventListener('focus', reload)
+    return () => {
+      cancelled = true
+      window.removeEventListener('pos-company-updated', reload)
+      window.removeEventListener('pos-integrations-updated', reload)
+      window.removeEventListener('focus', reload)
+    }
+  }, [])
+
   return useMemo(
-    () => filterNavigationByPermissions(navigationConfig, permissions),
-    [permissions]
+    () =>
+      filterNavigationByPermissions(
+        navigationConfig.map((group) => ({
+          ...group,
+          items: group.items.map((item) =>
+            item.id === 'takealot-dashboard' ? { ...item, children: takealotItems } : item,
+          ),
+        })),
+        permissions,
+      ),
+    [permissions, takealotItems],
   )
+}
+
+export function isNavigationItemActive(item: NavItem, pathname: string, search: string): boolean {
+  const [itemPath, itemQuery] = item.path.split('?')
+  if (pathname !== itemPath) return false
+  if (!itemQuery) return search.length === 0
+
+  const currentParams = new URLSearchParams(search)
+  return [...new URLSearchParams(itemQuery)].every(([key, value]) => currentParams.get(key) === value)
 }

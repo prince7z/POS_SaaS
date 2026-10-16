@@ -4,9 +4,10 @@ import { plannerSystemPrompt } from "../prompts/planner";
 import { agentToolRegistry } from "../registry";
 import { logger } from "../../../lib/logger";
 import { logDetailedAgentError } from "../utils/errorPrinter";
+import { listIntegrations } from "../../integrations/service";
 
-const plannerToolCatalog = (permissions: string[]) =>
-	agentToolRegistry
+const plannerToolCatalog = async (permissions: string[], companyId: string, includeTakealotIntegrations: boolean) => {
+	const tools = agentToolRegistry
 		.map((tool) => {
 			const operations = tool.operations.filter((operation) => {
 				const requiredAccess = tool.requiredAccessByOperation[operation];
@@ -27,6 +28,17 @@ const plannerToolCatalog = (permissions: string[]) =>
 			} : null;
 		})
 		.filter((tool): tool is NonNullable<typeof tool> => tool !== null);
+	if (!includeTakealotIntegrations) return tools;
+	const takealotIntegrations = await listIntegrations(companyId);
+	return tools.map((tool) => tool.tool === "takealot_tool"
+		? {
+			...tool,
+			integrations: takealotIntegrations
+				.filter((integration) => integration.type === "TAKEALOT" && integration.isActive && integration.configured)
+				.map(({ id, name }) => ({ id, name })),
+		}
+		: tool);
+};
 
 import type { AgentPerfTracker } from "../utils/perfLogger";
 
@@ -51,8 +63,8 @@ export const createPlan = async (
 	tracker?: AgentPerfTracker,
 	completedOperations: Array<{ tool: string; operation: string; description: string }> = []
 ): Promise<Plan> => {
-	const allTools = plannerToolCatalog(user.permissions);
 	const isTakealotRequest = /\btakealot\b|\bmarketplace\b/i.test(request);
+	const allTools = await plannerToolCatalog(user.permissions, user.companyId, isTakealotRequest);
 	const availableTools = isTakealotRequest
 		? allTools.filter((tool) => tool.tool === "takealot_tool")
 		: allTools;

@@ -158,6 +158,50 @@ export async function apiBlob(path: string, accept = 'text/csv'): Promise<Blob> 
   return response.blob()
 }
 
+export async function apiEventStream<T>(
+  path: string,
+  eventName: string,
+  onEvent: (event: T) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetchAuthorized(path, { signal }, 'text/event-stream')
+  if (!response.ok || !response.body) {
+    const body = await parseResponseBody<ApiFailure>(response)
+    throw new ApiError(
+      body && !body.success ? body.error.message : 'The event stream could not be opened.',
+      body && !body.success ? body.error.code : 'EVENT_STREAM_FAILED',
+      response.status,
+    )
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  try {
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let boundary = buffer.indexOf('\n\n')
+      while (boundary !== -1) {
+        const message = buffer.slice(0, boundary).replace(/\r/g, '')
+        buffer = buffer.slice(boundary + 2)
+        const lines = message.split('\n')
+        if (lines.includes(`event: ${eventName}`)) {
+          const data = lines
+            .filter((line) => line.startsWith('data:'))
+            .map((line) => line.slice(5).trim())
+            .join('\n')
+          if (data) onEvent(JSON.parse(data) as T)
+        }
+        boundary = buffer.indexOf('\n\n')
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 export async function apiRequestWithMeta<T>(
   path: string,
   init?: RequestInit,
