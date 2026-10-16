@@ -1,0 +1,86 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ vars.EC2_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Build and restart changed apps
+        env:
+          DEPLOY_HOST: ${{ secrets.EC2_HOST }}
+          DEPLOY_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" \
+            bash -s <<'REMOTE'
+          set -euo pipefail
+
+          app_dir="$HOME/projects/POS_SaaS"
+
+          cd "$app_dir"
+          git fetch origin main
+          changed_files="$(git diff --name-only HEAD origin/main)"
+          server_changed=false
+          client_changed=false
+          server_deps_changed=false
+          client_deps_changed=false
+
+          while IFS= read -r file; do
+            case "$file" in
+              server/*) server_changed=true ;;
+              client/*) client_changed=true ;;
+            esac
+            case "$file" in
+              server/package.json|server/package-lock.json) server_deps_changed=true ;;
+              client/package.json|client/package-lock.json) client_deps_changed=true ;;
+            esac
+          done <<< "$changed_files"
+
+          if ! pm2 describe pos-api >/dev/null 2>&1; then
+            server_changed=true
+            server_deps_changed=true
+          fi
+          if ! pm2 describe pos-client >/dev/null 2>&1; then
+            client_changed=true
+            client_deps_changed=true
+          fi
+
+          git merge --ff-only origin/main
+
+          if [ "$server_changed" = true ]; then
+            cd "$app_dir/server"
+            if [ "$server_deps_changed" = true ]; then
+              npm ci
+            fi
+            npm run build
+            cd "$app_dir"
+            pm2 startOrRestart ecosystem.config.cjs --only pos-api
+          fi
+
+          if [ "$client_changed" = true ]; then
+            cd "$app_dir/client"
+            if [ "$client_deps_changed" = true ]; then
+              npm ci
+            fi
+            NODE_OPTIONS="--max-old-space-size=2048" npm run build
+            cd "$app_dir"
+            pm2 startOrRestart ecosystem.config.cjs --only pos-client
+          fi
+          REMOTE
