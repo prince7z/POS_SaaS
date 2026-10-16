@@ -5,6 +5,9 @@ type Db = PrismaClient | Prisma.TransactionClient;
 export const findCompany = (db: Db, companyId: string) =>
 	db.company.findFirst({ where: { id: companyId, deletedAt: null } });
 
+export const createCompany = (db: Db, data: Prisma.CompanyCreateInput) =>
+	db.company.create({ data });
+
 export const updateCompany = (db: Db, companyId: string, data: Prisma.CompanyUpdateInput) =>
 	db.company.update({ where: { id: companyId }, data });
 

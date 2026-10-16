@@ -20,6 +20,19 @@ const userIdFrom = (request: Request): string => {
 	return userId;
 };
 
+router.get("/registration/users", requireAuth, async (request, response) => {
+	return sendSuccess(response, await service.getCompanyRegistrationUsers(currentAuth(request).userId));
+});
+
+router.get("/registration/accesses", requireAuth, async (request, response) => {
+	return sendSuccess(response, await service.getCompanyRegistrationAccesses(currentAuth(request).userId));
+});
+
+router.post("/registration", requireAuth, async (request, response) => {
+	const input = service.parse(service.registerCompanySchema, request.body);
+	return sendSuccess(response, await service.registerCompany(currentAuth(request).userId, input), 201);
+});
+
 router.get("/", requireAuth, requireAccess(Access.SETTINGS), async (request, response) => {
 	return sendSuccess(response, await service.getCompany(currentAuth(request).companyId));
 });

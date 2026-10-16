@@ -8,6 +8,7 @@ import { prisma } from "../../lib/prisma";
 import { AppError, forbidden, validationError } from "../../utils/errors";
 import { sanitizeCompany, sanitizeUser } from "../../utils/sanitizers";
 import * as repository from "./repository";
+import * as authRepository from "../auth/repository";
 
 const optionalText = (max = 255) => z.string().trim().max(max).nullable().optional();
 const email = z.string().trim().email().transform((value) => value.toLowerCase());
@@ -54,6 +55,155 @@ export const createUserSchema = z.object({
 	roleName: z.string().trim().min(1).max(80),
 	accesses: z.array(z.nativeEnum(Access)).min(1),
 });
+
+const registrationMembershipSchema = z.object({
+	userId: z.string().uuid(),
+	roleName: z.string().trim().min(1).max(80),
+	accesses: z.array(z.nativeEnum(Access)).min(1),
+});
+
+const registrationUserSchema = z.object({
+	fullName: z.string().trim().min(1).max(150),
+	email,
+	phone: optionalText(50),
+	password: z.string().min(8).max(128),
+	roleName: z.string().trim().min(1).max(80),
+	accesses: z.array(z.nativeEnum(Access)).min(1),
+});
+
+export const registerCompanySchema = z.object({
+	company: z.object({
+		name: z.string().trim().min(1).max(150),
+		phone: optionalText(50),
+		email: email.nullable().optional(),
+	}),
+	members: z.array(registrationMembershipSchema).max(100).default([]),
+	newUsers: z.array(registrationUserSchema).max(100).default([]),
+}).superRefine((input, context) => {
+	const memberIds = input.members.map((member) => member.userId);
+	if (new Set(memberIds).size !== memberIds.length) {
+		context.addIssue({ code: z.ZodIssueCode.custom, message: "A user can only be assigned once", path: ["members"] });
+	}
+	const newEmails = input.newUsers.map((user) => user.email);
+	if (new Set(newEmails).size !== newEmails.length) {
+		context.addIssue({ code: z.ZodIssueCode.custom, message: "New user emails must be unique", path: ["newUsers"] });
+	}
+});
+
+const companyRegistrarEmail = "rezomotomp@gmail.com";
+
+const ensureCompanyRegistrar = async (userId: string, db: typeof prisma | Prisma.TransactionClient) => {
+	const user = await db.user.findFirst({
+		where: { id: userId, deletedAt: null },
+		select: { email: true },
+	});
+	if (user?.email.trim().toLowerCase() !== companyRegistrarEmail) {
+		throw forbidden("Only the authorized company registrar can perform this action");
+	}
+};
+
+export const getCompanyRegistrationUsers = async (actorUserId: string) => {
+	await ensureCompanyRegistrar(actorUserId, prisma);
+	return prisma.user.findMany({
+		where: { deletedAt: null },
+		select: { id: true, fullName: true, email: true },
+		orderBy: { fullName: "asc" },
+	});
+};
+
+export const getCompanyRegistrationAccesses = async (actorUserId: string) => {
+	await ensureCompanyRegistrar(actorUserId, prisma);
+	return getAccesses();
+};
+
+export const registerCompany = async (actorUserId: string, input: z.infer<typeof registerCompanySchema>) => {
+	await ensureCompanyRegistrar(actorUserId, prisma);
+	const existingEmails = await Promise.all(input.newUsers.map((user) => repository.findGlobalUserByEmail(prisma, user.email)));
+	if (existingEmails.some(Boolean)) {
+		throw new AppError("An account already exists for one of the new user emails. Select that user instead.", 409, "EMAIL_ALREADY_EXISTS");
+	}
+	const newUserHashes = await Promise.all(input.newUsers.map((user) => bcrypt.hash(user.password, 12)));
+	const creatorAccesses = Object.values(Access);
+
+	return prisma.$transaction(async (tx) => {
+		await ensureCompanyRegistrar(actorUserId, tx);
+		const memberIds = input.members.map((member) => member.userId);
+		if (memberIds.length) {
+			const activeMembers = await tx.user.findMany({
+				where: { id: { in: memberIds }, deletedAt: null },
+				select: { id: true },
+			});
+			if (activeMembers.length !== memberIds.length) {
+				throw validationError("One or more selected users are no longer available");
+			}
+		}
+
+		const company = await repository.createCompany(tx, {
+			name: input.company.name,
+			phone: input.company.phone,
+			email: input.company.email,
+		});
+		const creatorAssignment = input.members.find((member) => member.userId === actorUserId);
+		await repository.createCompanyUser(tx, {
+			companyId: company.id,
+			userId: actorUserId,
+			roleName: creatorAssignment?.roleName ?? "Admin",
+			accesses: creatorAssignment?.accesses ?? creatorAccesses,
+			isActive: true,
+		});
+		await authRepository.createWalkInCustomer(tx, company.id);
+		await repository.createAuditLog(tx, {
+			companyId: company.id,
+			actorUserId,
+			action: "COMPANY_CREATED",
+			entityType: "Company",
+			entityId: company.id,
+		});
+
+		for (const member of input.members) {
+			if (member.userId === actorUserId) continue;
+			await repository.createCompanyUser(tx, {
+				companyId: company.id,
+				userId: member.userId,
+				roleName: member.roleName,
+				accesses: member.accesses,
+				isActive: true,
+			});
+			await repository.createAuditLog(tx, {
+				companyId: company.id,
+				actorUserId,
+				action: "USER_ADDED_TO_COMPANY",
+				entityType: "User",
+				entityId: member.userId,
+			});
+		}
+
+		for (const [index, user] of input.newUsers.entries()) {
+			const createdUser = await repository.createGlobalUser(tx, {
+				email: user.email,
+				passwordHash: newUserHashes[index],
+				fullName: user.fullName,
+				phone: user.phone,
+			});
+			await repository.createCompanyUser(tx, {
+				companyId: company.id,
+				userId: createdUser.id,
+				roleName: user.roleName,
+				accesses: user.accesses,
+				isActive: true,
+			});
+			await repository.createAuditLog(tx, {
+				companyId: company.id,
+				actorUserId,
+				action: "USER_CREATED",
+				entityType: "User",
+				entityId: createdUser.id,
+			});
+		}
+
+		return sanitizeCompany(company);
+	});
+};
 
 export const updateUserSchema = z.object({
 	fullName: z.string().trim().min(1).max(150).optional(),

@@ -43,6 +43,11 @@ export interface CompanyUser {
   isActive: boolean
   createdAt: string
 }
+export interface CompanyRegistrationUser {
+  id: string
+  fullName: string
+  email: string
+}
 export interface Page<T> {
   items: T[]
   pagination: { page: number; limit: number; total: number; totalPages: number }
@@ -98,6 +103,29 @@ export function deactivateCompanyUser(id: string) {
 }
 export function getCompanyAccesses() {
   return apiRequest<string[]>('/company/accesses')
+}
+export function getCompanyRegistrationUsers() {
+  return apiRequest<CompanyRegistrationUser[]>('/company/registration/users')
+}
+export function getCompanyRegistrationAccesses() {
+  return apiRequest<string[]>('/company/registration/accesses')
+}
+export function registerCompany(input: {
+  company: { name: string; email?: string; phone?: string }
+  members: Array<{ userId: string; roleName: string; accesses: string[] }>
+  newUsers: Array<{
+    fullName: string
+    email: string
+    phone?: string
+    password: string
+    roleName: string
+    accesses: string[]
+  }>
+}) {
+  return apiRequest<Company>('/company/registration', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }
 
 export async function uploadCompanyLogo(upload: MediaUpload, file: File) {

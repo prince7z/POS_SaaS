@@ -6,6 +6,7 @@ import {
   Box,
   Button,
   Card,
+  Checkbox,
   Dialog,
   Field,
   Grid,
@@ -45,23 +46,27 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { changePassword } from '@/api/endpoints/auth'
+import { changePassword, switchCompany } from '@/api/endpoints/auth'
 import {
   createCompanyUser,
   deactivateCompanyUser,
   deleteCompanyLogo,
   getCompany,
   getCompanyAccesses,
+  getCompanyRegistrationAccesses,
+  getCompanyRegistrationUsers,
   getCompanyUsers,
+  registerCompany,
   requestCompanyLogoUploadUrl,
   updateCompany,
   updateCompanyUser,
   uploadCompanyLogo,
   type Company,
+  type CompanyRegistrationUser,
   type CompanyUser,
 } from '@/api/endpoints/company'
 import { showSuccess, showError } from '@/components/feedback/notifications'
-import { setStoredCompany } from '@/lib/auth'
+import { getStoredUser, setAuthSession, setStoredCompany } from '@/lib/auth'
 import { SUPPORTED_COUNTRIES, SUPPORTED_CURRENCIES } from '@/lib/currency'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { QrImageUploader } from '@/components/common/QrImageUploader'
@@ -71,7 +76,18 @@ import { FormLabelIndicator } from '@/components/common/FormLabelIndicator'
 import { SearchableSelect } from '@/components/common/SearchableSelect'
 
 const MotionBox = motion(Box)
-type Section = 'general' | 'business' | 'users' | 'invoice' | 'tax' | 'integrations' | 'security'
+type Section = 'general' | 'business' | 'users' | 'invoice' | 'tax' | 'integrations' | 'security' | 'registration'
+type CompanyRegistrationAssignment = {
+  id: string
+  userId?: string
+  fullName: string
+  email: string
+  phone?: string
+  password?: string
+  roleName: string
+  accesses: string[]
+}
+const companyRegistrarEmail = 'rezomotomp@gmail.com'
 const sections: Array<{ id: Section; label: string; description: string; icon: typeof Building2 }> = [
   { id: 'general', label: 'General', description: 'Company and contact information', icon: Building2 },
   { id: 'business', label: 'Business Preferences', description: 'Regional and product behaviour', icon: Settings2 },
@@ -1229,6 +1245,8 @@ function Security() {
 
 export function SettingsPage() {
   const location = useLocation()
+  const storedUser = getStoredUser()
+  const canRegisterCompanies = storedUser?.email.trim().toLowerCase() === companyRegistrarEmail
   const [section, setSection] = useState<Section>(() =>
     new URLSearchParams(location.search).get('section') === 'integrations' ? 'integrations' : 'general',
   )
@@ -1237,6 +1255,20 @@ export function SettingsPage() {
   const [accesses, setAccesses] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [registrationUsers, setRegistrationUsers] = useState<CompanyRegistrationUser[]>([])
+  const [availableRegistrationAccesses, setAvailableRegistrationAccesses] = useState<string[]>([])
+  const [registrationLoading, setRegistrationLoading] = useState(false)
+  const [registrationSaving, setRegistrationSaving] = useState(false)
+  const [registrationError, setRegistrationError] = useState('')
+  const [registeredCompany, setRegisteredCompany] = useState<Company>()
+  const [switchingToRegisteredCompany, setSwitchingToRegisteredCompany] = useState(false)
+  const [registrationMode, setRegistrationMode] = useState<'existing' | 'new'>('existing')
+  const [registrationCompany, setRegistrationCompany] = useState({ name: '', email: '', phone: '' })
+  const [selectedRegistrationUserId, setSelectedRegistrationUserId] = useState('')
+  const [registrationRole, setRegistrationRole] = useState('Manager')
+  const [registrationAccesses, setRegistrationAccesses] = useState<string[]>([])
+  const [registrationAssignments, setRegistrationAssignments] = useState<CompanyRegistrationAssignment[]>([])
+  const [newRegistrationUser, setNewRegistrationUser] = useState({ fullName: '', email: '', phone: '', password: '' })
   const reloadUsers = () => {
     getCompanyUsers()
       .then((result) => setUsers(result.items))
@@ -1257,10 +1289,128 @@ export function SettingsPage() {
       })
       .finally(() => setLoading(false))
   }, [])
+  useEffect(() => {
+    if (section !== 'registration' || !canRegisterCompanies) return
+    setRegistrationLoading(true)
+    setRegistrationError('')
+    Promise.all([getCompanyRegistrationUsers(), getCompanyRegistrationAccesses()])
+      .then(([usersResult, accessesResult]) => {
+        setRegistrationUsers(usersResult)
+        setAvailableRegistrationAccesses(accessesResult)
+      })
+      .catch((cause) => setRegistrationError(cause instanceof Error ? cause.message : 'Company registration options could not be loaded.'))
+      .finally(() => setRegistrationLoading(false))
+  }, [section, canRegisterCompanies])
   const handleCompanySaved = (updated: Company) => {
     setCompany(updated)
     setStoredCompany(updated)
   }
+  const toggleRegistrationAccess = (access: string, checked: boolean) => {
+    setRegistrationAccesses((current) =>
+      checked ? [...new Set([...current, access])] : current.filter((item) => item !== access),
+    )
+  }
+  const addRegistrationAssignment = () => {
+    if (!registrationAccesses.length) {
+      setRegistrationError('Select at least one permission for the user.')
+      return
+    }
+    if (registrationMode === 'existing') {
+      const user = registrationUsers.find((item) => item.id === selectedRegistrationUserId)
+      if (!user) {
+        setRegistrationError('Select a system user to add.')
+        return
+      }
+      if (registrationAssignments.some((item) => item.userId === user.id)) {
+        setRegistrationError('This user has already been added.')
+        return
+      }
+      setRegistrationAssignments((current) => [
+        ...current,
+        { id: user.id, userId: user.id, fullName: user.fullName, email: user.email, roleName: registrationRole, accesses: registrationAccesses },
+      ])
+      setSelectedRegistrationUserId('')
+    } else {
+      if (!newRegistrationUser.fullName.trim() || !newRegistrationUser.email.trim() || newRegistrationUser.password.length < 8) {
+        setRegistrationError('Enter the user name, email, and a password of at least 8 characters.')
+        return
+      }
+      if (registrationUsers.some((user) => user.email.toLowerCase() === newRegistrationUser.email.trim().toLowerCase())) {
+        setRegistrationError('This account already exists. Select it from the system users list instead.')
+        return
+      }
+      if (registrationAssignments.some((item) => item.email.toLowerCase() === newRegistrationUser.email.trim().toLowerCase())) {
+        setRegistrationError('This email has already been added.')
+        return
+      }
+      setRegistrationAssignments((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          fullName: newRegistrationUser.fullName.trim(),
+          email: newRegistrationUser.email.trim().toLowerCase(),
+          phone: newRegistrationUser.phone.trim() || undefined,
+          password: newRegistrationUser.password,
+          roleName: registrationRole,
+          accesses: registrationAccesses,
+        },
+      ])
+      setNewRegistrationUser({ fullName: '', email: '', phone: '', password: '' })
+    }
+    setRegistrationError('')
+  }
+  const createRegisteredCompany = async () => {
+    if (!registrationCompany.name.trim()) {
+      setRegistrationError('Company name is required.')
+      return
+    }
+    setRegistrationSaving(true)
+    setRegistrationError('')
+    try {
+      const created = await registerCompany({
+        company: {
+          name: registrationCompany.name.trim(),
+          ...(registrationCompany.email.trim() ? { email: registrationCompany.email.trim() } : {}),
+          ...(registrationCompany.phone.trim() ? { phone: registrationCompany.phone.trim() } : {}),
+        },
+        members: registrationAssignments
+          .filter((member): member is CompanyRegistrationAssignment & { userId: string } => Boolean(member.userId))
+          .map(({ userId, roleName, accesses: memberAccesses }) => ({ userId, roleName, accesses: memberAccesses })),
+        newUsers: registrationAssignments
+          .filter((member) => !member.userId)
+          .map(({ fullName, email, phone, password, roleName, accesses: memberAccesses }) => ({
+            fullName,
+            email,
+            ...(phone ? { phone } : {}),
+            password: password ?? '',
+            roleName,
+            accesses: memberAccesses,
+          })),
+      })
+      setRegisteredCompany(created)
+      showSuccess('Company registered', `${created.name} was created with the assigned users.`)
+    } catch (cause) {
+      showError('Unable to register company', cause)
+      setRegistrationError(cause instanceof Error ? cause.message : 'Company could not be registered.')
+    } finally {
+      setRegistrationSaving(false)
+    }
+  }
+  const switchToRegisteredCompany = async () => {
+    if (!registeredCompany) return
+    setSwitchingToRegisteredCompany(true)
+    try {
+      setAuthSession(await switchCompany(registeredCompany.id))
+      window.location.reload()
+    } catch (cause) {
+      showError('Unable to switch company', cause)
+      setRegistrationError(cause instanceof Error ? cause.message : 'Could not switch to the new company.')
+      setSwitchingToRegisteredCompany(false)
+    }
+  }
+  const visibleSections = canRegisterCompanies
+    ? [...sections, { id: 'registration' as const, label: 'Register company', description: 'Create a company and assign users', icon: Building2 }]
+    : sections
 
   return (
     <PageContainer>
@@ -1278,7 +1428,7 @@ export function SettingsPage() {
           <Card.Root variant="outline" position={{ lg: 'sticky' }} top="4">
             <Card.Body p="2">
               <VStack align="stretch" gap="1">
-                {sections.map(({ id, label, description, icon: Icon }) => (
+                {visibleSections.map(({ id, label, description, icon: Icon }) => (
                   <Button
                     key={id}
                     variant={section === id ? 'subtle' : 'ghost'}
@@ -1325,6 +1475,176 @@ export function SettingsPage() {
                   {section === 'general' && <General company={company} onSaved={handleCompanySaved} />}
                   {section === 'business' && <Business company={company} onSaved={handleCompanySaved} />}
                   {section === 'users' && <UsersSettings users={users} accesses={accesses} onReload={reloadUsers} />}
+                  {section === 'registration' && canRegisterCompanies && (
+                    <VStack align="stretch" gap="5">
+                      <Box>
+                        <Heading size="sm">Register a company</Heading>
+                        <Text fontSize="sm" color="secondary">
+                          The creator is added as an Admin by default. Add your own account below if you want to choose its role and permissions.
+                        </Text>
+                      </Box>
+                      {registeredCompany && (
+                        <Card.Root variant="subtle" colorPalette="green">
+                          <Card.Body>
+                            <HStack justify="space-between" flexWrap="wrap" gap="3">
+                              <Box>
+                                <Text fontWeight="semibold">{registeredCompany.name} is ready</Text>
+                                <Text fontSize="sm" color="secondary">Switch to this company to manage its settings.</Text>
+                              </Box>
+                              <Button size="sm" loading={switchingToRegisteredCompany} onClick={switchToRegisteredCompany}>
+                                Switch company
+                              </Button>
+                            </HStack>
+                          </Card.Body>
+                        </Card.Root>
+                      )}
+                      <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap="4">
+                        <Field.Root required>
+                          <Field.Label>Company name<FormLabelIndicator required /></Field.Label>
+                          <Input
+                            value={registrationCompany.name}
+                            onChange={(event) => setRegistrationCompany({ ...registrationCompany, name: event.target.value })}
+                            placeholder="Company name"
+                          />
+                        </Field.Root>
+                        <Field.Root>
+                          <Field.Label>Company email</Field.Label>
+                          <Input
+                            type="email"
+                            value={registrationCompany.email}
+                            onChange={(event) => setRegistrationCompany({ ...registrationCompany, email: event.target.value })}
+                            placeholder="Optional"
+                          />
+                        </Field.Root>
+                        <Field.Root>
+                          <Field.Label>Company phone</Field.Label>
+                          <Input
+                            value={registrationCompany.phone}
+                            onChange={(event) => setRegistrationCompany({ ...registrationCompany, phone: event.target.value })}
+                            placeholder="Optional"
+                          />
+                        </Field.Root>
+                      </Grid>
+                      <Separator />
+                      <Box>
+                        <Heading size="sm">Users and permissions</Heading>
+                        <Text fontSize="sm" color="secondary">
+                          Choose existing accounts or create a new account, then select the role and access it should receive.
+                        </Text>
+                      </Box>
+                      <HStack>
+                        <Button size="xs" variant={registrationMode === 'existing' ? 'subtle' : 'outline'} onClick={() => setRegistrationMode('existing')}>
+                          Select system user
+                        </Button>
+                        <Button size="xs" variant={registrationMode === 'new' ? 'subtle' : 'outline'} onClick={() => setRegistrationMode('new')}>
+                          Create new user
+                        </Button>
+                      </HStack>
+                      {registrationMode === 'existing' ? (
+                        <Field.Root>
+                          <Field.Label>System user</Field.Label>
+                          <SearchableSelect
+                            options={registrationUsers
+                              .filter((user) => !registrationAssignments.some((assignment) => assignment.userId === user.id))
+                              .map((user) => ({ value: user.id, label: `${user.fullName} (${user.email})` }))}
+                            value={selectedRegistrationUserId}
+                            onChange={setSelectedRegistrationUserId}
+                            placeholder={registrationLoading ? 'Loading system users…' : 'Search by name or email'}
+                            disabled={registrationLoading}
+                            emptyMessage="No available users found."
+                          />
+                        </Field.Root>
+                      ) : (
+                        <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)' }} gap="3">
+                          <Field.Root required>
+                            <Field.Label>Full name</Field.Label>
+                            <Input value={newRegistrationUser.fullName} onChange={(event) => setNewRegistrationUser({ ...newRegistrationUser, fullName: event.target.value })} />
+                          </Field.Root>
+                          <Field.Root required>
+                            <Field.Label>Email</Field.Label>
+                            <Input type="email" value={newRegistrationUser.email} onChange={(event) => setNewRegistrationUser({ ...newRegistrationUser, email: event.target.value })} />
+                          </Field.Root>
+                          <Field.Root>
+                            <Field.Label>Phone</Field.Label>
+                            <Input value={newRegistrationUser.phone} onChange={(event) => setNewRegistrationUser({ ...newRegistrationUser, phone: event.target.value })} />
+                          </Field.Root>
+                          <Field.Root required>
+                            <Field.Label>Password (8 characters minimum)</Field.Label>
+                            <Input type="password" value={newRegistrationUser.password} onChange={(event) => setNewRegistrationUser({ ...newRegistrationUser, password: event.target.value })} />
+                          </Field.Root>
+                        </Grid>
+                      )}
+                      <Grid templateColumns={{ base: '1fr', md: '220px minmax(0, 1fr)' }} gap="4" alignItems="start">
+                        <Field.Root>
+                          <Field.Label>Role</Field.Label>
+                          <SearchableSelect
+                            options={roles.map((role) => ({ value: role, label: role }))}
+                            value={registrationRole}
+                            onChange={setRegistrationRole}
+                            placeholder="Select a role"
+                          />
+                        </Field.Root>
+                        <Box>
+                          <Text fontSize="sm" fontWeight="medium" mb="2">Permissions</Text>
+                          <Grid templateColumns={{ base: '1fr', sm: 'repeat(2, 1fr)' }} gap="2">
+                            {availableRegistrationAccesses.map((access) => (
+                              <Checkbox.Root
+                                key={access}
+                                checked={registrationAccesses.includes(access)}
+                                onCheckedChange={(event) => toggleRegistrationAccess(access, event.checked === true)}
+                                size="sm"
+                              >
+                                <Checkbox.HiddenInput />
+                                <Checkbox.Control />
+                                <Checkbox.Label>{access.replaceAll('_', ' ')}</Checkbox.Label>
+                              </Checkbox.Root>
+                            ))}
+                          </Grid>
+                        </Box>
+                      </Grid>
+                      <HStack justify="flex-end">
+                        <Button size="sm" variant="outline" onClick={addRegistrationAssignment}>
+                          <Plus size={15} />
+                          Add user
+                        </Button>
+                      </HStack>
+                      {registrationAssignments.length > 0 && (
+                        <VStack align="stretch" gap="2">
+                          {registrationAssignments.map((assignment) => (
+                            <Card.Root key={assignment.id} variant="outline">
+                              <Card.Body py="3">
+                                <HStack justify="space-between" align="start">
+                                  <Box>
+                                    <HStack>
+                                      <Text fontSize="sm" fontWeight="medium">{assignment.fullName}</Text>
+                                      <Badge>{assignment.roleName}</Badge>
+                                    </HStack>
+                                    <Text fontSize="xs" color="secondary">{assignment.email} · {assignment.accesses.length} permissions</Text>
+                                  </Box>
+                                  <IconButton
+                                    size="xs"
+                                    variant="ghost"
+                                    aria-label={`Remove ${assignment.fullName}`}
+                                    onClick={() => setRegistrationAssignments((current) => current.filter((item) => item.id !== assignment.id))}
+                                  >
+                                    <X size={14} />
+                                  </IconButton>
+                                </HStack>
+                              </Card.Body>
+                            </Card.Root>
+                          ))}
+                        </VStack>
+                      )}
+                      {registrationLoading && <Text fontSize="sm" color="secondary">Loading system users…</Text>}
+                      <ErrorText message={registrationError} />
+                      <HStack justify="flex-end">
+                        <Button size="sm" loading={registrationSaving} disabled={registrationLoading} onClick={createRegisteredCompany}>
+                          <Building2 size={15} />
+                          Register company
+                        </Button>
+                      </HStack>
+                    </VStack>
+                  )}
                   {section === 'invoice' && (
                     <SimpleCompanySection section="invoice" company={company} onSaved={handleCompanySaved} />
                   )}
