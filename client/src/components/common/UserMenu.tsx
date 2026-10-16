@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Avatar, Button, Menu, Spinner, Text, VStack } from '@chakra-ui/react'
 import { Check, ChevronDown, LogOut, Settings, Store, User } from 'lucide-react'
 import { clearAuthSession, getStoredCompany, getStoredCompanies, getStoredUser, setAuthSession } from '@/lib/auth'
-import { switchCompany } from '@/api/endpoints/auth'
+import { logout, switchCompany } from '@/api/endpoints/auth'
 import { showError, stashToast } from '@/components/feedback/notifications'
 import { useNavigate } from 'react-router-dom'
 
@@ -13,9 +13,15 @@ export function UserMenu({ collapsed = false, compact = false }: { collapsed?: b
   const navigate = useNavigate()
   const [switchingId, setSwitchingId] = useState<string | null>(null)
 
-  const handleLogout = () => {
-    clearAuthSession()
-    navigate('/auth/login')
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } catch (err) {
+      console.error('Failed to revoke the server session during logout', err)
+    } finally {
+      clearAuthSession()
+      navigate('/auth/login')
+    }
   }
 
   const handleSwitchCompany = async (targetCompanyId: string) => {

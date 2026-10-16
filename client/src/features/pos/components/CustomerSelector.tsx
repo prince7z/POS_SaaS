@@ -1,6 +1,10 @@
-import { Button, HStack, Menu, Text } from '@chakra-ui/react'
-import { ChevronDown, UserRound } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { SearchableSelect } from '@/components/common/SearchableSelect'
+import { getCustomers } from '@/api/endpoints/customers'
+import { showError } from '@/components/feedback/notifications'
 import type { Customer } from '../types'
+
+const WALK_IN_VALUE = '__walk-in__'
 
 export function CustomerSelector({
   customers,
@@ -11,42 +15,78 @@ export function CustomerSelector({
   selectedCustomerId: string | null
   onSelectCustomer: (customerId: string | null) => void
 }) {
-  const selected = customers.find((c) => c.id === selectedCustomerId)
-  const displayName = selected ? selected.name : 'Walk-in Customer'
+  const [searchResults, setSearchResults] = useState<Customer[] | null>(null)
+  const [cachedSelected, setCachedSelected] = useState<Customer | null>(null)
+  const searchTimer = useRef<number | undefined>(undefined)
+  const searchSequence = useRef(0)
+  const visibleCustomers = searchResults ?? customers
+  const selected =
+    customers.find((customer) => customer.id === selectedCustomerId) ??
+    searchResults?.find((customer) => customer.id === selectedCustomerId) ??
+    (cachedSelected?.id === selectedCustomerId ? cachedSelected : undefined)
+  const handleSearch = useCallback((value: string) => {
+    if (searchTimer.current !== undefined) window.clearTimeout(searchTimer.current)
+    const sequence = ++searchSequence.current
+    const search = value.trim()
+    if (!search) {
+      setSearchResults(null)
+      return
+    }
+    searchTimer.current = window.setTimeout(() => {
+      getCustomers({
+        page: 1,
+        limit: 100,
+        search,
+        includeInactive: false,
+        sortBy: 'name',
+        sortOrder: 'asc',
+      })
+        .then((result) => {
+          if (searchSequence.current === sequence) setSearchResults(result.items)
+        })
+        .catch((error) => {
+          if (searchSequence.current === sequence) showError('Customer search failed', error)
+        })
+    }, 250)
+  }, [])
+
+  useEffect(
+    () => () => {
+      if (searchTimer.current !== undefined) window.clearTimeout(searchTimer.current)
+    },
+    [],
+  )
+
+  const options = [
+    { value: WALK_IN_VALUE, label: 'Walk-in Customer' },
+    ...(selected && !selected.isWalkIn && !visibleCustomers.some((customer) => customer.id === selected.id)
+      ? [
+          {
+            value: selected.id,
+            label: [selected.name, selected.phone, selected.email].filter(Boolean).join(' · '),
+          },
+        ]
+      : []),
+    ...visibleCustomers
+      .filter((customer) => !customer.isWalkIn)
+      .map((customer) => ({
+        value: customer.id,
+        label: [customer.name, customer.phone, customer.email].filter(Boolean).join(' · '),
+      })),
+  ]
 
   return (
-    <Menu.Root positioning={{ placement: 'bottom-start' }}>
-      <Menu.Trigger asChild>
-        <Button size="sm" variant="outline" justifyContent="space-between" w="full">
-          <HStack gap="2" minW="0">
-            <UserRound size={14} style={{ flexShrink: 0 }} />
-            <Text lineClamp={1}>{displayName}</Text>
-          </HStack>
-          <ChevronDown size={14} style={{ flexShrink: 0 }} />
-        </Button>
-      </Menu.Trigger>
-      <Menu.Positioner>
-        <Menu.Content minW="240px" maxH="280px" overflowY="auto">
-          {/* Walk-in Customer default option */}
-          <Menu.Item
-            value="walk-in"
-            onClick={() => onSelectCustomer(null)}
-            fontWeight={!selectedCustomerId ? '600' : 'normal'}
-          >
-            Walk-in Customer
-          </Menu.Item>
-          {customers.map((customer) => (
-            <Menu.Item
-              key={customer.id}
-              value={customer.id}
-              onClick={() => onSelectCustomer(customer.id)}
-              fontWeight={selectedCustomerId === customer.id ? '600' : 'normal'}
-            >
-              {customer.name} {customer.phone ? `(${customer.phone})` : ''}
-            </Menu.Item>
-          ))}
-        </Menu.Content>
-      </Menu.Positioner>
-    </Menu.Root>
+    <SearchableSelect
+      options={options}
+      value={selected?.isWalkIn ? WALK_IN_VALUE : (selectedCustomerId ?? WALK_IN_VALUE)}
+      onChange={(value) => {
+        const customer = visibleCustomers.find((option) => option.id === value)
+        if (customer) setCachedSelected(customer)
+        onSelectCustomer(value === WALK_IN_VALUE ? null : value || null)
+      }}
+      placeholder="Walk-in Customer"
+      emptyMessage="No matching customers."
+      onSearch={handleSearch}
+    />
   )
 }

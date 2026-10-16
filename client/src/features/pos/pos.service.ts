@@ -3,7 +3,10 @@ import { getCustomers } from '@/api/endpoints/customers'
 import type { POSFilters } from './types'
 
 export function loadPOSInitialData() {
-  return Promise.all([getCategories(), getCustomers()])
+  return Promise.all([
+    getCategories(),
+    getCustomers({ page: 1, limit: 100, includeInactive: false, sortBy: 'name', sortOrder: 'asc' }),
+  ])
 }
 
 export function fetchPOSProducts(filters: POSFilters) {

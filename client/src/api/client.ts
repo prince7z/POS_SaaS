@@ -1,4 +1,4 @@
-import { clearAuthSession } from '@/lib/auth'
+import { clearAuthSession, getAuthToken, getRefreshToken, setAuthTokens } from '@/lib/auth'
 import { apiBaseUrl } from '@/config/app'
 
 export interface ApiSuccess<T> {
@@ -32,24 +32,126 @@ export class ApiError extends Error {
   }
 }
 
-const baseUrl = `${apiBaseUrl}`
+const baseUrl = apiBaseUrl.replace(/\/+$/, '')
+const authRefreshExclusions = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/refresh',
+]
+
+let refreshInFlight: Promise<string | null> | null = null
+
+function shouldRefresh(path: string): boolean {
+  return !authRefreshExclusions.some((excludedPath) => path.startsWith(excludedPath))
+}
+
+function redirectToLogin(): void {
+  if (
+    typeof window !== 'undefined' &&
+    !window.location.pathname.startsWith('/auth/') &&
+    window.location.pathname !== '/login'
+  ) {
+    window.location.href = '/auth/login'
+  }
+}
+
+async function parseResponseBody<T>(response: Response): Promise<T | undefined> {
+  try {
+    return (await response.json()) as T
+  } catch {
+    return undefined
+  }
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      const refreshToken = getRefreshToken()
+      const response = await fetch(`${baseUrl}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(refreshToken ? { refreshToken } : {}),
+      })
+      const body = await parseResponseBody<ApiSuccess<{ accessToken: string; refreshToken?: string }> | ApiFailure>(
+        response,
+      )
+
+      if (response.status === 401) {
+        clearAuthSession()
+        return null
+      }
+
+      if (!response.ok || !body || !body.success) {
+        const error = body && !body.success ? body.error : undefined
+        throw new ApiError(
+          error?.message ?? response.statusText ?? 'Unable to refresh the session.',
+          error?.code ?? 'TOKEN_REFRESH_FAILED',
+          response.status,
+        )
+      }
+
+      if (!body.data.accessToken) {
+        throw new ApiError('The refresh response did not include an access token.', 'TOKEN_REFRESH_FAILED', 500)
+      }
+
+      setAuthTokens(body.data.accessToken, body.data.refreshToken)
+      return body.data.accessToken
+    })().finally(() => {
+      refreshInFlight = null
+    })
+  }
+
+  return refreshInFlight
+}
+
+async function fetchAuthorized(path: string, init: RequestInit | undefined, accept: string): Promise<Response> {
+  const headers = new Headers(init?.headers)
+  headers.set('Accept', accept)
+  if (init?.body !== undefined && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+
+  const token = getAuthToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  const request = () =>
+    fetch(`${baseUrl}${path}`, {
+      ...init,
+      credentials: 'include',
+      headers,
+    })
+
+  let response = await request()
+  if (response.status !== 401 || !shouldRefresh(path)) return response
+
+  const refreshedToken = await refreshAccessToken()
+  if (!refreshedToken) {
+    redirectToLogin()
+    return response
+  }
+
+  headers.set('Authorization', `Bearer ${refreshedToken}`)
+  response = await request()
+  if (response.status === 401) {
+    clearAuthSession()
+    redirectToLogin()
+  }
+  return response
+}
 
 export async function apiBlob(path: string, accept = 'text/csv'): Promise<Blob> {
-  const token = localStorage.getItem('pos-auth-token')
-  const response = await fetch(`${baseUrl}${path}`, {
-    headers: { Accept: accept, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-  })
+  const response = await fetchAuthorized(path, undefined, accept)
   if (!response.ok) {
-    if (response.status === 401) {
-      clearAuthSession()
-      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth/') && window.location.pathname !== '/login') {
-        window.location.href = '/auth/login'
-      }
-    }
-    const body = await response.json().catch(() => undefined) as ApiFailure | undefined
+    const body = await parseResponseBody<ApiFailure>(response)
     throw new ApiError(
-      body?.error?.message ?? 'The requested file could not be downloaded.',
-      body?.error?.code ?? 'DOWNLOAD_FAILED',
+      body && !body.success ? body.error.message : 'The requested file could not be downloaded.',
+      body && !body.success ? body.error.code : 'DOWNLOAD_FAILED',
       response.status,
     )
   }
@@ -60,36 +162,18 @@ export async function apiRequestWithMeta<T>(
   path: string,
   init?: RequestInit,
 ): Promise<{ data: T; pagination?: ApiPagination }> {
-  const token = localStorage.getItem('pos-auth-token')
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init?.headers,
-    },
-  })
+  const response = await fetchAuthorized(path, init, 'application/json')
+  const body = await parseResponseBody<ApiSuccess<T> | ApiFailure>(response)
 
-  const body = (await response.json()) as ApiSuccess<T> | ApiFailure
-  if (!response.ok || !body.success) {
-    if (
-      response.status === 401 &&
-      !path.startsWith('/auth/login') &&
-      !path.startsWith('/auth/register') &&
-      !path.startsWith('/auth/forgot-password') &&
-      !path.startsWith('/auth/reset-password')
-    ) {
-      clearAuthSession()
-      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth/') && window.location.pathname !== '/login') {
-        window.location.href = '/auth/login'
-      }
-    }
-    const error = 'error' in body && body.error
-      ? body.error
-      : { code: 'HTTP_ERROR', message: response.statusText || 'An unknown error occurred.' }
-    throw new ApiError(error.message, error.code, response.status)
+  if (!response.ok || !body || !body.success) {
+    const error = body && !body.success ? body.error : undefined
+    throw new ApiError(
+      error?.message ?? response.statusText ?? 'An unknown error occurred.',
+      error?.code ?? 'HTTP_ERROR',
+      response.status,
+    )
   }
+
   return { data: body.data, pagination: body.pagination }
 }
 

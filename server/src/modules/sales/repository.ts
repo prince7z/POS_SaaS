@@ -89,6 +89,24 @@ export const findCustomerById = (db: Db, companyId: string, customerId: string) 
 export const findWalkInCustomer = (db: Db, companyId: string) =>
 	db.customer.findFirst({ where: { companyId, isWalkIn: true, deletedAt: null } });
 
+export const upsertWalkInCustomer = (db: Db, companyId: string) => {
+	const email = `walk-in-${companyId}@internal.invalid`;
+	return db.customer.upsert({
+		where: { companyId_email: { companyId, email } },
+		update: { deletedAt: null, isActive: true },
+		create: {
+			companyId,
+			name: "Walk-in Customer",
+			email,
+			customerType: "WALK_IN",
+			creditLimit: 0,
+			creditBalance: 0,
+			storeCreditBalance: 0,
+			isWalkIn: true,
+		},
+	});
+};
+
 export const createSale = (db: Db, data: Prisma.SaleUncheckedCreateInput) => db.sale.create({ data });
 
 export const updateSale = (db: Db, saleId: string, data: Prisma.SaleUncheckedUpdateInput) =>

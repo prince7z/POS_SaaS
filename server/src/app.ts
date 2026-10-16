@@ -16,7 +16,7 @@ app.use(helmet({
 	},
 }));
 app.use(cors({
-	origin: [env.origin,"http://localhost:5173", "http://jcom.pcodes.tech"],
+	origin: [...new Set([env.origin, env.frontendUrl, "http://localhost:5173", "http://jcom.pcodes.tech"])],
 	credentials: true,
 }));
 app.use(express.json());

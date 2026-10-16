@@ -15,6 +15,7 @@ export function SearchableSelect({
   disabled = false,
   emptyMessage = 'No matching options.',
   width = 'full',
+  onSearch,
 }: {
   options: SearchableSelectOption[]
   value: string
@@ -23,6 +24,7 @@ export function SearchableSelect({
   disabled?: boolean
   emptyMessage?: string
   width?: string
+  onSearch?: (value: string) => void
 }) {
   const optionsSignature = JSON.stringify(options)
   const { collection, filter, set } = useListCollection({
@@ -43,9 +45,15 @@ export function SearchableSelect({
       value={value ? [value] : []}
       onValueChange={(details) => onChange(details.value[0] ?? '')}
       onOpenChange={(details) => {
-        if (details.open) filter('')
+        if (details.open) {
+          filter('')
+          onSearch?.('')
+        }
       }}
-      onInputValueChange={(details) => filter(details.inputValue)}
+      onInputValueChange={(details) => {
+        filter(details.inputValue)
+        onSearch?.(details.inputValue)
+      }}
       openOnClick
       disabled={disabled}
       size="sm"

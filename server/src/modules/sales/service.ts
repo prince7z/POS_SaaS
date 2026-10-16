@@ -257,7 +257,16 @@ const recalcSaleState = (items: Array<{ quantity: number; unitPrice: number }>, 
 	return calculateTotals(decimals, taxRate, discountType, discountValue);
 };
 
-const getCompanyWalkIn = async (companyId: string) => repository.findWalkInCustomer(prisma, companyId);
+const getCompanyWalkIn = async (tx: Prisma.TransactionClient, companyId: string) => {
+	const existing = await repository.findWalkInCustomer(tx, companyId);
+	if (existing) return existing;
+
+	const walkIn = await repository.upsertWalkInCustomer(tx, companyId);
+	if (!walkIn.isWalkIn) {
+		throw error("WALK_IN_CUSTOMER_CONFLICT", "The reserved walk-in customer email is already in use", 409);
+	}
+	return walkIn;
+};
 
 export const createSaleDraft = async (companyId: string, userId: string, input: z.infer<typeof saleDraftSchema>) => {
 	const draftId = randomUUID();
@@ -467,8 +476,8 @@ export const completeSale = async (companyId: string, userId: string, saleId: st
 			if (numberValue(product.stockQuantity) < numberValue(item.quantity)) throw error("INSUFFICIENT_STOCK", "Insufficient stock", 409);
 		}
 
-		const customerId = input.customerId ?? sale.customerId ?? null;
-		const finalCustomer = customerId ? await lockCustomer(tx, companyId, customerId) : await getCompanyWalkIn(companyId);
+		const customerId = input.customerId === undefined ? sale.customerId : input.customerId;
+		const finalCustomer = customerId ? await lockCustomer(tx, companyId, customerId) : await getCompanyWalkIn(tx, companyId);
 		if (!finalCustomer) throw error("CUSTOMER_NOT_FOUND", "Customer not found", 404);
 		if (customerId && !finalCustomer.isWalkIn && !finalCustomer.isActive) throw error("CUSTOMER_NOT_FOUND", "Customer not found", 404);
 

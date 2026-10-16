@@ -1,4 +1,5 @@
 import { apiRequest } from '../client'
+import { getRefreshToken } from '@/lib/auth'
 
 export function changePassword(currentPassword: string, newPassword: string) {
   return apiRequest<void>('/auth/change-password', {
@@ -71,6 +72,14 @@ export function switchCompany(companyId: string) {
   return apiRequest<AuthResponse>('/auth/switch-company', {
     method: 'POST',
     body: JSON.stringify({ companyId }),
+  })
+}
+
+export function logout() {
+  const refreshToken = getRefreshToken()
+  return apiRequest<void>('/auth/logout', {
+    method: 'POST',
+    body: JSON.stringify(refreshToken ? { refreshToken } : {}),
   })
 }
 

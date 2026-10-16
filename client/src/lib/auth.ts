@@ -4,8 +4,6 @@ import type { AuthResponse, CompanyOption } from '@/api/endpoints/auth'
 export function setAuthSession(data: AuthResponse) {
   if (data.accessToken) {
     localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, data.accessToken)
-    // Set fallback cookie for session tracking
-    document.cookie = `${STORAGE_KEYS.AUTH_TOKEN}=${data.accessToken}; path=/; max-age=604800; SameSite=Lax`
   }
   if (data.refreshToken) {
     localStorage.setItem('pos-refresh-token', data.refreshToken)
@@ -26,6 +24,15 @@ export function setAuthSession(data: AuthResponse) {
 
 export function getAuthToken(): string | null {
   return localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN)
+}
+
+export function getRefreshToken(): string | null {
+  return localStorage.getItem('pos-refresh-token')
+}
+
+export function setAuthTokens(accessToken: string, refreshToken?: string) {
+  localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, accessToken)
+  if (refreshToken) localStorage.setItem('pos-refresh-token', refreshToken)
 }
 
 export function getStoredUser(): AuthResponse['user'] | null {

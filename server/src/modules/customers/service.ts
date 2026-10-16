@@ -8,7 +8,12 @@ import { AppError, validationError } from "../../utils/errors";
 import * as repository from "./repository";
 
 const uuid = z.string().uuid();
-const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
+const optionalText = (max: number) =>
+	z.string().trim().max(max).transform((value) => value || null).nullable().optional();
+const optionalEmail = z.preprocess(
+	(value) => typeof value === "string" && !value.trim() ? null : value,
+	z.string().trim().email().transform((value) => value.toLowerCase()).nullable().optional(),
+);
 const money = z.coerce.number().min(0);
 const imageType = z.enum(["image/jpeg", "image/png", "image/webp"]);
 
@@ -28,7 +33,7 @@ export const listSchema = z.object({
 const baseCustomerSchema = z.object({
 	name: z.string().trim().min(1).max(150),
 	phone: optionalText(50),
-	email: z.string().trim().email().transform((value) => value.toLowerCase()).nullable().optional(),
+	email: optionalEmail,
 	customerType: optionalText(80),
 	addressLine1: optionalText(255),
 	addressLine2: optionalText(255),
