@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { motion } from 'motion/react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   Activity,
   AlertCircle,
+  ArrowDown,
+  ArrowDownUp,
+  ArrowUp,
   BarChart3,
   ChartNoAxesCombined,
   ChevronLeft,
@@ -13,6 +17,7 @@ import {
   Package,
   RefreshCw,
   ReceiptText,
+  RotateCcw,
   ShoppingCart,
   Warehouse,
 } from 'lucide-react'
@@ -24,9 +29,10 @@ import {
   Button,
   Card,
   Flex,
+  Grid,
   Heading,
+  Image,
   Input,
-  NativeSelect,
   SimpleGrid,
   Skeleton,
   Stack,
@@ -49,15 +55,19 @@ import {
   streamTakealotSync,
   getTakealotTrends,
   triggerTakealotSync,
-  type TakealotAlert,
+  type TakealotAlertSortBy,
   type TakealotBreakdownGroup,
   type TakealotDateFilters,
   type TakealotOrder,
+  type TakealotOrderSortBy,
   type TakealotOrderRecord,
   type TakealotOverview,
-  type TakealotPageFilters,
+  type TakealotOfferSortBy,
+  type TakealotProductSortBy,
+  type TakealotTopOfferSortBy,
   type TakealotSale,
   type TakealotSyncStatus,
+  type TakealotWarehouseSortBy,
 } from '@/api/endpoints/takealot'
 import { getIntegrations, type Integration } from '@/api/endpoints/integrations'
 import { EChart } from '@/components/charts/EChart'
@@ -66,6 +76,7 @@ import { showError, showSuccess } from '@/components/feedback/notifications'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { getStoredCompany, getStoredUser } from '@/lib/auth'
 import { PageSizeControl } from '@/components/common/PageSizeControl'
+import { SearchableSelect, type SearchableSelectOption } from '@/components/common/SearchableSelect'
 import { formatCurrency, formatNumber, formatReportDate } from '@/lib/formatters'
 import { readTakealotCache, TAKEALOT_CACHE_TTL, writeTakealotCache } from './takealot-cache'
 import { TakealotDateRangePicker, type TakealotDateRange } from './components/TakealotDateRangePicker'
@@ -75,6 +86,7 @@ type Granularity = 'day' | 'week' | 'month'
 type Section = 'overview' | 'analytics' | 'products' | 'orders' | 'stock' | 'offers' | 'alerts'
 type ResourceMeta = { savedAt: number; stale: boolean; cached: boolean; loading?: boolean }
 type DashboardIdentity = { configured: boolean; companyId: string; userId: string; integrationId: string }
+type TableSort<K extends string = string> = { key: K; direction: 'asc' | 'desc' }
 
 interface ResourceState<T> extends ResourceMeta {
   key: string
@@ -86,6 +98,8 @@ interface ResourceState<T> extends ResourceMeta {
 const MotionCard = motion.create(Card.Root)
 const iso = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+const warehouseLabel = (warehouse: string) =>
+  ({ CPT: 'Cape Town (CPT)', JHB: 'Johannesburg (JHB)', DBN: 'Durban (DBN)' })[warehouse] ?? warehouse
 const lastThirtyDays = (): DateRange => {
   const to = new Date()
   const from = new Date(to)
@@ -116,6 +130,121 @@ const cacheKey = (identity: DashboardIdentity, section: string, parameters: obje
 const recordNumber = (value: Record<string, unknown> | undefined, key: string) =>
   typeof value?.[key] === 'number' && Number.isFinite(value[key]) ? (value[key] as number) : undefined
 const dateLabel = (value: string) => formatReportDate(value)
+const toggleTableSort = <K extends string>(current: TableSort<K>, key: K): TableSort<K> => ({
+  key,
+  direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+})
+function SortableColumnHeader<K extends string>({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  textAlign,
+  width,
+}: {
+  label: string
+  sortKey: K
+  sort: TableSort<K>
+  onSort: (sortKey: K) => void
+  textAlign?: 'start' | 'center' | 'end'
+  width?: string
+}) {
+  const active = sort.key === sortKey
+  const Icon = active ? (sort.direction === 'asc' ? ArrowUp : ArrowDown) : ArrowDownUp
+  return (
+    <Table.ColumnHeader
+      textAlign={textAlign}
+      w={width}
+      aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <Button
+        variant={active ? 'subtle' : 'ghost'}
+        size="xs"
+        fontWeight="semibold"
+        px="1.5"
+        py="1"
+        minH="7"
+        minW="0"
+        color={active ? 'blue.700' : 'fg'}
+        aria-label={`Sort by ${label}${active ? `, currently ${sort.direction}ending` : ''}`}
+        title={`Sort by ${label}${active ? ` (${sort.direction}ending)` : ''}`}
+        onClick={() => onSort(sortKey)}
+      >
+        <Flex align="center" gap="1.5" justify={textAlign === 'end' ? 'flex-end' : 'flex-start'}>
+          {label}
+          <Icon size={15} strokeWidth={active ? 2.5 : 2} aria-hidden="true" />
+        </Flex>
+      </Button>
+    </Table.ColumnHeader>
+  )
+}
+
+function ProductImage({ src, alt, size = 10 }: { src?: string | null; alt: string; size?: number }) {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [src])
+  return src && !failed ? (
+    <Image
+      src={src}
+      alt={alt}
+      boxSize={size}
+      objectFit="contain"
+      borderRadius="md"
+      borderWidth="1px"
+      borderColor="border"
+      bg="bg.panel"
+      flexShrink={0}
+      onError={() => setFailed(true)}
+    />
+  ) : (
+    <Flex
+      boxSize={size}
+      align="center"
+      justify="center"
+      borderRadius="md"
+      borderWidth="1px"
+      borderColor="border"
+      bg="bg.muted"
+      color="fg.muted"
+      flexShrink={0}
+      aria-label={`${alt} image unavailable`}
+    >
+      <Package size={Math.max(14, size * 1.4)} />
+    </Flex>
+  )
+}
+
+function WarehouseStockBadges({ cpt, jhb, dbn }: { cpt: number | null; jhb: number | null; dbn: number | null }) {
+  return (
+    <Flex gap="1.5" wrap="wrap" align="center">
+      <Badge colorPalette="yellow">Cape Town {formatNumber(cpt ?? 0)}</Badge>
+      <Badge colorPalette="blue">Johannesburg {formatNumber(jhb ?? 0)}</Badge>
+      <Badge bg="gray.900" color="white" _dark={{ bg: 'gray.700' }}>
+        Durban {formatNumber(dbn ?? 0)}
+      </Badge>
+    </Flex>
+  )
+}
+
+function DashboardSelect({
+  value,
+  onChange,
+  placeholder,
+  options,
+  width = '180px',
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+  options: SearchableSelectOption[]
+  width?: string
+}) {
+  return (
+    <Box minW="0" w={{ base: 'full', sm: width }}>
+      <SearchableSelect value={value} onChange={onChange} placeholder={placeholder} options={options} />
+    </Box>
+  )
+}
+
 const defaultResourceState = <T,>(key: string): ResourceState<T> => ({
   key,
   loading: false,
@@ -316,19 +445,24 @@ function SummaryGroupCard({
   secondary,
   detail,
   valueColor,
+  icon: Icon = BarChart3,
 }: {
   label: string
   value: string
   secondary: Array<{ label: string; value: string }>
   detail?: string
   valueColor?: string
+  icon?: LucideIcon
 }) {
   return (
     <Card.Root variant="outline" minW="0">
       <Card.Body>
-        <Text color="fg.muted" fontSize="sm">
-          {label}
-        </Text>
+        <Flex align="center" justify="space-between" gap="2">
+          <Text color="fg.muted" fontSize="sm">
+            {label}
+          </Text>
+          <Icon size={18} aria-hidden="true" />
+        </Flex>
         <Heading size="lg" mt="2" color={valueColor}>
           {value}
         </Heading>
@@ -388,6 +522,28 @@ function ChartCard({
   )
 }
 
+function donutOption(data: Array<{ name: string; value: number; color?: string }>, showLegend = true): EChartsOption {
+  return {
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: showLegend ? { bottom: 0, left: 'center' } : { show: false },
+    series: [
+      {
+        type: 'pie',
+        radius: ['45%', '72%'],
+        center: ['50%', showLegend ? '44%' : '50%'],
+        avoidLabelOverlap: true,
+        label: { show: false },
+        itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: 5 },
+        data: data.map((item) => ({
+          name: item.name,
+          value: item.value,
+          ...(item.color && { itemStyle: { color: item.color } }),
+        })),
+      },
+    ],
+  }
+}
+
 function ErrorPanel({ message, retry }: { message: string; retry: () => void }) {
   return (
     <Card.Root variant="outline" minW="0" w="full">
@@ -441,21 +597,355 @@ function ResourceNotice({
   )
 }
 
+function SkeletonEntrance({ children, delay = 0 }: { children: ReactNode; delay?: number }) {
+  const reducedMotion = useReducedMotion()
+  return (
+    <motion.div
+      initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: reducedMotion ? 0 : 0.24, delay: reducedMotion ? 0 : delay, ease: 'easeOut' }}
+      style={{ minWidth: 0 }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+function MetricSkeletonCard({ index }: { index: number }) {
+  return (
+    <SkeletonEntrance delay={index * 0.035}>
+      <Card.Root variant="outline" h="full" minH="132px">
+        <Card.Body p="4">
+          <Flex justify="space-between" align="start" gap="3">
+            <Stack flex="1" gap="3">
+              <Skeleton h="3" w="28" />
+              <Skeleton h="7" w="36" />
+              <Skeleton h="3" w="full" />
+            </Stack>
+            <Skeleton h="10" w="10" borderRadius="md" flexShrink="0" />
+          </Flex>
+        </Card.Body>
+      </Card.Root>
+    </SkeletonEntrance>
+  )
+}
+
 function LoadingCards({ count = 4 }: { count?: number }) {
   return (
-    <SimpleGrid columns={{ base: 1, sm: 2, xl: 4 }} gap="4" aria-label="Loading Takealot dashboard">
+    <SimpleGrid
+      columns={{ base: 1, sm: 2, xl: 4 }}
+      gap="4"
+      aria-label="Loading Takealot dashboard metrics"
+      aria-busy="true"
+      role="status"
+    >
       {Array.from({ length: count }, (_, index) => (
-        <Skeleton key={index} h="120px" borderRadius="md" />
+        <MetricSkeletonCard key={index} index={index} />
       ))}
     </SimpleGrid>
   )
 }
 
-function ChartSkeletons() {
+function ChartSkeletonCard({ height = '300px', kind = 'line' }: { height?: string; kind?: 'line' | 'donut' }) {
   return (
-    <SimpleGrid columns={{ base: 1, xl: 2 }} gap="4">
-      <Skeleton h="340px" borderRadius="md" />
-      <Skeleton h="340px" borderRadius="md" />
+    <SkeletonEntrance>
+      <Card.Root variant="outline" minW="0" h="full">
+        <Card.Header>
+          <Skeleton h="5" w="48" />
+          <Skeleton h="3" w="4/5" mt="2" />
+        </Card.Header>
+        <Card.Body pt="0">
+          {kind === 'donut' ? (
+            <Grid
+              templateColumns={{
+                base: 'minmax(96px, 0.8fr) minmax(0, 1.2fr)',
+                sm: 'minmax(120px, 0.8fr) minmax(0, 1.2fr)',
+              }}
+              alignItems="center"
+              gap="2"
+              h={height}
+            >
+              <Flex justify="center" align="center">
+                <Box
+                  w="36"
+                  h="36"
+                  borderWidth="12px"
+                  borderColor="bg.muted"
+                  borderRadius="full"
+                  display="grid"
+                  placeItems="center"
+                >
+                  <Skeleton w="10" h="10" borderRadius="full" />
+                </Box>
+              </Flex>
+              <Stack gap="3">
+                {Array.from({ length: 5 }, (_, index) => (
+                  <Skeleton key={index} h="3" w={index % 2 ? '4/5' : 'full'} />
+                ))}
+              </Stack>
+            </Grid>
+          ) : (
+            <Box h={height} position="relative" px="2" py="4">
+              <Stack h="full" justify="space-between" pb="6">
+                {Array.from({ length: 5 }, (_, index) => (
+                  <Skeleton key={index} h="1px" w="full" />
+                ))}
+              </Stack>
+              <Flex position="absolute" insetX="8" top="5" bottom="12" align="end" justify="space-around" gap="3">
+                {['34%', '52%', '43%', '75%', '60%', '88%', '49%', '68%'].map((bar, index) => (
+                  <Skeleton key={index} h={bar} w="full" borderRadius="sm" />
+                ))}
+              </Flex>
+            </Box>
+          )}
+        </Card.Body>
+      </Card.Root>
+    </SkeletonEntrance>
+  )
+}
+
+function ChartSkeletons({ count = 2 }: { count?: number }) {
+  return (
+    <SimpleGrid columns={{ base: 1, xl: 2 }} gap="4" aria-label="Loading Takealot charts" aria-busy="true">
+      {Array.from({ length: count }, (_, index) => (
+        <ChartSkeletonCard key={index} />
+      ))}
+    </SimpleGrid>
+  )
+}
+
+function FilterSkeletons({ fields = 3 }: { fields?: number }) {
+  return (
+    <Grid
+      templateColumns={{
+        base: 'minmax(0, 1fr)',
+        sm: 'repeat(2, minmax(0, 1fr))',
+        xl: `repeat(${fields + 1}, minmax(0, 1fr))`,
+      }}
+      gap="3"
+      aria-label="Loading filters"
+      aria-busy="true"
+    >
+      {Array.from({ length: fields }, (_, index) => (
+        <SkeletonEntrance key={index} delay={index * 0.035}>
+          <Stack gap="2">
+            <Skeleton h="3" w="20" />
+            <Skeleton h="10" w="full" borderRadius="md" />
+          </Stack>
+        </SkeletonEntrance>
+      ))}
+      <Flex align="end">
+        <Skeleton h="10" w={{ base: 'full', xl: '28' }} borderRadius="md" />
+      </Flex>
+    </Grid>
+  )
+}
+
+function TableSkeleton({ titleWidth = '40%', rows = 6 }: { titleWidth?: string; rows?: number }) {
+  return (
+    <SkeletonEntrance>
+      <Card.Root variant="outline" minW="0" w="full" aria-label="Loading table" aria-busy="true">
+        <Card.Header>
+          <Skeleton h="5" w={titleWidth} />
+        </Card.Header>
+        <Box px="4" pb="4">
+          <Grid
+            templateColumns={{
+              base: 'minmax(0, 2fr) repeat(2, minmax(0, 1fr))',
+              md: 'minmax(0, 2fr) repeat(4, minmax(0, 1fr))',
+            }}
+            gap="4"
+            py="3"
+            borderBottomWidth="1px"
+            borderColor="border"
+          >
+            <Skeleton h="3" w="24" />
+            {[0, 1, 2, 3].map((index) => (
+              <Skeleton key={index} h="3" w="16" display={index > 1 ? { base: 'none', md: 'block' } : 'block'} />
+            ))}
+          </Grid>
+          <Stack gap="0">
+            {Array.from({ length: rows }, (_, index) => (
+              <Grid
+                key={index}
+                templateColumns={{
+                  base: 'minmax(0, 2fr) repeat(2, minmax(0, 1fr))',
+                  md: 'minmax(0, 2fr) repeat(4, minmax(0, 1fr))',
+                }}
+                gap="4"
+                alignItems="center"
+                py="3"
+                borderBottomWidth="1px"
+                borderColor="border"
+              >
+                <Flex align="center" gap="3" minW="0">
+                  <Skeleton h="10" w="10" borderRadius="md" flexShrink="0" />
+                  <Stack gap="2" flex="1" minW="0">
+                    <Skeleton h="3" w={index % 2 ? '4/5' : 'full'} />
+                    <Skeleton h="2" w="3/5" />
+                  </Stack>
+                </Flex>
+                {[0, 1, 2, 3].map((cell) => (
+                  <Skeleton
+                    key={cell}
+                    h="3"
+                    w={cell % 2 ? '4/5' : '3/5'}
+                    justifySelf="end"
+                    display={cell > 1 ? { base: 'none', md: 'block' } : 'block'}
+                  />
+                ))}
+              </Grid>
+            ))}
+          </Stack>
+        </Box>
+      </Card.Root>
+    </SkeletonEntrance>
+  )
+}
+
+function SummarySkeleton({ titleWidth = '48%' }: { titleWidth?: string }) {
+  return (
+    <SkeletonEntrance>
+      <Card.Root variant="outline" minW="0" w="full">
+        <Card.Header>
+          <Skeleton h="5" w={titleWidth} />
+          <Skeleton h="3" w="40%" mt="2" />
+        </Card.Header>
+        <Card.Body pt="0">
+          <Grid templateColumns={{ base: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) 280px' }} alignItems="center" gap="4">
+            <Stack gap="4">
+              <SimpleGrid columns={{ base: 2, sm: 4 }} gap="2">
+                {Array.from({ length: 4 }, (_, index) => (
+                  <Stack key={index} p="3" gap="2" borderRadius="md" bg="bg.subtle">
+                    <Skeleton h="3" w="16" />
+                    <Skeleton h="5" w="12" />
+                    <Skeleton h="2" w="4/5" />
+                  </Stack>
+                ))}
+              </SimpleGrid>
+              <Stack gap="2">
+                <Skeleton h="3" w="full" />
+                <Skeleton h="3" w="4/5" />
+              </Stack>
+              <SimpleGrid columns={{ base: 1, sm: 3 }} gap="3">
+                {Array.from({ length: 3 }, (_, index) => (
+                  <Stack key={index} gap="2">
+                    <Skeleton h="3" w="24" />
+                    <Skeleton h="5" w="32" />
+                  </Stack>
+                ))}
+              </SimpleGrid>
+            </Stack>
+            <Flex justify="center" align="center" minH="220px">
+              <Box
+                w="40"
+                h="40"
+                borderWidth="16px"
+                borderColor="bg.muted"
+                borderRadius="full"
+                display="grid"
+                placeItems="center"
+              >
+                <Skeleton w="14" h="14" borderRadius="full" />
+              </Box>
+            </Flex>
+          </Grid>
+        </Card.Body>
+      </Card.Root>
+    </SkeletonEntrance>
+  )
+}
+
+function OverviewSkeleton() {
+  return (
+    <Stack gap="4" aria-label="Loading Takealot overview" aria-busy="true">
+      <LoadingCards count={16} />
+      <ChartSkeletons />
+      <LoadingCards count={4} />
+      <TableSkeleton titleWidth="32%" rows={5} />
+    </Stack>
+  )
+}
+
+function AnalyticsSkeleton() {
+  return (
+    <Stack gap="4" aria-label="Loading sales analytics" aria-busy="true">
+      <LoadingCards count={4} />
+      <ChartSkeletons />
+    </Stack>
+  )
+}
+
+function ProductPerformanceSkeleton() {
+  return (
+    <Stack gap="4" aria-label="Loading product performance" aria-busy="true">
+      <FilterSkeletons fields={2} />
+      <LoadingCards count={3} />
+      <ChartSkeletonCard />
+      <TableSkeleton titleWidth="36%" />
+    </Stack>
+  )
+}
+
+function OrdersSkeleton() {
+  return (
+    <Stack gap="4" aria-label="Loading orders" aria-busy="true">
+      <FilterSkeletons fields={3} />
+      <Grid templateColumns={{ base: 'minmax(0, 1fr)', lg: 'minmax(0, 3fr) minmax(0, 1fr)' }} gap="4">
+        <ChartSkeletonCard height="300px" />
+        <ChartSkeletonCard height="220px" kind="donut" />
+      </Grid>
+      <TableSkeleton titleWidth="28%" />
+    </Stack>
+  )
+}
+
+function StockSkeleton() {
+  return (
+    <Stack gap="4" aria-label="Loading stock health" aria-busy="true">
+      <LoadingCards count={4} />
+      <TableSkeleton titleWidth="34%" rows={4} />
+      <ChartSkeletons />
+    </Stack>
+  )
+}
+
+function OffersSkeleton() {
+  return (
+    <Stack gap="4" aria-label="Loading Takealot offers" aria-busy="true">
+      <FilterSkeletons fields={5} />
+      <TableSkeleton titleWidth="28%" />
+      <SummarySkeleton />
+    </Stack>
+  )
+}
+
+function AlertsSkeleton() {
+  return (
+    <Stack gap="4" aria-label="Loading Takealot alerts" aria-busy="true">
+      <FilterSkeletons fields={2} />
+      <TableSkeleton titleWidth="26%" />
+      <SummarySkeleton titleWidth="30%" />
+    </Stack>
+  )
+}
+
+function IntegrationSkeletons() {
+  return (
+    <SimpleGrid columns={{ base: 1, sm: 2 }} gap="4" aria-label="Loading Takealot connections" aria-busy="true">
+      {[0, 1].map((index) => (
+        <SkeletonEntrance key={index} delay={index * 0.05}>
+          <Card.Root variant="outline">
+            <Card.Body p="4">
+              <Stack gap="3">
+                <Skeleton h="5" w="2/5" />
+                <Skeleton h="3" w="4/5" />
+                <Skeleton h="10" w="full" borderRadius="md" />
+              </Stack>
+            </Card.Body>
+          </Card.Root>
+        </SkeletonEntrance>
+      ))}
     </SimpleGrid>
   )
 }
@@ -471,21 +961,33 @@ function OverviewPanel({
   refreshToken: number
   onMeta: (meta: ResourceMeta, refreshToken: number, outcome?: 'success' | 'error') => void
 }) {
-  const key = cacheKey(identity, 'overview')
+  const key = cacheKey(identity, 'overview-v2')
   const fetcher = useCallback(
     (signal: AbortSignal) => getTakealotDashboardOverview(identity.integrationId, signal),
     [identity.integrationId],
   )
-  const pricingKey = cacheKey(identity, 'pricing-sales-analytics')
+  const [topOfferSort, setTopOfferSort] = useState<TableSort<TakealotTopOfferSortBy>>({
+    key: 'reportedSalesUnits',
+    direction: 'desc',
+  })
+  const pricingFilters = useMemo(
+    () => ({ sortBy: topOfferSort.key, sortOrder: topOfferSort.direction }),
+    [topOfferSort],
+  )
+  const pricingKey = cacheKey(identity, 'pricing-sales-analytics', pricingFilters)
   const pricingFetcher = useCallback(
-    (signal: AbortSignal) => getTakealotPricingSalesAnalytics(identity.integrationId, signal),
-    [identity.integrationId],
+    (signal: AbortSignal) => getTakealotPricingSalesAnalytics(identity.integrationId, pricingFilters, signal),
+    [identity.integrationId, pricingFilters],
   )
   const resource = useCachedResource(enabled, key, fetcher, refreshToken, onMeta)
   const pricing = useCachedResource(enabled, pricingKey, pricingFetcher, refreshToken, onMeta)
   const data = resource.data
+  const topOfferRows = pricing.data?.topOffersByReportedSales ?? []
+  const onTopOfferSort = (key: TakealotTopOfferSortBy) => {
+    setTopOfferSort((current) => toggleTableSort(current, key))
+  }
 
-  if (resource.loading && !data) return <LoadingCards />
+  if (resource.loading && !data) return <OverviewSkeleton />
   if (!data && resource.error) return <ErrorPanel message={resource.error} retry={resource.refresh} />
   if (!data) return null
 
@@ -493,29 +995,66 @@ function OverviewPanel({
     <Stack gap="4">
       <ResourceNotice resource={resource} retry={resource.refresh} />
       <SimpleGrid columns={{ base: 1, sm: 2, xl: 4 }} gap="4">
-        <MetricCard label="Total offers" value={formatNumber(data.totalOffers)} icon={Package} />
-        <MetricCard label="Active listings" value={formatNumber(data.listingStatusCounts.active)} icon={Activity} />
         <MetricCard
-          label="Disabled listings"
-          value={formatNumber(data.listingStatusCounts.disabled)}
+          label="Total offers"
+          value={formatNumber(data.totalOffers)}
+          detail="Count of saved Takealot offers for this seller connection."
+          icon={Package}
+        />
+        <MetricCard
+          label="Buyable listings"
+          value={formatNumber(data.listingStatusCounts.buyable)}
+          detail="Offers currently reported as Buyable by Takealot."
+          icon={Activity}
+        />
+        <MetricCard
+          label="Not buyable"
+          value={formatNumber(data.listingStatusCounts.notBuyable)}
+          detail="Offers reported as Not Buyable by Takealot."
           icon={AlertCircle}
         />
-        <MetricCard label="Stock units" value={formatNumber(data.totalStock)} icon={Warehouse} />
-        <MetricCard label="Incoming units" value={formatNumber(data.totalIncomingStock)} icon={ShoppingCart} />
+        <MetricCard
+          label="Disabled by Takealot"
+          value={formatNumber(data.listingStatusCounts.disabledByTakealot)}
+          detail="Listings disabled by Takealot."
+          icon={AlertCircle}
+        />
+        <MetricCard
+          label="Disabled by seller"
+          value={formatNumber(data.listingStatusCounts.disabledBySeller)}
+          detail="Listings disabled by the seller."
+          icon={AlertCircle}
+        />
+        <MetricCard
+          label="Stock units"
+          value={formatNumber(data.totalStock)}
+          detail="CPT + JHB + DBN stock currently held by Takealot."
+          icon={Warehouse}
+        />
+        <MetricCard
+          label="Incoming units"
+          value={formatNumber(data.totalIncomingStock)}
+          detail="Sum of units currently on the way to Takealot warehouses."
+          icon={ShoppingCart}
+        />
         <MetricCard
           label="Inventory cost value"
           value={formatCurrency(data.inventoryCostValue)}
+          detail="Σ (warehouse stock × known unit cost); offers without cost are excluded."
           icon={CircleDollarSign}
         />
         <MetricCard
           label="Potential retail value"
           value={formatCurrency(data.potentialRetailInventoryValue)}
+          detail="Σ (warehouse stock × current selling price); an estimate, not sales revenue."
           icon={CircleDollarSign}
         />
         <MetricCard
           label="Potential gross profit"
           value={formatCurrency(data.potentialGrossProfit)}
+          detail="Σ (warehouse stock × (selling price − known unit cost)); excludes fees and uncosted items."
           icon={CircleDollarSign}
+          valueColor={data.potentialGrossProfit >= 0 ? 'green.fg' : 'fg.error'}
         />
         <MetricCard
           label="Potential gross margin"
@@ -524,13 +1063,67 @@ function OverviewPanel({
               ? 'Unavailable'
               : `${data.potentialGrossMarginPercent.toFixed(1)}%`
           }
+          detail="Potential gross profit ÷ potential retail value × 100."
           icon={ChartNoAxesCombined}
         />
-        <MetricCard label="Out of stock" value={formatNumber(data.outOfStockOffers)} icon={AlertCircle} />
-        <MetricCard label="Low stock" value={formatNumber(data.lowStockOffers)} icon={AlertCircle} />
-        <MetricCard label="Excess stock" value={formatNumber(data.excessStockOffers)} icon={Package} />
-        <MetricCard label="Missing cost" value={formatNumber(data.missingCostOffers)} icon={ReceiptText} />
-        <MetricCard label="Missing RRP" value={formatNumber(data.missingRrpOffers)} icon={ReceiptText} />
+        <MetricCard
+          label="Out of stock"
+          value={formatNumber(data.outOfStockOffers)}
+          detail="Offers with zero or fewer units across CPT, JHB, and DBN."
+          icon={AlertCircle}
+        />
+        <MetricCard
+          label="Low stock"
+          value={formatNumber(data.lowStockOffers)}
+          detail="Offers with positive stock at or below the configured low-stock threshold."
+          icon={AlertCircle}
+        />
+        <MetricCard
+          label="Excess stock"
+          value={formatNumber(data.excessStockOffers)}
+          detail="Offers with Takealot-reported excess stock above zero."
+          icon={Package}
+        />
+        <MetricCard
+          label="Missing cost"
+          value={formatNumber(data.missingCostOffers)}
+          detail="Offers with no usable unit cost from SKU parsing or catalog cost."
+          icon={ReceiptText}
+        />
+        <MetricCard
+          label="Missing RRP"
+          value={formatNumber(data.missingRrpOffers)}
+          detail="Offers with no recommended retail price recorded."
+          icon={ReceiptText}
+        />
+      </SimpleGrid>
+      <SimpleGrid columns={{ base: 1, xl: 2 }} gap="4">
+        <ChartCard
+          title="Listing status mix"
+          description="Share of saved offers by listing status."
+          icon={Activity}
+          height="280px"
+          option={donutOption([
+            { name: 'Buyable', value: data.listingStatusCounts.buyable, color: '#16a34a' },
+            { name: 'Not Buyable', value: data.listingStatusCounts.notBuyable, color: '#f59e0b' },
+            { name: 'Disabled by Takealot', value: data.listingStatusCounts.disabledByTakealot, color: '#dc2626' },
+            { name: 'Disabled by Seller', value: data.listingStatusCounts.disabledBySeller, color: '#2563eb' },
+            ...(data.listingStatusCounts.other > 0
+              ? [{ name: 'Other / unmapped', value: data.listingStatusCounts.other, color: '#64748b' }]
+              : []),
+          ])}
+        />
+        <ChartCard
+          title="Stock by warehouse"
+          description="Current synced units stored at each Takealot warehouse."
+          icon={Warehouse}
+          height="280px"
+          option={donutOption([
+            { name: 'Cape Town', value: data.stockByWarehouse.CPT, color: '#2563eb' },
+            { name: 'Johannesburg', value: data.stockByWarehouse.JHB, color: '#8b5cf6' },
+            { name: 'Durban', value: data.stockByWarehouse.DBN, color: '#14b8a6' },
+          ])}
+        />
       </SimpleGrid>
       {pricing.data && (
         <>
@@ -538,16 +1131,19 @@ function OverviewPanel({
             <MetricCard
               label="Offers below cost"
               value={formatNumber(pricing.data.pricing.sellingBelowCostOffers)}
+              detail="Offers where current selling price is less than known unit cost."
               icon={AlertCircle}
             />
             <MetricCard
               label="Offers with positive potential margin"
               value={formatNumber(pricing.data.pricing.positivePotentialMarginOffers)}
+              detail="Offers where selling price exceeds known unit cost."
               icon={CircleDollarSign}
             />
             <MetricCard
               label="Offers with negative potential margin"
               value={formatNumber(pricing.data.pricing.negativePotentialMarginOffers)}
+              detail="Offers where selling price is below known unit cost."
               icon={CircleDollarSign}
             />
             <MetricCard
@@ -561,30 +1157,104 @@ function OverviewPanel({
           </SimpleGrid>
           <Card.Root variant="outline">
             <Card.Header>
-              <Heading size="sm">Top offers by reported sales units</Heading>
+              <Flex align="center" gap="2">
+                <ShoppingCart size={17} aria-hidden="true" />
+                <Heading size="sm">Top offers by reported sales units</Heading>
+              </Flex>
               <Text fontSize="sm" color="fg.muted">
                 {pricing.data.salesSemantics}
               </Text>
             </Card.Header>
-            <Box overflowX="auto">
-              <Table.Root size="sm" variant="line">
+            <Stack display={{ base: 'flex', lg: 'none' }} gap="3" px="4" pb="4">
+              {topOfferRows.map((offer) => (
+                <Card.Root key={offer.offerId} variant="subtle">
+                  <Card.Body>
+                    <Flex gap="3" align="center">
+                      <ProductImage src={offer.imageUrl} alt={offer.title ?? offer.offerId} />
+                      <Box minW="0">
+                        <Text fontWeight="semibold" overflowWrap="anywhere">
+                          {offer.title || offer.offerId}
+                        </Text>
+                        <Text fontSize="xs" color="fg.muted">
+                          {offer.sku || 'SKU unavailable'} · {formatNumber(offer.reportedSalesUnits)} reported units
+                        </Text>
+                      </Box>
+                    </Flex>
+                    <SimpleGrid columns={2} gap="2" mt="3">
+                      <Text fontSize="sm">
+                        Selling price: {offer.sellingPrice === null ? '—' : formatCurrency(offer.sellingPrice)}
+                      </Text>
+                      <Text fontSize="sm">
+                        Unit cost: {offer.costPrice === null ? '—' : formatCurrency(offer.costPrice)}
+                      </Text>
+                      <Text
+                        fontSize="sm"
+                        color={
+                          offer.potentialGrossProfitPerUnit === null
+                            ? 'fg.muted'
+                            : offer.potentialGrossProfitPerUnit >= 0
+                              ? 'green.fg'
+                              : 'fg.error'
+                        }
+                      >
+                        Potential / unit:{' '}
+                        {offer.potentialGrossProfitPerUnit === null
+                          ? 'Unavailable'
+                          : formatCurrency(offer.potentialGrossProfitPerUnit)}
+                      </Text>
+                    </SimpleGrid>
+                  </Card.Body>
+                </Card.Root>
+              ))}
+            </Stack>
+            <Box display={{ base: 'none', lg: 'block' }} minW="0" w="full" overflow="hidden">
+              <Table.Root size="sm" variant="line" tableLayout="fixed" w="full">
                 <Table.Header>
                   <Table.Row>
-                    <Table.ColumnHeader>Offer</Table.ColumnHeader>
-                    <Table.ColumnHeader textAlign="end">Reported units</Table.ColumnHeader>
-                    <Table.ColumnHeader textAlign="end">Selling price</Table.ColumnHeader>
-                    <Table.ColumnHeader textAlign="end">Cost</Table.ColumnHeader>
-                    <Table.ColumnHeader textAlign="end">Potential profit / unit</Table.ColumnHeader>
+                    <SortableColumnHeader label="Offer" sortKey="title" sort={topOfferSort} onSort={onTopOfferSort} />
+                    <SortableColumnHeader
+                      label="Reported units"
+                      sortKey="reportedSalesUnits"
+                      sort={topOfferSort}
+                      onSort={onTopOfferSort}
+                      textAlign="end"
+                    />
+                    <SortableColumnHeader
+                      label="Selling price"
+                      sortKey="sellingPrice"
+                      sort={topOfferSort}
+                      onSort={onTopOfferSort}
+                      textAlign="end"
+                    />
+                    <SortableColumnHeader
+                      label="Cost"
+                      sortKey="costPrice"
+                      sort={topOfferSort}
+                      onSort={onTopOfferSort}
+                      textAlign="end"
+                    />
+                    <SortableColumnHeader
+                      label="Potential profit / unit"
+                      sortKey="potentialGrossProfitPerUnit"
+                      sort={topOfferSort}
+                      onSort={onTopOfferSort}
+                      textAlign="end"
+                    />
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
-                  {pricing.data.topOffersByReportedSales.map((offer) => (
+                  {topOfferRows.map((offer) => (
                     <Table.Row key={offer.offerId}>
                       <Table.Cell>
-                        {offer.title || offer.offerId}
-                        <Text fontSize="xs" color="fg.muted">
-                          {offer.sku || ''}
-                        </Text>
+                        <Flex align="center" gap="2" minW="0">
+                          <ProductImage src={offer.imageUrl} alt={offer.title ?? offer.offerId} size={9} />
+                          <Box minW="0" overflowWrap="anywhere">
+                            <Text fontWeight="medium">{offer.title || offer.offerId}</Text>
+                            <Text fontSize="xs" color="fg.muted">
+                              {offer.sku || 'SKU unavailable'}
+                            </Text>
+                          </Box>
+                        </Flex>
                       </Table.Cell>
                       <Table.Cell textAlign="end">{formatNumber(offer.reportedSalesUnits)}</Table.Cell>
                       <Table.Cell textAlign="end">
@@ -594,9 +1264,13 @@ function OverviewPanel({
                         {offer.costPrice === null ? '—' : formatCurrency(offer.costPrice)}
                       </Table.Cell>
                       <Table.Cell textAlign="end">
-                        {offer.potentialGrossProfitPerUnit === null
-                          ? 'Unavailable'
-                          : formatCurrency(offer.potentialGrossProfitPerUnit)}
+                        {offer.potentialGrossProfitPerUnit === null ? (
+                          'Unavailable'
+                        ) : (
+                          <Text color={offer.potentialGrossProfitPerUnit >= 0 ? 'green.fg' : 'fg.error'}>
+                            {formatCurrency(offer.potentialGrossProfitPerUnit)}
+                          </Text>
+                        )}
                       </Table.Cell>
                     </Table.Row>
                   ))}
@@ -799,12 +1473,7 @@ function AnalyticsPanel({
 
   const resourceError = trends.error || breakdown.error
   if (enabled && trends.loading && !trends.data && breakdown.loading && !breakdown.data) {
-    return (
-      <>
-        <ChartSkeletons />
-        <LoadingCards count={2} />
-      </>
-    )
+    return <AnalyticsSkeleton />
   }
   if (resourceError && !trends.data && !breakdown.data) {
     return (
@@ -832,8 +1501,8 @@ function AnalyticsPanel({
           }}
         />
       )}
-      {trends.loading && !trends.data && <ChartSkeletons />}
-      {breakdown.loading && !breakdown.data && <Skeleton h="320px" borderRadius="md" />}
+      {trends.loading && !trends.data && <ChartSkeletonCard height="320px" />}
+      {breakdown.loading && !breakdown.data && <ChartSkeletonCard height="320px" kind="donut" />}
       {points.length === 0 && !trends.loading && trends.data && (
         <Card.Root variant="outline">
           <Card.Body>
@@ -873,19 +1542,19 @@ function AnalyticsPanel({
         </>
       )}
       <Flex justify="flex-end">
-        <NativeSelect.Root size="sm" maxW="220px">
-          <NativeSelect.Field
-            aria-label="Sales breakdown dimension"
-            value={groupBy}
-            onChange={(event) => setGroupBy(event.target.value as TakealotBreakdownGroup)}
-          >
-            <option value="promotion">Promotion</option>
-            <option value="saleStatus">Sale status</option>
-            <option value="dc">Distribution centre</option>
-            <option value="customerDc">Customer distribution centre</option>
-            <option value="stockSourceRegion">Stock source region</option>
-          </NativeSelect.Field>
-        </NativeSelect.Root>
+        <DashboardSelect
+          value={groupBy}
+          onChange={(value) => setGroupBy(value as TakealotBreakdownGroup)}
+          placeholder="Sales breakdown dimension"
+          width="220px"
+          options={[
+            { value: 'promotion', label: 'Promotion' },
+            { value: 'saleStatus', label: 'Sale status' },
+            { value: 'dc', label: 'Distribution centre' },
+            { value: 'customerDc', label: 'Customer distribution centre' },
+            { value: 'stockSourceRegion', label: 'Stock source region' },
+          ]}
+        />
       </Flex>
       {breakdown.data && breakdownPoints.length === 0 ? (
         <Card.Root variant="outline">
@@ -923,7 +1592,7 @@ function ProductPanel({
   refreshToken: number
   onMeta: (meta: ResourceMeta, refreshToken: number, outcome?: 'success' | 'error') => void
 }) {
-  const sortBy: TakealotPageFilters['sortBy'] = 'revenue'
+  const [sortBy, setSortBy] = useState<TakealotProductSortBy>('revenue')
   const [order, setOrder] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
@@ -943,6 +1612,15 @@ function ProductPanel({
   const resource = useCachedResource(enabled, key, fetcher, refreshToken, onMeta)
   const productData = resource.data
   const products = productData?.products ?? []
+  const productSort: TableSort<TakealotProductSortBy> = { key: sortBy, direction: order }
+  const sortProductsBy = (key: TakealotProductSortBy) => {
+    if (sortBy === key) setOrder((current) => (current === 'asc' ? 'desc' : 'asc'))
+    else {
+      setSortBy(key)
+      setOrder('desc')
+    }
+    setPage(1)
+  }
   useEffect(() => {
     setPage(1)
   }, [range.from, range.to])
@@ -1078,13 +1756,7 @@ function ProductPanel({
       ...(draftTitle.trim() && { productTitle: draftTitle.trim() }),
     })
   }
-  if (resource.loading && !resource.data)
-    return (
-      <>
-        <LoadingCards count={3} />
-        <ChartSkeletons />
-      </>
-    )
+  if (resource.loading && !resource.data) return <ProductPerformanceSkeleton />
   if (!resource.data && resource.error) return <ErrorPanel message={resource.error} retry={resource.refresh} />
   return (
     <Stack gap="4">
@@ -1117,7 +1789,7 @@ function ProductPanel({
           variant="outline"
           onClick={() => {
             setPage(1)
-            setOrder(order === 'desc' ? 'asc' : 'desc')
+            setOrder((current) => (current === 'desc' ? 'asc' : 'desc'))
           }}
         >
           {order === 'desc' ? 'Highest first' : 'Lowest first'}
@@ -1136,6 +1808,8 @@ function ProductPanel({
               label="Total revenue"
               value={formatCurrency(productData.summary.revenue)}
               secondary={[{ label: 'Average product price', value: formatCurrency(productData.summary.averagePrice) }]}
+              detail={productData.revenueDefinition}
+              icon={CircleDollarSign}
             />
             <SummaryGroupCard
               label="Total orders"
@@ -1144,6 +1818,8 @@ function ProductPanel({
                 { label: 'Units sold', value: formatNumber(productData.summary.units) },
                 { label: 'Average units per order', value: formatNumber(productData.summary.unitsPerOrder) },
               ]}
+              detail="Distinct order IDs, units sold, and units ÷ orders."
+              icon={ShoppingCart}
             />
             <SummaryGroupCard
               label="Total Takealot fees"
@@ -1161,6 +1837,7 @@ function ProductPanel({
               ]}
               detail="Charges deducted by Takealot."
               valueColor="fg.error"
+              icon={ReceiptText}
             />
           </SimpleGrid>
           <Card.Root variant="outline">
@@ -1231,8 +1908,11 @@ function ProductPanel({
           />
           <Card.Root variant="outline">
             <Card.Header>
-              <Flex justify="space-between" align="center">
-                <Card.Title>Products</Card.Title>
+              <Flex justify="space-between" align="center" gap="2">
+                <Flex align="center" gap="2">
+                  <Package size={17} aria-hidden="true" />
+                  <Card.Title>Products</Card.Title>
+                </Flex>
                 <Badge variant="subtle">{formatNumber(productData.pagination.total)} products</Badge>
               </Flex>
             </Card.Header>
@@ -1241,14 +1921,17 @@ function ProductPanel({
                 return (
                   <Card.Root key={`${product.sku ?? 'product'}-${product.tsin ?? index}`} variant="subtle">
                     <Card.Body gap="3">
-                      <Box minW="0">
-                        <Text fontWeight="semibold" overflowWrap="anywhere">
-                          {product.title ?? 'Untitled product'}
-                        </Text>
-                        <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
-                          SKU {product.sku ?? '—'} · TSIN {product.tsin === undefined ? '—' : String(product.tsin)}
-                        </Text>
-                      </Box>
+                      <Flex gap="3" align="center">
+                        <ProductImage src={product.imageUrl} alt={product.title ?? product.sku ?? 'Product'} />
+                        <Box minW="0">
+                          <Text fontWeight="semibold" overflowWrap="anywhere">
+                            {product.title ?? 'Untitled product'}
+                          </Text>
+                          <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                            SKU {product.sku ?? '—'} · TSIN {product.tsin === undefined ? '—' : String(product.tsin)}
+                          </Text>
+                        </Box>
+                      </Flex>
                       <SimpleGrid columns={2} gap="3">
                         <Box>
                           <Text fontSize="xs" color="fg.muted">
@@ -1319,22 +2002,42 @@ function ProductPanel({
               <Table.Root size="sm" tableLayout="fixed" w="full">
                 <Table.Header>
                   <Table.Row>
-                    <Table.ColumnHeader w="27%">Product</Table.ColumnHeader>
-                    <Table.ColumnHeader w="16%" textAlign="end">
-                      Sales value
-                    </Table.ColumnHeader>
-                    <Table.ColumnHeader w="13%" textAlign="end">
-                      Total fee
-                    </Table.ColumnHeader>
-                    <Table.ColumnHeader w="14%" textAlign="end">
-                      Total cost
-                    </Table.ColumnHeader>
-                    <Table.ColumnHeader w="16%" textAlign="end">
-                      Profit / loss
-                    </Table.ColumnHeader>
-                    <Table.ColumnHeader w="14%" textAlign="end">
-                      Orders
-                    </Table.ColumnHeader>
+                    <SortableColumnHeader label="Product" sortKey="title" sort={productSort} onSort={sortProductsBy} />
+                    <SortableColumnHeader
+                      label="Sales value"
+                      sortKey="revenue"
+                      sort={productSort}
+                      onSort={sortProductsBy}
+                      textAlign="end"
+                    />
+                    <SortableColumnHeader
+                      label="Total fee"
+                      sortKey="totalFee"
+                      sort={productSort}
+                      onSort={sortProductsBy}
+                      textAlign="end"
+                    />
+                    <SortableColumnHeader
+                      label="Total cost"
+                      sortKey="totalCost"
+                      sort={productSort}
+                      onSort={sortProductsBy}
+                      textAlign="end"
+                    />
+                    <SortableColumnHeader
+                      label="Profit / loss"
+                      sortKey="profit"
+                      sort={productSort}
+                      onSort={sortProductsBy}
+                      textAlign="end"
+                    />
+                    <SortableColumnHeader
+                      label="Orders"
+                      sortKey="orders"
+                      sort={productSort}
+                      onSort={sortProductsBy}
+                      textAlign="end"
+                    />
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
@@ -1342,10 +2045,22 @@ function ProductPanel({
                     return (
                       <Table.Row key={`${product.sku ?? 'product'}-${product.tsin ?? index}`}>
                         <Table.Cell overflowWrap="anywhere">
-                          <Text fontWeight="medium">{product.title ?? 'Untitled product'}</Text>
-                          <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
-                            SKU {product.sku ?? '—'} · TSIN {product.tsin === undefined ? '—' : String(product.tsin)}
-                          </Text>
+                          <Flex align="center" gap="2" minW="0">
+                            <ProductImage
+                              src={product.imageUrl}
+                              alt={product.title ?? product.sku ?? 'Product'}
+                              size={9}
+                            />
+                            <Box minW="0">
+                              <Text fontWeight="medium" overflowWrap="anywhere">
+                                {product.title ?? 'Untitled product'}
+                              </Text>
+                              <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                                SKU {product.sku ?? '—'} · TSIN{' '}
+                                {product.tsin === undefined ? '—' : String(product.tsin)}
+                              </Text>
+                            </Box>
+                          </Flex>
                         </Table.Cell>
                         <Table.Cell textAlign="end" whiteSpace="nowrap">
                           <Text color="blue.600">{formatCurrency(product.revenue)}</Text>
@@ -1452,6 +2167,7 @@ type OrderDisplayRow = {
   date?: string
   sku?: string
   title?: string
+  imageUrl?: string | null
   quantity?: number
   price?: number
   status?: string | boolean
@@ -1469,6 +2185,11 @@ function normalizeOrders(orders: TakealotOrderRecord[]): OrderDisplayRow[] {
         date: order.date_authed,
         sku: item.merchant_sku,
         title: item.title,
+        imageUrl: item.image_url ?? null,
+        quantity: item.quantity,
+        price: item.selling_price,
+        status: item.sale_status,
+        dc: item.dc,
       }))
     }
     const sale: TakealotSale = record
@@ -1480,6 +2201,7 @@ function normalizeOrders(orders: TakealotOrderRecord[]): OrderDisplayRow[] {
         date: sale.order_date,
         sku: sale.sku,
         title: sale.product_title,
+        imageUrl: sale.image_url ?? null,
         quantity: sale.quantity,
         price: sale.selling_price,
         status: sale.sale_status,
@@ -1506,19 +2228,26 @@ function OrdersPanel({
   const [draftSku, setDraftSku] = useState('')
   const [draftTitle, setDraftTitle] = useState('')
   const [draftOrderId, setDraftOrderId] = useState('')
+  const [hiddenOrderStatuses, setHiddenOrderStatuses] = useState<Set<string>>(() => new Set())
   const [filter, setFilter] = useState<{ sku?: string; productTitle?: string; orderId?: number }>({})
   const [limit, setLimit] = useState(10)
+  const [orderSort, setOrderSort] = useState<TableSort<TakealotOrderSortBy>>({
+    key: 'date',
+    direction: 'desc',
+  })
   const filters = useMemo(
     () => ({
       ...range,
       ...filter,
       page,
       limit,
+      sortBy: orderSort.key,
+      sortOrder: orderSort.direction,
     }),
-    [range.from, range.to, filter, page, limit],
+    [range.from, range.to, filter, page, limit, orderSort],
   )
   const requestKey = JSON.stringify(filters)
-  const key = cacheKey(identity, 'orders', filters)
+  const key = cacheKey(identity, 'orders-v2', filters)
   const fetcher = useCallback(
     (signal: AbortSignal) => getTakealotOrders(identity.integrationId, filters, signal),
     [identity.integrationId, requestKey],
@@ -1526,6 +2255,60 @@ function OrdersPanel({
   const resource = useCachedResource(enabled, key, fetcher, refreshToken, onMeta)
   const ordersData = resource.data
   const rows = useMemo(() => normalizeOrders(ordersData?.orders ?? []), [ordersData])
+  const sortedRows = rows
+  const sortOrdersBy = (key: TakealotOrderSortBy) => {
+    setOrderSort((current) => toggleTableSort(current, key))
+    setPage(1)
+  }
+  const orderTrend = ordersData?.analytics.trend ?? []
+  const orderTrendOption: EChartsOption = useMemo(
+    () => ({
+      tooltip: { trigger: 'axis' },
+      legend: { bottom: 0 },
+      grid: { left: 72, right: 68, top: 24, bottom: 55 },
+      xAxis: {
+        type: 'category',
+        data: orderTrend.map((point) => point.date),
+        axisLabel: { formatter: (value: string) => dateLabel(value) },
+      },
+      yAxis: [
+        {
+          type: 'value',
+          name: 'Sales value',
+          axisLabel: { formatter: (value: number) => formatCurrency(Number(value)) },
+        },
+        { type: 'value', name: 'Units', axisLabel: { formatter: (value: number) => formatNumber(Number(value)) } },
+      ],
+      series: [
+        {
+          name: 'Sales value',
+          type: 'line',
+          smooth: true,
+          yAxisIndex: 0,
+          data: orderTrend.map((point) => point.revenue),
+        },
+        { name: 'Units', type: 'line', smooth: true, yAxisIndex: 1, data: orderTrend.map((point) => point.units) },
+      ],
+    }),
+    [orderTrend],
+  )
+  const orderStatusCounts = ordersData?.analytics.statusCounts ?? []
+  const statusPalette = [
+    '#5470c6',
+    '#91cc75',
+    '#fac858',
+    '#ee6666',
+    '#73c0de',
+    '#3ba272',
+    '#fc8452',
+    '#9a60b4',
+    '#ea7ccc',
+  ]
+  const orderStatusChartData = orderStatusCounts.map((item, index) => ({
+    ...item,
+    color: statusPalette[index % statusPalette.length],
+  }))
+  const visibleOrderStatusChartData = orderStatusChartData.filter((item) => !hiddenOrderStatuses.has(item.name))
   useEffect(() => {
     setPage(1)
   }, [range.from, range.to])
@@ -1543,7 +2326,7 @@ function OrdersPanel({
     })
   }
 
-  if (resource.loading && !resource.data) return <Skeleton h="360px" borderRadius="md" />
+  if (resource.loading && !resource.data) return <OrdersSkeleton />
   if (!resource.data && resource.error) return <ErrorPanel message={resource.error} retry={resource.refresh} />
   return (
     <Stack gap="4">
@@ -1588,6 +2371,121 @@ function OrdersPanel({
           Apply filters
         </Button>
       </Flex>
+      {(orderTrend.length > 0 || orderStatusCounts.length > 0) && (
+        <Grid
+          templateColumns={{
+            base: 'minmax(0, 1fr)',
+            lg:
+              orderTrend.length > 0 && orderStatusCounts.length > 0
+                ? 'minmax(0, 3fr) minmax(0, 1fr)'
+                : 'minmax(0, 1fr)',
+          }}
+          gap="4"
+          alignItems="stretch"
+        >
+          {orderTrend.length > 0 && (
+            <ChartCard
+              title="Sales value and units for selected range"
+              description={`Daily totals for all matching sale items from ${formatReportDate(range.from)} to ${formatReportDate(range.to)}. The chart is not limited to the current table page.`}
+              option={orderTrendOption}
+              icon={Activity}
+            />
+          )}
+          {orderStatusCounts.length > 0 && (
+            <MotionCard variant="outline">
+              <Card.Header>
+                <Flex align="center" gap="2">
+                  <ReceiptText size={17} aria-hidden="true" />
+                  <Card.Title>Order status mix for selected range</Card.Title>
+                </Flex>
+                <Card.Description>
+                  Click a status to show or hide its slice. Counts cover all matching sale items in the selected date
+                  range, not only the visible table page.
+                </Card.Description>
+              </Card.Header>
+              <Card.Body>
+                <Grid
+                  templateColumns={{
+                    base: 'minmax(96px, 0.8fr) minmax(0, 1.2fr)',
+                    sm: 'minmax(120px, 0.8fr) minmax(0, 1.2fr)',
+                  }}
+                  alignItems="center"
+                  gap="2"
+                >
+                  {visibleOrderStatusChartData.length > 0 ? (
+                    <EChart
+                      option={donutOption(visibleOrderStatusChartData, false)}
+                      height="220px"
+                      ariaLabel="Visible order status mix for all matching sale items in the selected range"
+                    />
+                  ) : (
+                    <Flex h="220px" align="center" justify="center" textAlign="center" px="3">
+                      <Text fontSize="xs" color="fg.muted">
+                        All statuses are hidden. Select a legend item to show it.
+                      </Text>
+                    </Flex>
+                  )}
+                  <Stack gap="2" maxH="220px" overflowY="auto" minW="0">
+                    {orderStatusChartData.map((item) => (
+                      <Button
+                        key={item.name}
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        w="full"
+                        minW="0"
+                        h="auto"
+                        minH="8"
+                        justifyContent="start"
+                        textAlign="left"
+                        whiteSpace="normal"
+                        px="2"
+                        py="1"
+                        opacity={hiddenOrderStatuses.has(item.name) ? 0.55 : 1}
+                        aria-pressed={!hiddenOrderStatuses.has(item.name)}
+                        aria-label={`${hiddenOrderStatuses.has(item.name) ? 'Show' : 'Hide'} ${item.name}, ${formatNumber(item.value)} items`}
+                        onClick={() =>
+                          setHiddenOrderStatuses((current) => {
+                            const next = new Set(current)
+                            if (next.has(item.name)) next.delete(item.name)
+                            else next.add(item.name)
+                            return next
+                          })
+                        }
+                      >
+                        <Flex align="start" gap="2" w="full" minW="0">
+                          <Box
+                            w="2.5"
+                            h="2.5"
+                            mt="1"
+                            borderRadius="sm"
+                            bg={item.color}
+                            flexShrink="0"
+                            aria-hidden="true"
+                          />
+                          <Text
+                            fontSize="xs"
+                            lineHeight="short"
+                            overflowWrap="anywhere"
+                            minW="0"
+                            flex="1"
+                            textDecoration={hiddenOrderStatuses.has(item.name) ? 'line-through' : undefined}
+                          >
+                            {item.name}
+                          </Text>
+                          <Text fontSize="xs" fontWeight="medium" flexShrink="0">
+                            {formatNumber(item.value)}
+                          </Text>
+                        </Flex>
+                      </Button>
+                    ))}
+                  </Stack>
+                </Grid>
+              </Card.Body>
+            </MotionCard>
+          )}
+        </Grid>
+      )}
       {!ordersData || rows.length === 0 ? (
         <Card.Root variant="outline">
           <Card.Body>
@@ -1600,18 +2498,21 @@ function OrdersPanel({
             <Card.Title>Orders and sale items</Card.Title>
           </Card.Header>
           <Stack display={{ base: 'flex', lg: 'none' }} gap="3" px="4" pb="4">
-            {rows.map((row) => (
+            {sortedRows.map((row) => (
               <Card.Root key={row.key} variant="subtle">
                 <Card.Body gap="3">
                   <Flex justify="space-between" align="start" gap="3">
-                    <Box minW="0">
-                      <Text fontWeight="semibold" overflowWrap="anywhere">
-                        {row.title ?? 'Untitled product'}
-                      </Text>
-                      <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
-                        SKU {row.sku ?? '—'}
-                      </Text>
-                    </Box>
+                    <Flex gap="3" minW="0" align="center">
+                      <ProductImage src={row.imageUrl} alt={row.title ?? row.sku ?? 'Product'} />
+                      <Box minW="0">
+                        <Text fontWeight="semibold" overflowWrap="anywhere">
+                          {row.title ?? 'Untitled product'}
+                        </Text>
+                        <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                          SKU {row.sku ?? '—'}
+                        </Text>
+                      </Box>
+                    </Flex>
                     <Text fontSize="xs" color="fg.muted" flexShrink="0">
                       {row.date ? formatReportDate(row.date) : '—'}
                     </Text>
@@ -1654,31 +2555,44 @@ function OrdersPanel({
             <Table.Root size="sm" tableLayout="fixed" w="full">
               <Table.Header>
                 <Table.Row>
-                  <Table.ColumnHeader w="17%">Order / item</Table.ColumnHeader>
-                  <Table.ColumnHeader w="13%">Date</Table.ColumnHeader>
-                  <Table.ColumnHeader w="30%">Product / SKU</Table.ColumnHeader>
-                  <Table.ColumnHeader w="9%" textAlign="end">
-                    Quantity
-                  </Table.ColumnHeader>
-                  <Table.ColumnHeader w="13%" textAlign="end">
-                    Selling price
-                  </Table.ColumnHeader>
-                  <Table.ColumnHeader w="10%">Status</Table.ColumnHeader>
-                  <Table.ColumnHeader w="8%">DC</Table.ColumnHeader>
+                  <SortableColumnHeader label="Order / item" sortKey="orderId" sort={orderSort} onSort={sortOrdersBy} />
+                  <SortableColumnHeader label="Date" sortKey="date" sort={orderSort} onSort={sortOrdersBy} />
+                  <SortableColumnHeader label="Product / SKU" sortKey="title" sort={orderSort} onSort={sortOrdersBy} />
+                  <SortableColumnHeader
+                    label="Quantity"
+                    sortKey="quantity"
+                    sort={orderSort}
+                    onSort={sortOrdersBy}
+                    textAlign="end"
+                  />
+                  <SortableColumnHeader
+                    label="Selling price"
+                    sortKey="price"
+                    sort={orderSort}
+                    onSort={sortOrdersBy}
+                    textAlign="end"
+                  />
+                  <SortableColumnHeader label="Status" sortKey="status" sort={orderSort} onSort={sortOrdersBy} />
+                  <SortableColumnHeader label="DC" sortKey="dc" sort={orderSort} onSort={sortOrdersBy} />
                 </Table.Row>
               </Table.Header>
               <Table.Body>
-                {rows.map((row) => (
+                {sortedRows.map((row) => (
                   <Table.Row key={row.key}>
                     <Table.Cell whiteSpace="nowrap">
                       {String(row.orderId)} / {row.itemId === undefined ? '—' : String(row.itemId)}
                     </Table.Cell>
                     <Table.Cell whiteSpace="nowrap">{row.date ? formatReportDate(row.date) : '—'}</Table.Cell>
                     <Table.Cell overflowWrap="anywhere">
-                      <Text>{row.title ?? '—'}</Text>
-                      <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
-                        SKU {row.sku ?? '—'}
-                      </Text>
+                      <Flex gap="2" align="center" minW="0">
+                        <ProductImage src={row.imageUrl} alt={row.title ?? row.sku ?? 'Product'} size={9} />
+                        <Box minW="0">
+                          <Text overflowWrap="anywhere">{row.title ?? '—'}</Text>
+                          <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                            SKU {row.sku ?? '—'}
+                          </Text>
+                        </Box>
+                      </Flex>
                     </Table.Cell>
                     <Table.Cell textAlign="end" whiteSpace="nowrap">
                       {row.quantity === undefined ? '—' : formatNumber(row.quantity)}
@@ -1748,9 +2662,9 @@ function OffersPanel({
   const [search, setSearch] = useState('')
   const [warehouse, setWarehouse] = useState<'CPT' | 'JHB' | 'DBN' | 'ALL'>('ALL')
   const [stockState, setStockState] = useState<'in_stock' | 'out_of_stock' | 'low_stock' | 'all'>('all')
-  const [costState, setCostState] = useState<'known' | 'missing' | ''>('')
+  const [costState, setCostState] = useState<'known' | 'missing' | 'all'>('all')
   const [marginState, setMarginState] = useState<'positive' | 'negative' | 'zero' | 'all'>('all')
-  const [sortBy, setSortBy] = useState('title')
+  const [sortBy, setSortBy] = useState<TakealotOfferSortBy>('title')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
@@ -1761,7 +2675,7 @@ function OffersPanel({
       ...(search.trim() ? { search: search.trim() } : {}),
       warehouse,
       stockState,
-      ...(costState ? { costState } : {}),
+      ...(costState !== 'all' ? { costState } : {}),
       marginState,
       sortBy,
       sortOrder,
@@ -1769,22 +2683,52 @@ function OffersPanel({
     [page, pageSize, search, warehouse, stockState, costState, marginState, sortBy, sortOrder],
   )
   const requestKey = JSON.stringify(filters)
-  const key = cacheKey(identity, 'offers', filters)
+  const key = cacheKey(identity, 'offers-v2', filters)
   const fetcher = useCallback(
     (signal: AbortSignal) => getTakealotOffers(identity.integrationId, filters, signal),
     [identity.integrationId, requestKey],
   )
   const resource = useCachedResource(enabled, key, fetcher, refreshToken, onMeta)
   const data = resource.data
+  const offerRows = data?.items ?? []
+  const offerTableSort: TableSort<TakealotOfferSortBy> = { key: sortBy, direction: sortOrder }
+  const sortOfferBy = (key: TakealotOfferSortBy) => {
+    setSortOrder((current) => (sortBy === key ? (current === 'asc' ? 'desc' : 'asc') : 'asc'))
+    setSortBy(key)
+    setPage(1)
+  }
+  const accountSummary = data?.summary
+  const activeFilterCount =
+    Number(search.trim().length > 0) +
+    Number(warehouse !== 'ALL') +
+    Number(stockState !== 'all') +
+    Number(costState !== 'all') +
+    Number(marginState !== 'all')
+  const clearFilters = () => {
+    setSearch('')
+    setWarehouse('ALL')
+    setStockState('all')
+    setCostState('all')
+    setMarginState('all')
+    setPage(1)
+  }
 
-  if (resource.loading && !data) return <LoadingCards />
+  if (resource.loading && !data) return <OffersSkeleton />
   if (!data && resource.error) return <ErrorPanel message={resource.error} retry={resource.refresh} />
 
   return (
     <Stack gap="4">
       <ResourceNotice resource={resource} retry={resource.refresh} />
-      <Flex gap="3" wrap="wrap" align="end">
-        <Box flex="1" minW="220px">
+      <Grid
+        templateColumns={{
+          base: 'minmax(0, 1fr)',
+          sm: 'repeat(2, minmax(0, 1fr))',
+          xl: 'minmax(280px, 2fr) repeat(4, minmax(160px, 1fr))',
+        }}
+        gap="3"
+        alignItems="end"
+      >
+        <Box minW="0">
           <Text fontSize="xs" mb="1" color="fg.muted">
             Search offers
           </Text>
@@ -1797,192 +2741,385 @@ function OffersPanel({
             placeholder="Title, SKU, offer ID, or TSIN"
           />
         </Box>
-        <NativeSelect.Root size="sm" maxW="150px">
-          <NativeSelect.Field
-            aria-label="Warehouse filter"
-            value={warehouse}
-            onChange={(event) => {
-              setWarehouse(event.target.value as typeof warehouse)
-              setPage(1)
-            }}
-          >
-            <option value="ALL">All warehouses</option>
-            <option value="CPT">CPT</option>
-            <option value="JHB">JHB</option>
-            <option value="DBN">DBN</option>
-          </NativeSelect.Field>
-        </NativeSelect.Root>
-        <NativeSelect.Root size="sm" maxW="155px">
-          <NativeSelect.Field
-            aria-label="Stock filter"
-            value={stockState}
-            onChange={(event) => {
-              setStockState(event.target.value as typeof stockState)
-              setPage(1)
-            }}
-          >
-            <option value="all">All stock</option>
-            <option value="in_stock">In stock</option>
-            <option value="low_stock">Low stock</option>
-            <option value="out_of_stock">Out of stock</option>
-          </NativeSelect.Field>
-        </NativeSelect.Root>
-        <NativeSelect.Root size="sm" maxW="150px">
-          <NativeSelect.Field
-            aria-label="Cost filter"
-            value={costState}
-            onChange={(event) => {
-              setCostState(event.target.value as typeof costState)
-              setPage(1)
-            }}
-          >
-            <option value="">All costs</option>
-            <option value="known">Cost known</option>
-            <option value="missing">Cost missing</option>
-          </NativeSelect.Field>
-        </NativeSelect.Root>
-        <NativeSelect.Root size="sm" maxW="160px">
-          <NativeSelect.Field
-            aria-label="Margin filter"
-            value={marginState}
-            onChange={(event) => {
-              setMarginState(event.target.value as typeof marginState)
-              setPage(1)
-            }}
-          >
-            <option value="all">All margins</option>
-            <option value="positive">Positive</option>
-            <option value="negative">Negative</option>
-            <option value="zero">Zero</option>
-          </NativeSelect.Field>
-        </NativeSelect.Root>
-        <NativeSelect.Root size="sm" maxW="155px">
-          <NativeSelect.Field
-            aria-label="Offer sort"
-            value={sortBy}
-            onChange={(event) => {
-              setSortBy(event.target.value)
-              setPage(1)
-            }}
-          >
-            <option value="title">Product name</option>
-            <option value="sku">SKU</option>
-            <option value="sellingPrice">Selling price</option>
-            <option value="costPrice">Cost</option>
-            <option value="totalStock">Total stock</option>
-          </NativeSelect.Field>
-        </NativeSelect.Root>
-        <NativeSelect.Root size="sm" maxW="120px">
-          <NativeSelect.Field
-            aria-label="Sort order"
-            value={sortOrder}
-            onChange={(event) => {
-              setSortOrder(event.target.value as typeof sortOrder)
-              setPage(1)
-            }}
-          >
-            <option value="asc">Ascending</option>
-            <option value="desc">Descending</option>
-          </NativeSelect.Field>
-        </NativeSelect.Root>
+        <DashboardSelect
+          value={warehouse}
+          onChange={(value) => {
+            setWarehouse(value ? (value as typeof warehouse) : 'ALL')
+            setPage(1)
+          }}
+          placeholder="Warehouse filter"
+          width="full"
+          options={[
+            { value: 'ALL', label: 'All warehouses' },
+            { value: 'CPT', label: 'Cape Town (CPT)' },
+            { value: 'JHB', label: 'Johannesburg (JHB)' },
+            { value: 'DBN', label: 'Durban (DBN)' },
+          ]}
+        />
+        <DashboardSelect
+          value={stockState}
+          onChange={(value) => {
+            setStockState((value || 'all') as typeof stockState)
+            setPage(1)
+          }}
+          placeholder="Stock filter"
+          width="full"
+          options={[
+            { value: 'all', label: 'All stock' },
+            { value: 'in_stock', label: 'In stock' },
+            { value: 'low_stock', label: 'Low stock' },
+            { value: 'out_of_stock', label: 'Out of stock' },
+          ]}
+        />
+        <DashboardSelect
+          value={costState}
+          onChange={(value) => {
+            setCostState((value || 'all') as typeof costState)
+            setPage(1)
+          }}
+          placeholder="Cost filter"
+          width="full"
+          options={[
+            { value: 'all', label: 'All costs' },
+            { value: 'known', label: 'Cost known' },
+            { value: 'missing', label: 'Cost missing' },
+          ]}
+        />
+        <DashboardSelect
+          value={marginState}
+          onChange={(value) => {
+            setMarginState((value || 'all') as typeof marginState)
+            setPage(1)
+          }}
+          placeholder="Margin filter"
+          width="full"
+          options={[
+            { value: 'all', label: 'All margins' },
+            { value: 'positive', label: 'Positive' },
+            { value: 'negative', label: 'Negative' },
+            { value: 'zero', label: 'Zero' },
+          ]}
+        />
+      </Grid>
+      <Flex justify="space-between" align="center" gap="3" wrap="wrap">
+        <Flex align="center" gap="3" wrap="wrap">
+          <Text fontSize="sm" color="fg.muted">
+            {activeFilterCount === 0
+              ? 'Showing all offers.'
+              : `${activeFilterCount} active filter${activeFilterCount === 1 ? '' : 's'}.`}{' '}
+            Click a column heading to sort all matching offers.
+          </Text>
+          <Button size="sm" variant="outline" disabled={activeFilterCount === 0} onClick={clearFilters}>
+            <RotateCcw size={15} aria-hidden="true" />
+            Clear filters
+          </Button>
+        </Flex>
       </Flex>
       {resource.error && <ErrorPanel message={resource.error} retry={resource.refresh} />}
       {data && (
-        <Card.Root variant="outline">
-          <Box overflowX="auto">
-            <Table.Root size="sm" variant="line">
-              <Table.Header>
-                <Table.Row>
-                  <Table.ColumnHeader>Offer</Table.ColumnHeader>
-                  <Table.ColumnHeader>Status</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Selling price</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Cost</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Potential profit / unit</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Stock CPT / JHB / DBN</Table.ColumnHeader>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {data.items.map((offer) => (
-                  <Table.Row key={offer.offerId}>
-                    <Table.Cell minW="220px">
-                      {offer.offerUrl ? (
-                        <a
-                          href={offer.offerUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{ fontWeight: 500, color: 'var(--chakra-colors-blue-600)' }}
-                        >
-                          {offer.title || offer.offerId}
-                        </a>
-                      ) : (
-                        <Text fontWeight="medium">{offer.title || offer.offerId}</Text>
-                      )}
-                      <Text fontSize="xs" color="fg.muted">
-                        SKU {offer.sku || '—'} · Offer {offer.offerId}
+        <Stack gap="4" minW="0">
+          <Card.Root variant="outline" minW="0">
+            <Stack display={{ base: 'flex', lg: 'none' }} gap="3" p="4">
+              {offerRows.map((offer) => (
+                <Card.Root key={offer.offerId} variant="subtle">
+                  <Card.Body>
+                    <Flex gap="3" align="center">
+                      <ProductImage src={offer.imageUrl} alt={offer.title ?? offer.offerId} />
+                      <Box minW="0">
+                        {offer.offerUrl ? (
+                          <a href={offer.offerUrl} target="_blank" rel="noreferrer" style={{ fontWeight: 600 }}>
+                            {offer.title || offer.offerId}
+                          </a>
+                        ) : (
+                          <Text fontWeight="semibold" overflowWrap="anywhere">
+                            {offer.title || offer.offerId}
+                          </Text>
+                        )}
+                        <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                          SKU {offer.sku || '—'} · Offer {offer.offerId}
+                        </Text>
+                      </Box>
+                    </Flex>
+                    <SimpleGrid columns={2} gap="2" mt="3">
+                      <Text fontSize="sm">Status: {offer.status || '—'}</Text>
+                      <Text fontSize="sm">
+                        Selling: {offer.sellingPrice === null ? '—' : formatCurrency(offer.sellingPrice)}
                       </Text>
-                    </Table.Cell>
-                    <Table.Cell>{offer.status || '—'}</Table.Cell>
-                    <Table.Cell textAlign="end">
-                      {offer.sellingPrice === null ? '—' : formatCurrency(offer.sellingPrice)}
-                    </Table.Cell>
-                    <Table.Cell textAlign="end">
-                      {offer.costPrice === null ? '—' : formatCurrency(offer.costPrice)}
-                    </Table.Cell>
-                    <Table.Cell textAlign="end">
-                      {offer.potentialGrossProfitPerUnit === null
-                        ? 'Unavailable'
-                        : formatCurrency(offer.potentialGrossProfitPerUnit)}
-                    </Table.Cell>
-                    <Table.Cell textAlign="end" whiteSpace="nowrap">
-                      {formatNumber(offer.stockCpt ?? 0)} / {formatNumber(offer.stockJhb ?? 0)} /{' '}
-                      {formatNumber(offer.stockDbn ?? 0)}
-                    </Table.Cell>
-                  </Table.Row>
-                ))}
-                {data.items.length === 0 && (
+                      <Text fontSize="sm">
+                        Cost: {offer.costPrice === null ? '—' : formatCurrency(offer.costPrice)}
+                      </Text>
+                      <Text
+                        fontSize="sm"
+                        color={
+                          offer.potentialGrossProfitPerUnit === null
+                            ? 'fg.muted'
+                            : offer.potentialGrossProfitPerUnit >= 0
+                              ? 'green.fg'
+                              : 'fg.error'
+                        }
+                      >
+                        Profit / unit:{' '}
+                        {offer.potentialGrossProfitPerUnit === null
+                          ? 'Unavailable'
+                          : formatCurrency(offer.potentialGrossProfitPerUnit)}
+                      </Text>
+                    </SimpleGrid>
+                    <Flex gap="2" wrap="wrap" mt="3">
+                      <WarehouseStockBadges cpt={offer.stockCpt} jhb={offer.stockJhb} dbn={offer.stockDbn} />
+                      <Text fontSize="xs" color="fg.muted" alignSelf="center">
+                        Incoming: Cape Town {formatNumber(offer.stockOnWayCpt ?? 0)} · Johannesburg{' '}
+                        {formatNumber(offer.stockOnWayJhb ?? 0)} · Durban {formatNumber(offer.stockOnWayDbn ?? 0)}
+                      </Text>
+                    </Flex>
+                  </Card.Body>
+                </Card.Root>
+              ))}
+              {data.items.length === 0 && (
+                <Text textAlign="center" color="fg.muted">
+                  No offers matched these filters.
+                </Text>
+              )}
+            </Stack>
+            <Box display={{ base: 'none', lg: 'block' }} minW="0" w="full" overflow="hidden">
+              <Table.Root size="sm" variant="line" tableLayout="fixed" w="full">
+                <Table.Header>
                   <Table.Row>
-                    <Table.Cell colSpan={6} textAlign="center">
-                      No offers matched these filters.
-                    </Table.Cell>
+                    <SortableColumnHeader
+                      label="Offer"
+                      sortKey="title"
+                      sort={offerTableSort}
+                      onSort={sortOfferBy}
+                      width="30%"
+                    />
+                    <SortableColumnHeader
+                      label="Status"
+                      sortKey="status"
+                      sort={offerTableSort}
+                      onSort={sortOfferBy}
+                      width="11%"
+                    />
+                    <SortableColumnHeader
+                      label="Selling price"
+                      sortKey="sellingPrice"
+                      sort={offerTableSort}
+                      onSort={sortOfferBy}
+                      textAlign="end"
+                      width="12%"
+                    />
+                    <SortableColumnHeader
+                      label="Cost"
+                      sortKey="costPrice"
+                      sort={offerTableSort}
+                      onSort={sortOfferBy}
+                      textAlign="end"
+                      width="11%"
+                    />
+                    <SortableColumnHeader
+                      label="Profit / unit"
+                      sortKey="potentialGrossProfitPerUnit"
+                      sort={offerTableSort}
+                      onSort={sortOfferBy}
+                      textAlign="end"
+                      width="16%"
+                    />
+                    <SortableColumnHeader
+                      label="Warehouse stock"
+                      sortKey="totalStock"
+                      sort={offerTableSort}
+                      onSort={sortOfferBy}
+                      textAlign="end"
+                      width="20%"
+                    />
                   </Table.Row>
-                )}
-              </Table.Body>
-            </Table.Root>
-          </Box>
-          <Flex justify="space-between" align="center" p="4" wrap="wrap" gap="3">
-            <Text fontSize="sm" color="fg.muted">
-              Page {data.pagination.page} of {Math.max(data.pagination.totalPages, 1)} ·{' '}
-              {formatNumber(data.pagination.total)} offers
-            </Text>
-            <Flex gap="3" align="center" wrap="wrap">
-              <PageSizeControl
-                value={pageSize}
-                onChange={(value) => {
-                  setPageSize(value)
-                  setPage(1)
-                }}
-              />
-              <Flex gap="2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page <= 1}
-                  onClick={() => setPage((current) => current - 1)}
-                >
-                  <ChevronLeft size={15} /> Previous
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page >= data.pagination.totalPages}
-                  onClick={() => setPage((current) => current + 1)}
-                >
-                  Next <ChevronRight size={15} />
-                </Button>
+                </Table.Header>
+                <Table.Body>
+                  {offerRows.map((offer) => (
+                    <Table.Row key={offer.offerId}>
+                      <Table.Cell overflowWrap="anywhere">
+                        {offer.offerUrl ? (
+                          <a
+                            href={offer.offerUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ fontWeight: 500, color: 'var(--chakra-colors-blue-600)' }}
+                          >
+                            <Flex align="center" gap="2" minW="0">
+                              <ProductImage src={offer.imageUrl} alt={offer.title ?? offer.offerId} size={9} />
+                              <Text overflowWrap="anywhere">{offer.title || offer.offerId}</Text>
+                            </Flex>
+                          </a>
+                        ) : (
+                          <Flex align="center" gap="2" minW="0">
+                            <ProductImage src={offer.imageUrl} alt={offer.title ?? offer.offerId} size={9} />
+                            <Text fontWeight="medium" overflowWrap="anywhere">
+                              {offer.title || offer.offerId}
+                            </Text>
+                          </Flex>
+                        )}
+                        <Text fontSize="xs" color="fg.muted">
+                          SKU {offer.sku || '—'}
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell>{offer.status || '—'}</Table.Cell>
+                      <Table.Cell textAlign="end">
+                        {offer.sellingPrice === null ? '—' : formatCurrency(offer.sellingPrice)}
+                      </Table.Cell>
+                      <Table.Cell textAlign="end">
+                        {offer.costPrice === null ? '—' : formatCurrency(offer.costPrice)}
+                      </Table.Cell>
+                      <Table.Cell textAlign="end">
+                        {offer.potentialGrossProfitPerUnit === null ? (
+                          'Unavailable'
+                        ) : (
+                          <Text color={offer.potentialGrossProfitPerUnit >= 0 ? 'green.fg' : 'fg.error'}>
+                            {formatCurrency(offer.potentialGrossProfitPerUnit)}
+                          </Text>
+                        )}
+                      </Table.Cell>
+                      <Table.Cell>
+                        <WarehouseStockBadges cpt={offer.stockCpt} jhb={offer.stockJhb} dbn={offer.stockDbn} />
+                      </Table.Cell>
+                    </Table.Row>
+                  ))}
+                  {data.items.length === 0 && (
+                    <Table.Row>
+                      <Table.Cell colSpan={6} textAlign="center">
+                        No offers matched these filters.
+                      </Table.Cell>
+                    </Table.Row>
+                  )}
+                </Table.Body>
+              </Table.Root>
+            </Box>
+            <Flex justify="space-between" align="center" p="4" wrap="wrap" gap="3">
+              <Text fontSize="sm" color="fg.muted">
+                Page {data.pagination.page} of {Math.max(data.pagination.totalPages, 1)} ·{' '}
+                {formatNumber(data.pagination.total)} offers
+              </Text>
+              <Flex gap="3" align="center" wrap="wrap">
+                <PageSizeControl
+                  value={pageSize}
+                  onChange={(value) => {
+                    setPageSize(value)
+                    setPage(1)
+                  }}
+                />
+                <Flex gap="2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page <= 1}
+                    onClick={() => setPage((current) => current - 1)}
+                  >
+                    <ChevronLeft size={15} /> Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page >= data.pagination.totalPages}
+                    onClick={() => setPage((current) => current + 1)}
+                  >
+                    Next <ChevronRight size={15} />
+                  </Button>
+                </Flex>
               </Flex>
             </Flex>
-          </Flex>
-        </Card.Root>
+          </Card.Root>
+          {accountSummary && accountSummary.totalOffers > 0 && (
+            <Card.Root variant="outline" minW="0" w="full">
+              <Card.Header pb="2">
+                <Card.Title>Account-wide potential inventory value</Card.Title>
+                <Text fontSize="xs" color="fg.muted">
+                  All synchronized offers · {formatNumber(accountSummary.totalOffers)} offers
+                </Text>
+              </Card.Header>
+              <Card.Body pt="0">
+                <Grid
+                  templateColumns={{ base: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) 320px' }}
+                  alignItems="center"
+                  gap="4"
+                >
+                  <Stack gap="3" minW="0">
+                    <SimpleGrid columns={{ base: 2, sm: 4 }} gap="2">
+                      <Box p="2" borderRadius="md" bg="green.subtle">
+                        <Text fontSize="xs" color="fg.muted">
+                          Above cost
+                        </Text>
+                        <Text fontWeight="semibold" color="green.fg">
+                          {formatNumber(accountSummary.positiveProfitOffers)}
+                        </Text>
+                      </Box>
+                      <Box p="2" borderRadius="md" bg="red.subtle">
+                        <Text fontSize="xs" color="fg.muted">
+                          Below cost
+                        </Text>
+                        <Text fontWeight="semibold" color="fg.error">
+                          {formatNumber(accountSummary.negativeProfitOffers)}
+                        </Text>
+                      </Box>
+                      <Box p="2" borderRadius="md" bg="bg.subtle">
+                        <Text fontSize="xs" color="fg.muted">
+                          Break-even
+                        </Text>
+                        <Text fontWeight="semibold">{formatNumber(accountSummary.breakEvenOffers)}</Text>
+                      </Box>
+                      <Box p="2" borderRadius="md" bg="bg.subtle">
+                        <Text fontSize="xs" color="fg.muted">
+                          Unavailable
+                        </Text>
+                        <Text fontWeight="semibold">{formatNumber(accountSummary.unavailableProfitOffers)}</Text>
+                      </Box>
+                    </SimpleGrid>
+                    <Text fontSize="xs" color="fg.muted">
+                      Profit counts compare selling price with unit cost before Takealot fees. The values below estimate
+                      all synchronized stock, not realized sales profit.
+                    </Text>
+                    <SimpleGrid columns={{ base: 1, sm: 3 }} gap="3">
+                      <Box>
+                        <Text fontSize="xs" color="fg.muted">
+                          Potential retail value
+                        </Text>
+                        <Text fontWeight="medium">{formatCurrency(accountSummary.potentialRetailValue)}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="xs" color="fg.muted">
+                          Inventory cost value
+                        </Text>
+                        <Text fontWeight="medium">{formatCurrency(accountSummary.inventoryCostValue)}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="xs" color="fg.muted">
+                          Potential gross profit
+                        </Text>
+                        <Text
+                          fontWeight="semibold"
+                          color={accountSummary.potentialGrossProfitOnCurrentStock >= 0 ? 'green.fg' : 'fg.error'}
+                        >
+                          {formatCurrency(accountSummary.potentialGrossProfitOnCurrentStock)}
+                        </Text>
+                      </Box>
+                    </SimpleGrid>
+                    <Text fontSize="xs" color="fg.muted">
+                      Stock: Cape Town {formatNumber(accountSummary.stockByWarehouse.capeTown)} · Johannesburg{' '}
+                      {formatNumber(accountSummary.stockByWarehouse.johannesburg)} · Durban{' '}
+                      {formatNumber(accountSummary.stockByWarehouse.durban)}
+                    </Text>
+                  </Stack>
+                  <EChart
+                    option={donutOption([
+                      { name: 'Above cost', value: accountSummary.positiveProfitOffers, color: '#16a34a' },
+                      { name: 'Below cost', value: accountSummary.negativeProfitOffers, color: '#dc2626' },
+                      { name: 'Break-even', value: accountSummary.breakEvenOffers, color: '#64748b' },
+                      { name: 'Unavailable', value: accountSummary.unavailableProfitOffers, color: '#f59e0b' },
+                    ])}
+                    height="220px"
+                    ariaLabel="Account-wide profit mix across all synchronized offers"
+                  />
+                </Grid>
+              </Card.Body>
+            </Card.Root>
+          )}
+        </Stack>
       )}
     </Stack>
   )
@@ -2001,6 +3138,10 @@ function AlertsPanel({
 }) {
   const [severity, setSeverity] = useState<'critical' | 'high' | 'medium' | 'low' | ''>('')
   const [warehouse, setWarehouse] = useState<'CPT' | 'JHB' | 'DBN' | 'ALL'>('ALL')
+  const [alertSort, setAlertSort] = useState<TableSort<TakealotAlertSortBy>>({
+    key: 'severity',
+    direction: 'desc',
+  })
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const filters = useMemo(
@@ -2009,78 +3150,185 @@ function AlertsPanel({
       pageSize,
       ...(severity ? { severity } : {}),
       warehouse,
-      sortBy: 'severity',
-      sortOrder: 'desc' as const,
+      sortBy: alertSort.key,
+      sortOrder: alertSort.direction,
     }),
-    [page, pageSize, severity, warehouse],
+    [page, pageSize, severity, warehouse, alertSort],
   )
   const requestKey = JSON.stringify(filters)
-  const key = cacheKey(identity, 'alerts', filters)
+  const key = cacheKey(identity, 'alerts-v2', filters)
   const fetcher = useCallback(
     (signal: AbortSignal) => getTakealotAlerts(identity.integrationId, filters, signal),
     [identity.integrationId, requestKey],
   )
   const resource = useCachedResource(enabled, key, fetcher, refreshToken, onMeta)
   const data = resource.data
-
-  if (resource.loading && !data) return <LoadingCards />
+  const sortedAlerts = data?.items ?? []
+  const alertSeverityBreakdown = data
+    ? [
+        { name: 'Critical', count: data.summary.critical, color: '#991b1b', background: 'red.subtle' },
+        { name: 'High', count: data.summary.high, color: '#dc2626', background: 'orange.subtle' },
+        { name: 'Medium', count: data.summary.medium, color: '#f97316', background: 'yellow.subtle' },
+        { name: 'Low', count: data.summary.low, color: '#64748b', background: 'bg.subtle' },
+      ]
+    : []
+  const sortAlertsBy = (key: TakealotAlertSortBy) => {
+    setAlertSort((current) => toggleTableSort(current, key))
+    setPage(1)
+  }
+  if (resource.loading && !data) return <AlertsSkeleton />
   if (!data && resource.error) return <ErrorPanel message={resource.error} retry={resource.refresh} />
 
   return (
     <Stack gap="4">
       <ResourceNotice resource={resource} retry={resource.refresh} />
       <Flex gap="3" wrap="wrap" align="end">
-        <NativeSelect.Root size="sm" maxW="170px">
-          <NativeSelect.Field
-            aria-label="Alert severity"
-            value={severity}
-            onChange={(event) => {
-              setSeverity(event.target.value as typeof severity)
-              setPage(1)
-            }}
-          >
-            <option value="">All severities</option>
-            <option value="critical">Critical</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </NativeSelect.Field>
-        </NativeSelect.Root>
-        <NativeSelect.Root size="sm" maxW="150px">
-          <NativeSelect.Field
-            aria-label="Alert warehouse"
-            value={warehouse}
-            onChange={(event) => {
-              setWarehouse(event.target.value as typeof warehouse)
-              setPage(1)
-            }}
-          >
-            <option value="ALL">All warehouses</option>
-            <option value="CPT">CPT</option>
-            <option value="JHB">JHB</option>
-            <option value="DBN">DBN</option>
-          </NativeSelect.Field>
-        </NativeSelect.Root>
+        <DashboardSelect
+          value={severity}
+          onChange={(value) => {
+            setSeverity(value as typeof severity)
+            setPage(1)
+          }}
+          placeholder="Alert severity"
+          width="170px"
+          options={[
+            { value: '', label: 'All severities' },
+            { value: 'critical', label: 'Critical' },
+            { value: 'high', label: 'High' },
+            { value: 'medium', label: 'Medium' },
+            { value: 'low', label: 'Low' },
+          ]}
+        />
+        <DashboardSelect
+          value={warehouse}
+          onChange={(value) => {
+            setWarehouse(value ? (value as typeof warehouse) : 'ALL')
+            setPage(1)
+          }}
+          placeholder="Alert warehouse"
+          width="150px"
+          options={[
+            { value: 'ALL', label: 'All warehouses' },
+            { value: 'CPT', label: 'Cape Town (CPT)' },
+            { value: 'JHB', label: 'Johannesburg (JHB)' },
+            { value: 'DBN', label: 'Durban (DBN)' },
+          ]}
+        />
         {data?.isStale && <Badge colorPalette="orange">Offer data is stale</Badge>}
       </Flex>
       {resource.error && <ErrorPanel message={resource.error} retry={resource.refresh} />}
       {data && (
         <Card.Root variant="outline">
-          <Box overflowX="auto">
-            <Table.Root size="sm" variant="line">
+          <Stack display={{ base: 'flex', lg: 'none' }} gap="3" p="4">
+            {sortedAlerts.map((alert, index) => (
+              <Card.Root key={`${alert.offerId}-${alert.type}-${alert.warehouse ?? 'all'}-${index}`} variant="subtle">
+                <Card.Body gap="3">
+                  <Flex align="center" gap="3">
+                    <ProductImage src={alert.imageUrl} alt={alert.title ?? alert.offerId} />
+                    <Box minW="0">
+                      <Badge
+                        colorPalette={
+                          alert.severity === 'critical' || alert.severity === 'high'
+                            ? 'red'
+                            : alert.severity === 'medium'
+                              ? 'orange'
+                              : 'gray'
+                        }
+                      >
+                        {alert.severity}
+                      </Badge>
+                      <Text fontWeight="semibold" mt="1" overflowWrap="anywhere">
+                        {alert.title || alert.offerId}
+                      </Text>
+                      <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                        {alert.sku || 'SKU unavailable'}
+                      </Text>
+                    </Box>
+                  </Flex>
+                  <Text fontSize="sm">
+                    {alert.type.replaceAll('_', ' ')} · {alert.message}
+                  </Text>
+                  <SimpleGrid columns={2} gap="2">
+                    <Text fontSize="sm">Warehouse: {alert.warehouse || '—'}</Text>
+                    <Text fontSize="sm">Quantity: {alert.quantity === null ? '—' : formatNumber(alert.quantity)}</Text>
+                    <Text fontSize="sm">
+                      Selling price: {alert.sellingPrice === null ? '—' : formatCurrency(alert.sellingPrice)}
+                    </Text>
+                    <Text fontSize="sm">Cost: {alert.costPrice === null ? '—' : formatCurrency(alert.costPrice)}</Text>
+                  </SimpleGrid>
+                </Card.Body>
+              </Card.Root>
+            ))}
+            {sortedAlerts.length === 0 && (
+              <Text textAlign="center" color="fg.muted">
+                No alerts match these filters.
+              </Text>
+            )}
+          </Stack>
+          <Box display={{ base: 'none', lg: 'block' }} minW="0" w="full" overflow="hidden">
+            <Table.Root size="sm" variant="line" tableLayout="fixed" w="full">
               <Table.Header>
                 <Table.Row>
-                  <Table.ColumnHeader>Severity</Table.ColumnHeader>
-                  <Table.ColumnHeader>Alert</Table.ColumnHeader>
-                  <Table.ColumnHeader>Product / SKU</Table.ColumnHeader>
-                  <Table.ColumnHeader>Warehouse</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Quantity</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Selling price</Table.ColumnHeader>
+                  <SortableColumnHeader
+                    label="Product / SKU"
+                    sortKey="title"
+                    sort={alertSort}
+                    onSort={sortAlertsBy}
+                    width="36%"
+                  />
+                  <SortableColumnHeader
+                    label="Severity"
+                    sortKey="severity"
+                    sort={alertSort}
+                    onSort={sortAlertsBy}
+                    width="10%"
+                  />
+                  <SortableColumnHeader
+                    label="Alert"
+                    sortKey="type"
+                    sort={alertSort}
+                    onSort={sortAlertsBy}
+                    width="25%"
+                  />
+                  <SortableColumnHeader
+                    label="Warehouse"
+                    sortKey="warehouse"
+                    sort={alertSort}
+                    onSort={sortAlertsBy}
+                    width="11%"
+                  />
+                  <SortableColumnHeader
+                    label="Quantity"
+                    sortKey="quantity"
+                    sort={alertSort}
+                    onSort={sortAlertsBy}
+                    textAlign="end"
+                    width="9%"
+                  />
+                  <SortableColumnHeader
+                    label="Selling price"
+                    sortKey="sellingPrice"
+                    sort={alertSort}
+                    onSort={sortAlertsBy}
+                    textAlign="end"
+                    width="9%"
+                  />
                 </Table.Row>
               </Table.Header>
               <Table.Body>
-                {data.items.map((alert: TakealotAlert, index) => (
+                {sortedAlerts.map((alert, index) => (
                   <Table.Row key={`${alert.offerId}-${alert.type}-${alert.warehouse ?? 'all'}-${index}`}>
+                    <Table.Cell>
+                      <Flex align="center" gap="2" minW="0">
+                        <ProductImage src={alert.imageUrl} alt={alert.title ?? alert.offerId} size={9} />
+                        <Box minW="0">
+                          <Text overflowWrap="anywhere">{alert.title || alert.offerId}</Text>
+                          <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                            {alert.sku || 'SKU unavailable'}
+                          </Text>
+                        </Box>
+                      </Flex>
+                    </Table.Cell>
                     <Table.Cell>
                       <Badge
                         colorPalette={
@@ -2098,12 +3346,6 @@ function AlertsPanel({
                       <Text fontWeight="medium">{alert.type.replaceAll('_', ' ')}</Text>
                       <Text fontSize="xs" color="fg.muted">
                         {alert.message}
-                      </Text>
-                    </Table.Cell>
-                    <Table.Cell>
-                      {alert.title || alert.offerId}
-                      <Text fontSize="xs" color="fg.muted">
-                        {alert.sku || ''}
                       </Text>
                     </Table.Cell>
                     <Table.Cell>{alert.warehouse || '—'}</Table.Cell>
@@ -2160,6 +3402,57 @@ function AlertsPanel({
           </Flex>
         </Card.Root>
       )}
+      {data && data.summary.total > 0 && (
+        <Card.Root variant="outline" minW="0" w="full">
+          <Card.Header pb="2">
+            <Card.Title>Alert severity overview</Card.Title>
+            <Text fontSize="xs" color="fg.muted">
+              {formatNumber(data.summary.total)} matching alerts · current filters · all pages
+            </Text>
+          </Card.Header>
+          <Card.Body pt="0">
+            <Grid templateColumns={{ base: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) 320px' }} alignItems="center" gap="4">
+              <Stack gap="3" minW="0">
+                <SimpleGrid columns={{ base: 2, sm: 4 }} gap="2">
+                  {alertSeverityBreakdown.map((item) => {
+                    const percentage = (item.count / data.summary.total) * 100
+                    return (
+                      <Box key={item.name} p="2" borderRadius="md" bg={item.background}>
+                        <Text fontSize="xs" color="fg.muted">
+                          {item.name}
+                        </Text>
+                        <Text fontWeight="semibold" color={item.color}>
+                          {formatNumber(item.count)}
+                        </Text>
+                        <Text fontSize="xs" color="fg.muted">
+                          {percentage.toFixed(1)}% of matches
+                        </Text>
+                      </Box>
+                    )
+                  })}
+                </SimpleGrid>
+                <Text fontSize="xs" color="fg.muted">
+                  Critical indicates an immediate stock issue; high flags urgent pricing or stock risk; medium covers
+                  product, listing, and inventory issues; low covers review and informational notices. Counts are
+                  calculated server-side from the current filters; percentages are each severity count divided by the
+                  matching-alert total. Pagination and sort order do not change this breakdown.
+                </Text>
+              </Stack>
+              <EChart
+                option={donutOption(
+                  alertSeverityBreakdown.map((item) => ({
+                    name: item.name,
+                    value: item.count,
+                    color: item.color,
+                  })),
+                )}
+                height="220px"
+                ariaLabel="Server-calculated alert severity distribution across all alerts matching the active filters"
+              />
+            </Grid>
+          </Card.Body>
+        </Card.Root>
+      )}
     </Stack>
   )
 }
@@ -2184,14 +3477,22 @@ function StockPanel({
   const summaryKey = cacheKey(identity, 'inventory-summary')
   const historyFilters = useMemo(() => ({ ...range, interval: granularity }), [range.from, range.to, granularity])
   const historyKey = cacheKey(identity, 'inventory-history', historyFilters)
-  const warehouseKey = cacheKey(identity, 'warehouse-analytics')
+  const [warehouseSort, setWarehouseSort] = useState<TableSort<TakealotWarehouseSortBy>>({
+    key: 'stockUnits',
+    direction: 'desc',
+  })
+  const warehouseFilters = useMemo(
+    () => ({ sortBy: warehouseSort.key, sortOrder: warehouseSort.direction }),
+    [warehouseSort],
+  )
+  const warehouseKey = cacheKey(identity, 'warehouse-analytics', warehouseFilters)
   const getSummary = useCallback(
     (signal: AbortSignal) => getTakealotInventorySummary(identity.integrationId, signal),
     [identity.integrationId],
   )
   const getWarehouseAnalytics = useCallback(
-    (signal: AbortSignal) => getTakealotInventoryAnalytics(identity.integrationId, signal),
-    [identity.integrationId],
+    (signal: AbortSignal) => getTakealotInventoryAnalytics(identity.integrationId, warehouseFilters, signal),
+    [identity.integrationId, warehouseFilters],
   )
   const getHistory = useCallback(
     (signal: AbortSignal) => getTakealotInventoryHistory(identity.integrationId, historyFilters, signal),
@@ -2213,6 +3514,11 @@ function StockPanel({
   const fees = recordNumber(stockHealth, 'storage_fee_enabled_offer_count')
   const replenishment = recordNumber(stockHealth, 'recommended_for_replenishment_offer_count')
   const inventoryPoints = history.data?.series ?? []
+  const warehouses = warehouseAnalytics.data?.warehouses ?? []
+  const sortedWarehouses = warehouses
+  const sortWarehousesBy = (key: TakealotWarehouseSortBy) => {
+    setWarehouseSort((current) => toggleTableSort(current, key))
+  }
   const chart: EChartsOption = useMemo(
     () => ({
       tooltip: { trigger: 'axis', valueFormatter: (value) => formatNumber(Number(value)) },
@@ -2241,14 +3547,26 @@ function StockPanel({
     }),
     [inventoryPoints],
   )
+  const stockByWarehouseChart: EChartsOption = useMemo(
+    () => ({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      legend: { bottom: 0 },
+      grid: { left: 68, right: 20, top: 24, bottom: 55 },
+      xAxis: {
+        type: 'category',
+        data: warehouses.map((warehouse) => warehouseLabel(warehouse.warehouse)),
+        axisLabel: { interval: 0, rotate: 20 },
+      },
+      yAxis: { type: 'value', axisLabel: { formatter: (value: number) => formatNumber(Number(value)) } },
+      series: [
+        { name: 'In stock', type: 'bar', data: warehouses.map((warehouse) => warehouse.stockUnits) },
+        { name: 'Incoming', type: 'bar', data: warehouses.map((warehouse) => warehouse.incomingUnits) },
+      ],
+    }),
+    [warehouses],
+  )
 
-  if (enabled && summary.loading && !summary.data && !fallback)
-    return (
-      <>
-        <LoadingCards count={4} />
-        <ChartSkeletons />
-      </>
-    )
+  if (enabled && summary.loading && !summary.data && !fallback) return <StockSkeleton />
   const error = summary.error || history.error || warehouseAnalytics.error
   if (error && !stockCounts && !stockHealth) {
     return (
@@ -2282,49 +3600,119 @@ function StockPanel({
         <MetricCard
           label="Offers with stock"
           value={total === undefined ? undefined : formatNumber(total)}
+          detail="Reported count of offers with available warehouse stock."
           icon={Package}
         />
         <MetricCard
           label="Unbalanced stock"
           value={unbalanced === undefined ? undefined : formatNumber(unbalanced)}
+          detail="Offers with stock distribution flagged as unbalanced by Takealot."
           icon={Activity}
         />
         <MetricCard
           label="Storage-fee-enabled offers"
           value={fees === undefined ? undefined : formatNumber(fees)}
+          detail="Offers currently marked as subject to storage fees."
           icon={ReceiptText}
         />
         <MetricCard
           label="Recommended for replenishment"
           value={replenishment === undefined ? undefined : formatNumber(replenishment)}
+          detail="Offers Takealot recommends replenishing."
           icon={Warehouse}
         />
       </SimpleGrid>
       {warehouseAnalytics.data && (
         <Card.Root variant="outline">
           <Card.Header>
-            <Heading size="sm">Warehouse inventory</Heading>
+            <Flex align="center" gap="2">
+              <Warehouse size={17} aria-hidden="true" />
+              <Heading size="sm">Warehouse inventory</Heading>
+            </Flex>
             <Text fontSize="sm" color="fg.muted">
               Current inventory values derived from synchronized offers; values are potential, not realized sales.
             </Text>
           </Card.Header>
-          <Box overflowX="auto">
-            <Table.Root size="sm" variant="line">
+          <Stack display={{ base: 'flex', lg: 'none' }} gap="3" px="4">
+            {sortedWarehouses.map((warehouse) => (
+              <Card.Root key={warehouse.warehouse} variant="subtle">
+                <Card.Body>
+                  <Text fontWeight="semibold">{warehouseLabel(warehouse.warehouse)}</Text>
+                  <SimpleGrid columns={2} gap="2" mt="2">
+                    <Text fontSize="sm">Stock: {formatNumber(warehouse.stockUnits)}</Text>
+                    <Text fontSize="sm">Incoming: {formatNumber(warehouse.incomingUnits)}</Text>
+                    <Text fontSize="sm">
+                      Reported sales:{' '}
+                      {warehouse.reportedSalesUnits === undefined ? '—' : formatNumber(warehouse.reportedSalesUnits)}
+                    </Text>
+                    <Text fontSize="sm">Inventory cost: {formatCurrency(warehouse.inventoryCostValue)}</Text>
+                    <Text fontSize="sm">Potential retail: {formatCurrency(warehouse.potentialRetailValue)}</Text>
+                    <Text fontSize="sm" color={warehouse.potentialGrossProfit >= 0 ? 'green.fg' : 'fg.error'}>
+                      Potential profit: {formatCurrency(warehouse.potentialGrossProfit)}
+                    </Text>
+                  </SimpleGrid>
+                </Card.Body>
+              </Card.Root>
+            ))}
+          </Stack>
+          <Box display={{ base: 'none', lg: 'block' }} minW="0" w="full" overflow="hidden">
+            <Table.Root size="sm" variant="line" tableLayout="fixed" w="full">
               <Table.Header>
                 <Table.Row>
-                  <Table.ColumnHeader>Warehouse</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Stock units</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Incoming units</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Reported sales units</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Inventory cost</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Potential retail value</Table.ColumnHeader>
-                  <Table.ColumnHeader textAlign="end">Potential gross profit</Table.ColumnHeader>
+                  <SortableColumnHeader
+                    label="Warehouse"
+                    sortKey="warehouse"
+                    sort={warehouseSort}
+                    onSort={sortWarehousesBy}
+                  />
+                  <SortableColumnHeader
+                    label="Stock units"
+                    sortKey="stockUnits"
+                    sort={warehouseSort}
+                    onSort={sortWarehousesBy}
+                    textAlign="end"
+                  />
+                  <SortableColumnHeader
+                    label="Incoming units"
+                    sortKey="incomingUnits"
+                    sort={warehouseSort}
+                    onSort={sortWarehousesBy}
+                    textAlign="end"
+                  />
+                  <SortableColumnHeader
+                    label="Reported sales units"
+                    sortKey="reportedSalesUnits"
+                    sort={warehouseSort}
+                    onSort={sortWarehousesBy}
+                    textAlign="end"
+                  />
+                  <SortableColumnHeader
+                    label="Inventory cost"
+                    sortKey="inventoryCostValue"
+                    sort={warehouseSort}
+                    onSort={sortWarehousesBy}
+                    textAlign="end"
+                  />
+                  <SortableColumnHeader
+                    label="Potential retail value"
+                    sortKey="potentialRetailValue"
+                    sort={warehouseSort}
+                    onSort={sortWarehousesBy}
+                    textAlign="end"
+                  />
+                  <SortableColumnHeader
+                    label="Potential gross profit"
+                    sortKey="potentialGrossProfit"
+                    sort={warehouseSort}
+                    onSort={sortWarehousesBy}
+                    textAlign="end"
+                  />
                 </Table.Row>
               </Table.Header>
               <Table.Body>
-                {warehouseAnalytics.data.warehouses.map((warehouse) => (
+                {sortedWarehouses.map((warehouse) => (
                   <Table.Row key={warehouse.warehouse}>
-                    <Table.Cell>{warehouse.warehouse}</Table.Cell>
+                    <Table.Cell>{warehouseLabel(warehouse.warehouse)}</Table.Cell>
                     <Table.Cell textAlign="end">{formatNumber(warehouse.stockUnits)}</Table.Cell>
                     <Table.Cell textAlign="end">{formatNumber(warehouse.incomingUnits)}</Table.Cell>
                     <Table.Cell textAlign="end">
@@ -2332,7 +3720,11 @@ function StockPanel({
                     </Table.Cell>
                     <Table.Cell textAlign="end">{formatCurrency(warehouse.inventoryCostValue)}</Table.Cell>
                     <Table.Cell textAlign="end">{formatCurrency(warehouse.potentialRetailValue)}</Table.Cell>
-                    <Table.Cell textAlign="end">{formatCurrency(warehouse.potentialGrossProfit)}</Table.Cell>
+                    <Table.Cell textAlign="end">
+                      <Text color={warehouse.potentialGrossProfit >= 0 ? 'green.fg' : 'fg.error'}>
+                        {formatCurrency(warehouse.potentialGrossProfit)}
+                      </Text>
+                    </Table.Cell>
                   </Table.Row>
                 ))}
               </Table.Body>
@@ -2344,6 +3736,14 @@ function StockPanel({
             </Text>
           </Card.Body>
         </Card.Root>
+      )}
+      {warehouses.length > 0 && (
+        <ChartCard
+          title="Stock and incoming units by warehouse"
+          description="Current synchronized units held by Takealot versus units on the way."
+          option={stockByWarehouseChart}
+          icon={ChartNoAxesCombined}
+        />
       )}
       {summary.data?.capturedAt && (
         <Text fontSize="sm" color="fg.muted">
@@ -2364,7 +3764,7 @@ function StockPanel({
           </Card.Body>
         </Card.Root>
       ) : history.loading ? (
-        <Skeleton h="320px" borderRadius="md" />
+        <ChartSkeletonCard height="320px" />
       ) : null}
     </Stack>
   )
@@ -2373,6 +3773,7 @@ function StockPanel({
 export function TakealotDashboardPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const reducedMotion = useReducedMotion()
   const [identity, setIdentity] = useState<DashboardIdentity>(() =>
     localIdentity(searchParams.get('integrationId') ?? ''),
   )
@@ -2623,8 +4024,10 @@ export function TakealotDashboardPage() {
     { id: 'offers', label: 'Offers', icon: Package },
     { id: 'alerts', label: 'Alerts', icon: AlertCircle },
   ]
+  const sectionUsesDateRange = ['analytics', 'products', 'orders', 'stock'].includes(activeSection)
+  const sectionUsesGranularity = activeSection === 'analytics' || activeSection === 'stock'
   return (
-    <PageContainer>
+    <PageContainer className="takealot-dashboard-page">
       <PageHeader
         title="Takealot Dashboard"
         description="Monitor Takealot sales, product performance and stock health."
@@ -2731,7 +4134,7 @@ export function TakealotDashboardPage() {
       )}
 
       {integrationsLoading && integrations.length === 0 ? (
-        <LoadingCards count={2} />
+        <IntegrationSkeletons />
       ) : integrations.length === 0 ? (
         <Card.Root variant="outline">
           <Card.Body p={{ base: '6', md: '10' }}>
@@ -2756,61 +4159,18 @@ export function TakealotDashboardPage() {
               <Text color="fg.muted">
                 Choose which seller account to view. Data from different connections is kept separate.
               </Text>
-              <NativeSelect.Root size="sm" maxW="sm">
-                <NativeSelect.Field
-                  aria-label="Takealot connection"
-                  value={identity.integrationId}
-                  onChange={(event) => selectIntegration(event.target.value)}
-                >
-                  <option value="">Choose a connection</option>
-                  {integrations.map((integration) => (
-                    <option key={integration.id} value={integration.id}>
-                      {integration.name}
-                    </option>
-                  ))}
-                </NativeSelect.Field>
-              </NativeSelect.Root>
+              <DashboardSelect
+                value={identity.integrationId}
+                onChange={selectIntegration}
+                placeholder="Choose a connection"
+                width="320px"
+                options={integrations.map((integration) => ({ value: integration.id, label: integration.name }))}
+              />
             </Stack>
           </Card.Body>
         </Card.Root>
       ) : (
         <Stack gap="5">
-          <Stack gap="3">
-            <Flex gap="3" wrap="wrap" align="end">
-              {integrations.length > 1 && (
-                <NativeSelect.Root size="sm" maxW="240px">
-                  <NativeSelect.Field
-                    aria-label="Takealot connection"
-                    value={identity.integrationId}
-                    onChange={(event) => selectIntegration(event.target.value)}
-                  >
-                    {integrations.map((integration) => (
-                      <option key={integration.id} value={integration.id}>
-                        {integration.name}
-                      </option>
-                    ))}
-                  </NativeSelect.Field>
-                </NativeSelect.Root>
-              )}
-              <TakealotDateRangePicker value={range} onApply={setRange} />
-              <NativeSelect.Root size="sm" maxW="140px">
-                <NativeSelect.Field
-                  aria-label="Chart granularity"
-                  value={granularity}
-                  onChange={(event) => setGranularity(event.target.value as Granularity)}
-                >
-                  <option value="day">Day</option>
-                  <option value="week">Week</option>
-                  <option value="month">Month</option>
-                </NativeSelect.Field>
-              </NativeSelect.Root>
-            </Flex>
-            <Text fontSize="xs" color="fg.muted">
-              Date range applies to sales, product-performance, order, and saved inventory-history reports. Offer,
-              pricing, and alert data reflect the latest synchronization.
-            </Text>
-          </Stack>
-
           <Flex
             role="tablist"
             aria-label="Takealot dashboard sections"
@@ -2837,60 +4197,108 @@ export function TakealotDashboardPage() {
             ))}
           </Flex>
 
+          <Stack gap="2">
+            <Flex gap="3" wrap="wrap" align="center">
+              {integrations.length > 1 ? (
+                <DashboardSelect
+                  value={identity.integrationId}
+                  onChange={selectIntegration}
+                  placeholder="Takealot connection"
+                  width="240px"
+                  options={integrations.map((integration) => ({ value: integration.id, label: integration.name }))}
+                />
+              ) : (
+                <Badge colorPalette="blue" variant="subtle">
+                  {integrations[0]?.name ?? 'Takealot connection'}
+                </Badge>
+              )}
+              {sectionUsesDateRange && <TakealotDateRangePicker value={range} onApply={setRange} />}
+              {sectionUsesGranularity && (
+                <DashboardSelect
+                  value={granularity}
+                  onChange={(value) => setGranularity(value as Granularity)}
+                  placeholder="Chart granularity"
+                  width="140px"
+                  options={[
+                    { value: 'day', label: 'Day' },
+                    { value: 'week', label: 'Week' },
+                    { value: 'month', label: 'Month' },
+                  ]}
+                />
+              )}
+            </Flex>
+            {sectionUsesDateRange && (
+              <Text fontSize="xs" color="fg.muted">
+                Date range applies to this section. Offer and alert sections use the latest synchronized data.
+              </Text>
+            )}
+          </Stack>
+
           <Box role="tabpanel" id={`takealot-panel-${activeSection}`} aria-labelledby={`takealot-tab-${activeSection}`}>
-            {activeSection === 'overview' && (
-              <OverviewPanel
-                enabled={identity.configured}
-                identity={identity}
-                refreshToken={refreshTokens.overview}
-                onMeta={onOverviewMeta}
-              />
-            )}
-            {activeSection === 'analytics' && (
-              <AnalyticsPanel
-                enabled
-                identity={identity}
-                range={range}
-                granularity={granularity}
-                refreshToken={refreshTokens.analytics}
-                onMeta={onAnalyticsMeta}
-              />
-            )}
-            {activeSection === 'products' && (
-              <ProductPanel
-                enabled
-                identity={identity}
-                range={range}
-                refreshToken={refreshTokens.products}
-                onMeta={onProductsMeta}
-              />
-            )}
-            {activeSection === 'orders' && (
-              <OrdersPanel
-                enabled
-                identity={identity}
-                range={range}
-                refreshToken={refreshTokens.orders}
-                onMeta={onOrdersMeta}
-              />
-            )}
-            {activeSection === 'stock' && (
-              <StockPanel
-                enabled
-                identity={identity}
-                range={range}
-                granularity={granularity}
-                fallback={undefined}
-                refreshToken={refreshTokens.stock}
-                onMeta={onStockMeta}
-              />
-            )}
-            {activeSection === 'offers' && (
-              <OffersPanel enabled identity={identity} refreshToken={refreshTokens.offers} onMeta={onOffersMeta} />
-            )}
-            {activeSection === 'alerts' && (
-              <AlertsPanel enabled identity={identity} refreshToken={refreshTokens.alerts} onMeta={onAlertsMeta} />
-            )}
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={activeSection}
+                initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reducedMotion ? undefined : { opacity: 0, y: -4 }}
+                transition={{ duration: reducedMotion ? 0 : 0.18, ease: 'easeOut' }}
+                style={{ minWidth: 0 }}
+              >
+                {activeSection === 'overview' && (
+                  <OverviewPanel
+                    enabled={identity.configured}
+                    identity={identity}
+                    refreshToken={refreshTokens.overview}
+                    onMeta={onOverviewMeta}
+                  />
+                )}
+                {activeSection === 'analytics' && (
+                  <AnalyticsPanel
+                    enabled
+                    identity={identity}
+                    range={range}
+                    granularity={granularity}
+                    refreshToken={refreshTokens.analytics}
+                    onMeta={onAnalyticsMeta}
+                  />
+                )}
+                {activeSection === 'products' && (
+                  <ProductPanel
+                    enabled
+                    identity={identity}
+                    range={range}
+                    refreshToken={refreshTokens.products}
+                    onMeta={onProductsMeta}
+                  />
+                )}
+                {activeSection === 'orders' && (
+                  <OrdersPanel
+                    enabled
+                    identity={identity}
+                    range={range}
+                    refreshToken={refreshTokens.orders}
+                    onMeta={onOrdersMeta}
+                  />
+                )}
+                {activeSection === 'stock' && (
+                  <StockPanel
+                    enabled
+                    identity={identity}
+                    range={range}
+                    granularity={granularity}
+                    fallback={undefined}
+                    refreshToken={refreshTokens.stock}
+                    onMeta={onStockMeta}
+                  />
+                )}
+                {activeSection === 'offers' && (
+                  <OffersPanel enabled identity={identity} refreshToken={refreshTokens.offers} onMeta={onOffersMeta} />
+                )}
+                {activeSection === 'alerts' && (
+                  <AlertsPanel enabled identity={identity} refreshToken={refreshTokens.alerts} onMeta={onAlertsMeta} />
+                )}
+              </motion.div>
+            </AnimatePresence>
           </Box>
         </Stack>
       )}

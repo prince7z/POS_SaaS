@@ -53,6 +53,7 @@ export interface TakealotProduct {
   sku?: string
   tsin?: number
   title?: string
+  imageUrl: string | null
   unitCost: number | null
   totalCost: number | null
   costedUnits: number
@@ -96,6 +97,7 @@ export interface TakealotSale {
   shipment_name?: string
   offer_id?: number
   product_title?: string
+  image_url?: string | null
   takealot_url_mobi?: string
   sku?: string
   tsin?: number
@@ -117,6 +119,11 @@ export interface TakealotOrderItem {
   title?: string
   tsin_id?: number
   takealot_url?: string
+  image_url?: string | null
+  quantity?: number
+  selling_price?: number
+  sale_status?: string | boolean
+  dc?: string
 }
 
 export interface TakealotOrder {
@@ -130,6 +137,10 @@ export type TakealotOrderRecord = TakealotSale | TakealotOrder
 export interface TakealotOrders {
   orders: TakealotOrderRecord[]
   pagination: ApiPagination
+  analytics: {
+    trend: Array<{ date: string; revenue: number; units: number }>
+    statusCounts: Array<{ name: string; value: number }>
+  }
 }
 
 export interface TakealotInventorySnapshot {
@@ -161,9 +172,22 @@ export interface TakealotDateFilters {
 export interface TakealotPageFilters extends TakealotDateFilters {
   page?: number
   limit?: number
-  sortBy?: 'revenue' | 'units' | 'orders' | 'averagePrice'
+  sortBy?: TakealotProductSortBy
   order?: 'asc' | 'desc'
   orderId?: number
+}
+
+export type TakealotProductSortBy =
+  'revenue' | 'units' | 'orders' | 'averagePrice' | 'title' | 'totalFee' | 'totalCost' | 'profit'
+
+export type TakealotOrderSortBy = 'orderId' | 'date' | 'title' | 'quantity' | 'price' | 'status' | 'dc'
+
+export interface TakealotOrderFilters extends TakealotDateFilters {
+  page?: number
+  limit?: number
+  orderId?: number
+  sortBy?: TakealotOrderSortBy
+  sortOrder?: 'asc' | 'desc'
 }
 
 export interface TakealotPageInfo {
@@ -176,7 +200,13 @@ export interface TakealotPageInfo {
 
 export interface TakealotDashboardOverview {
   totalOffers: number
-  listingStatusCounts: { active: number; disabled: number; other: number }
+  listingStatusCounts: {
+    buyable: number
+    notBuyable: number
+    disabledByTakealot: number
+    disabledBySeller: number
+    other: number
+  }
   totalStock: number
   totalIncomingStock: number
   inventoryCostValue: number
@@ -220,10 +250,39 @@ export interface TakealotOffer {
   lastSyncedAt: string | null
 }
 
+export type TakealotOfferSortBy =
+  | 'title'
+  | 'sku'
+  | 'status'
+  | 'sellingPrice'
+  | 'costPrice'
+  | 'stockCpt'
+  | 'stockJhb'
+  | 'stockDbn'
+  | 'potentialGrossProfitPerUnit'
+  | 'totalStock'
+
 export interface TakealotOffersResult {
   items: TakealotOffer[]
   pagination: TakealotPageInfo
+  summary: TakealotOfferAccountSummary
   lastSuccessfulSyncAt: string | null
+}
+
+export interface TakealotOfferAccountSummary {
+  totalOffers: number
+  positiveProfitOffers: number
+  negativeProfitOffers: number
+  breakEvenOffers: number
+  unavailableProfitOffers: number
+  stockByWarehouse: {
+    capeTown: number
+    johannesburg: number
+    durban: number
+  }
+  potentialRetailValue: number
+  inventoryCostValue: number
+  potentialGrossProfitOnCurrentStock: number
 }
 
 export interface TakealotInventoryWarehouse {
@@ -247,11 +306,36 @@ export interface TakealotInventoryAnalytics {
   financialNote: string
 }
 
+export type TakealotWarehouseSortBy =
+  | 'warehouse'
+  | 'stockUnits'
+  | 'incomingUnits'
+  | 'inventoryCostValue'
+  | 'potentialRetailValue'
+  | 'potentialGrossProfit'
+  | 'outOfStockOffers'
+  | 'lowStockOffers'
+  | 'excessStockOffers'
+  | 'shareOfInventoryPercent'
+  | 'reportedSalesUnits'
+
+export type TakealotTopOfferSortBy =
+  | 'offerId'
+  | 'title'
+  | 'sku'
+  | 'sellingPrice'
+  | 'rrp'
+  | 'costPrice'
+  | 'potentialGrossProfitPerUnit'
+  | 'grossMarginPercent'
+  | 'reportedSalesUnits'
+
 export interface TakealotPricingSalesAnalytics {
   reportedSalesUnitsByWarehouse: Array<{ warehouse: string; units: number }>
   topOffersByReportedSales: Array<{
     offerId: string
     title: string | null
+    imageUrl: string | null
     sku: string | null
     sellingPrice: number | null
     rrp: number | null
@@ -287,9 +371,19 @@ export interface TakealotAlert {
   costPrice: number | null
 }
 
+export type TakealotAlertSortBy =
+  'severity' | 'type' | 'title' | 'sku' | 'warehouse' | 'quantity' | 'sellingPrice' | 'costPrice'
+
 export interface TakealotAlertsResult {
   items: TakealotAlert[]
   pagination: TakealotPageInfo
+  summary: {
+    total: number
+    critical: number
+    high: number
+    medium: number
+    low: number
+  }
   lastSuccessfulSyncAt: string | null
   isStale: boolean
 }
@@ -447,7 +541,13 @@ function assertProducts(value: {
   }
 }
 
-function assertOrders(value: { data: { orders: TakealotOrderRecord[] }; pagination?: ApiPagination }): TakealotOrders {
+function assertOrders(value: {
+  data: {
+    orders: TakealotOrderRecord[]
+    analytics: TakealotOrders['analytics']
+  }
+  pagination?: ApiPagination
+}): TakealotOrders {
   const response = requireRecord(value.data, 'orders')
   if (!Array.isArray(response.orders)) throw new Error('Takealot returned invalid orders.')
   response.orders.forEach((order: unknown) => {
@@ -455,7 +555,19 @@ function assertOrders(value: { data: { orders: TakealotOrderRecord[] }; paginati
     requireNumber(row.order_id, 'order identifier')
     if (Array.isArray(row.order_items)) {
       requireString(row.date_authed, 'order date')
-      row.order_items.forEach((item: unknown) => requireRecord(item, 'order item'))
+      row.order_items.forEach((item: unknown) => {
+        const orderItem = requireRecord(item, 'order item')
+        if (orderItem.quantity !== undefined) requireNumber(orderItem.quantity, 'order item quantity')
+        if (orderItem.selling_price !== undefined) requireNumber(orderItem.selling_price, 'order item selling price')
+        if (
+          orderItem.sale_status !== undefined &&
+          typeof orderItem.sale_status !== 'string' &&
+          typeof orderItem.sale_status !== 'boolean'
+        ) {
+          throw new Error('Takealot returned an invalid order item status.')
+        }
+        if (orderItem.dc !== undefined) requireString(orderItem.dc, 'order item distribution center')
+      })
     } else {
       requireNumber(row.order_item_id, 'order item identifier')
       requireNumber(row.quantity, 'order item quantity')
@@ -463,7 +575,30 @@ function assertOrders(value: { data: { orders: TakealotOrderRecord[] }; paginati
       requireString(row.order_date, 'order item date')
     }
   })
-  return { orders: response.orders as TakealotOrderRecord[], pagination: requirePagination(value.pagination) }
+  const analytics = requireRecord(response.analytics, 'order analytics')
+  if (!Array.isArray(analytics.trend) || !Array.isArray(analytics.statusCounts)) {
+    throw new Error('Takealot returned invalid order analytics.')
+  }
+  const trend = analytics.trend.map((entry: unknown) => {
+    const point = requireRecord(entry, 'order trend point')
+    return {
+      date: requireString(point.date, 'order trend date'),
+      revenue: requireNumber(point.revenue, 'order trend revenue'),
+      units: requireNumber(point.units, 'order trend units'),
+    }
+  })
+  const statusCounts = analytics.statusCounts.map((entry: unknown) => {
+    const status = requireRecord(entry, 'order status count')
+    return {
+      name: requireString(status.name, 'order status'),
+      value: requireNumber(status.value, 'order status count'),
+    }
+  })
+  return {
+    orders: response.orders as TakealotOrderRecord[],
+    pagination: requirePagination(value.pagination),
+    analytics: { trend, statusCounts },
+  }
 }
 
 export function getTakealotOverview(integrationId: string, signal?: AbortSignal) {
@@ -510,8 +645,11 @@ export async function getTakealotProducts(integrationId: string, filters: Takeal
   return assertProducts(response)
 }
 
-export async function getTakealotOrders(integrationId: string, filters: TakealotPageFilters, signal?: AbortSignal) {
-  const response = await apiRequestWithMeta<{ orders: TakealotOrderRecord[] }>(
+export async function getTakealotOrders(integrationId: string, filters: TakealotOrderFilters, signal?: AbortSignal) {
+  const response = await apiRequestWithMeta<{
+    orders: TakealotOrderRecord[]
+    analytics: TakealotOrders['analytics']
+  }>(
     integrationPath(
       integrationId,
       `/orders${query({
@@ -523,6 +661,8 @@ export async function getTakealotOrders(integrationId: string, filters: Takealot
         orderId: filters.orderId,
         page: filters.page ?? 1,
         limit: filters.limit ?? 10,
+        sortBy: filters.sortBy ?? 'date',
+        sortOrder: filters.sortOrder ?? 'desc',
       })}`,
     ),
     { signal },
@@ -562,16 +702,51 @@ export function getTakealotOffers(
     stockState?: 'in_stock' | 'out_of_stock' | 'low_stock' | 'all'
     costState?: 'known' | 'missing'
     marginState?: 'positive' | 'negative' | 'zero' | 'all'
-    sortBy?: string
+    sortBy?: TakealotOfferSortBy
     sortOrder?: 'asc' | 'desc'
   },
   signal?: AbortSignal,
 ): Promise<TakealotOffersResult> {
-  return apiRequestWithMeta<{ items: TakealotOffersResult['items']; lastSuccessfulSyncAt: string | null }>(
-    integrationPath(integrationId, `/offers${query(filters)}`),
-    { signal },
-  ).then((response) => {
+  return apiRequestWithMeta<{
+    items: TakealotOffersResult['items']
+    summary: TakealotOfferAccountSummary
+    lastSuccessfulSyncAt: string | null
+  }>(integrationPath(integrationId, `/offers${query(filters)}`), { signal }).then((response) => {
     if (!response.pagination) throw new Error('Takealot returned invalid offer pagination metadata.')
+    const summary = response.data.summary
+    const summaryValues = summary
+      ? [
+          summary.totalOffers,
+          summary.positiveProfitOffers,
+          summary.negativeProfitOffers,
+          summary.breakEvenOffers,
+          summary.unavailableProfitOffers,
+          summary.stockByWarehouse?.capeTown,
+          summary.stockByWarehouse?.johannesburg,
+          summary.stockByWarehouse?.durban,
+          summary.potentialRetailValue,
+          summary.inventoryCostValue,
+          summary.potentialGrossProfitOnCurrentStock,
+        ]
+      : []
+    if (
+      !summary ||
+      summaryValues.some((value) => typeof value !== 'number' || !Number.isFinite(value)) ||
+      [
+        summary.totalOffers,
+        summary.positiveProfitOffers,
+        summary.negativeProfitOffers,
+        summary.breakEvenOffers,
+        summary.unavailableProfitOffers,
+      ].some((value) => !Number.isInteger(value) || value < 0) ||
+      summary.totalOffers !==
+        summary.positiveProfitOffers +
+          summary.negativeProfitOffers +
+          summary.breakEvenOffers +
+          summary.unavailableProfitOffers
+    ) {
+      throw new Error('Takealot returned an invalid account-wide offer summary.')
+    }
     return {
       ...response.data,
       pagination: {
@@ -585,14 +760,26 @@ export function getTakealotOffers(
   })
 }
 
-export function getTakealotInventoryAnalytics(integrationId: string, signal?: AbortSignal) {
-  return apiRequest<TakealotInventoryAnalytics>(integrationPath(integrationId, '/analytics/warehouses'), { signal })
+export function getTakealotInventoryAnalytics(
+  integrationId: string,
+  filters: { sortBy: TakealotWarehouseSortBy; sortOrder: 'asc' | 'desc' },
+  signal?: AbortSignal,
+) {
+  return apiRequest<TakealotInventoryAnalytics>(
+    integrationPath(integrationId, `/analytics/warehouses${query(filters)}`),
+    { signal },
+  )
 }
 
-export function getTakealotPricingSalesAnalytics(integrationId: string, signal?: AbortSignal) {
-  return apiRequest<TakealotPricingSalesAnalytics>(integrationPath(integrationId, '/analytics/pricing-sales'), {
-    signal,
-  })
+export function getTakealotPricingSalesAnalytics(
+  integrationId: string,
+  filters: { sortBy: TakealotTopOfferSortBy; sortOrder: 'asc' | 'desc' },
+  signal?: AbortSignal,
+) {
+  return apiRequest<TakealotPricingSalesAnalytics>(
+    integrationPath(integrationId, `/analytics/pricing-sales${query(filters)}`),
+    { signal },
+  )
 }
 
 export function getTakealotAlerts(
@@ -603,17 +790,30 @@ export function getTakealotAlerts(
     type?: string
     severity?: 'critical' | 'high' | 'medium' | 'low'
     warehouse?: 'CPT' | 'JHB' | 'DBN' | 'ALL'
-    sortBy?: string
+    sortBy?: TakealotAlertSortBy
     sortOrder?: 'asc' | 'desc'
   },
   signal?: AbortSignal,
 ): Promise<TakealotAlertsResult> {
   return apiRequestWithMeta<{
     items: TakealotAlertsResult['items']
+    summary: TakealotAlertsResult['summary']
     lastSuccessfulSyncAt: string | null
     isStale: boolean
   }>(integrationPath(integrationId, `/alerts${query(filters)}`), { signal }).then((response) => {
     if (!response.pagination) throw new Error('Takealot returned invalid alert pagination metadata.')
+    if (
+      !response.data.summary ||
+      ![
+        response.data.summary.total,
+        response.data.summary.critical,
+        response.data.summary.high,
+        response.data.summary.medium,
+        response.data.summary.low,
+      ].every((count) => Number.isInteger(count) && count >= 0)
+    ) {
+      throw new Error('Takealot returned invalid alert severity summary.')
+    }
     return {
       ...response.data,
       pagination: {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Flex, Grid, Popover, Text } from '@chakra-ui/react'
+import { Button, Flex, Grid, Popover, Portal, Text } from '@chakra-ui/react'
 import { CalendarDays, Check, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 
 export type TakealotDateRange = { from: string; to: string }
@@ -21,8 +21,10 @@ const addDays = (date: Date, days: number) => {
 }
 const rangeFrom = (first: string, second: string): TakealotDateRange =>
   first <= second ? { from: first, to: second } : { from: second, to: first }
-const formatDate = (value: string, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }) =>
-  new Intl.DateTimeFormat(undefined, options).format(parseDate(value))
+const formatDate = (
+  value: string,
+  options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' },
+) => new Intl.DateTimeFormat(undefined, options).format(parseDate(value))
 const sameRange = (first: TakealotDateRange, second: TakealotDateRange) =>
   first.from === second.from && first.to === second.to
 
@@ -45,7 +47,10 @@ const presets: Preset[] = [
   },
   {
     label: 'Last 6 months',
-    getRange: (today) => ({ from: dateKey(new Date(today.getFullYear(), today.getMonth() - 5, 1)), to: dateKey(today) }),
+    getRange: (today) => ({
+      from: dateKey(new Date(today.getFullYear(), today.getMonth() - 5, 1)),
+      to: dateKey(today),
+    }),
   },
 ]
 
@@ -83,13 +88,19 @@ function MonthCalendar({
           <Button size="xs" variant="ghost" aria-label="Show previous month" onClick={() => onNavigate(-1)}>
             <ChevronLeft size={16} />
           </Button>
-        ) : <span />}
-        <Text fontSize="sm" fontWeight="700">{monthName}</Text>
+        ) : (
+          <span />
+        )}
+        <Text fontSize="sm" fontWeight="700">
+          {monthName}
+        </Text>
         {side === 'next' ? (
           <Button size="xs" variant="ghost" aria-label="Show next month" onClick={() => onNavigate(1)}>
             <ChevronRight size={16} />
           </Button>
-        ) : <span />}
+        ) : (
+          <span />
+        )}
       </Flex>
       <Grid templateColumns="repeat(7, minmax(0, 1fr))" gap="1" mb="1">
         {weekdays.map((weekday) => (
@@ -226,120 +237,143 @@ export function TakealotDateRangePicker({
           <span>{rangeLabel}</span>
         </Button>
       </Popover.Trigger>
-      <Popover.Positioner>
-        <Popover.Content
-          width={{ base: 'calc(100vw - 24px)', md: '680px' }}
-          maxH="min(85vh, 720px)"
-          overflowY="auto"
-          p="0"
-          borderWidth="1px"
-          borderColor="border"
-          borderRadius="xl"
-          boxShadow="xl"
-          zIndex="popover"
-        >
-          <Flex align="center" justify="space-between" px="5" py="4" borderBottomWidth="1px" borderColor="border">
-            <div>
-              <Text fontSize="sm" fontWeight="700">Select date range</Text>
-              <Text fontSize="xs" color="fg.muted" mt="1">{formatDate(pendingRange.from)} – {formatDate(pendingRange.to)}</Text>
-            </div>
-            <Button size="xs" variant="ghost" aria-label="Close date picker" onClick={() => setOpen(false)}>
-              <span aria-hidden="true">×</span>
-            </Button>
-          </Flex>
-          <Grid templateColumns={{ base: '1fr', md: '150px minmax(0, 1fr)' }}>
-            <Flex
-              direction={{ base: 'row', md: 'column' }}
-              gap="1"
-              p="3"
-              borderRightWidth={{ base: '0', md: '1px' }}
-              borderBottomWidth={{ base: '1px', md: '0' }}
-              borderColor="border"
-              overflowX="auto"
-            >
-              {presets.map((preset) => {
-                const presetRange = preset.getRange(parseDate(today))
-                const selected = sameRange(presetRange, pendingRange)
-                return (
-                  <Button
-                    key={preset.label}
-                    size="sm"
-                    variant={selected ? 'subtle' : 'ghost'}
-                    colorPalette={selected ? 'blue' : undefined}
-                    justifyContent={{ base: 'center', md: 'flex-start' }}
-                    whiteSpace="nowrap"
-                    onClick={() => {
-                      setPendingRange(presetRange)
-                      setVisibleMonth(monthStart(parseDate(presetRange.from)))
-                      setError('')
-                      anchor.current = null
-                      selecting.current = false
-                    }}
-                  >
-                    {preset.label}
-                  </Button>
-                )
-              })}
+      <Portal>
+        <Popover.Positioner>
+          <Popover.Content
+            width={{ base: 'calc(100vw - 24px)', md: 'min(680px, calc(100vw - 24px))' }}
+            maxH="min(85vh, 720px)"
+            overflowY="auto"
+            p="0"
+            borderWidth="1px"
+            borderColor="border"
+            borderRadius="xl"
+            boxShadow="xl"
+            zIndex="popover"
+          >
+            <Flex align="center" justify="space-between" px="5" py="4" borderBottomWidth="1px" borderColor="border">
+              <div>
+                <Text fontSize="sm" fontWeight="700">
+                  Select date range
+                </Text>
+                <Text fontSize="xs" color="fg.muted" mt="1">
+                  {formatDate(pendingRange.from)} – {formatDate(pendingRange.to)}
+                </Text>
+              </div>
+              <Button size="xs" variant="ghost" aria-label="Close date picker" onClick={() => setOpen(false)}>
+                <span aria-hidden="true">×</span>
+              </Button>
             </Flex>
-            <div>
-              <Grid templateColumns={{ base: '1fr', md: '1fr 1fr' }} gap={{ base: '4', md: '5' }} p={{ base: '3', md: '5' }}>
-                <MonthCalendar
-                  month={visibleMonth}
-                  side="previous"
-                  range={pendingRange}
-                  today={today}
-                  onNavigate={(months) => months && setVisibleMonth((current) => shiftMonth(current, months))}
-                  onDatePointerDown={handlePointerDown}
-                  onDatePointerEnter={handlePointerEnter}
-                  onDateClick={(date, detail) => {
-                    if (detail === 0) startPicking(date)
-                  }}
-                />
-                <MonthCalendar
-                  month={shiftMonth(visibleMonth, 1)}
-                  side="next"
-                  range={pendingRange}
-                  today={today}
-                  onNavigate={(months) => months && setVisibleMonth((current) => shiftMonth(current, months))}
-                  onDatePointerDown={handlePointerDown}
-                  onDatePointerEnter={handlePointerEnter}
-                  onDateClick={(date, detail) => {
-                    if (detail === 0) startPicking(date)
-                  }}
-                />
-              </Grid>
-              {error && <Text role="alert" color="fg.error" fontSize="xs" px="5" pb="3">{error}</Text>}
-            </div>
-          </Grid>
-          <Flex align="center" justify="space-between" gap="2" px="4" py="3" borderTopWidth="1px" borderColor="border" wrap="wrap">
-            <Flex gap="2" wrap="wrap">
-              <Button size="sm" variant="outline" onClick={() => setVisibleMonth((month) => shiftMonth(month, -6))}>
-                <ChevronLeft size={14} /> Back 6 months
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setVisibleMonth((month) => shiftMonth(month, 6))}>
-                Forward 6 months <ChevronRight size={14} />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  const resetRange = presets[3].getRange(parseDate(today))
-                  setPendingRange(resetRange)
-                  setVisibleMonth(monthStart(parseDate(resetRange.from)))
-                  setError('')
-                  anchor.current = null
-                  selecting.current = false
-                }}
+            <Grid templateColumns={{ base: '1fr', md: '150px minmax(0, 1fr)' }}>
+              <Flex
+                direction={{ base: 'row', md: 'column' }}
+                gap="1"
+                p="3"
+                borderRightWidth={{ base: '0', md: '1px' }}
+                borderBottomWidth={{ base: '1px', md: '0' }}
+                borderColor="border"
+                overflowX="auto"
               >
-                <RotateCcw size={14} /> Reset
+                {presets.map((preset) => {
+                  const presetRange = preset.getRange(parseDate(today))
+                  const selected = sameRange(presetRange, pendingRange)
+                  return (
+                    <Button
+                      key={preset.label}
+                      size="sm"
+                      variant={selected ? 'subtle' : 'ghost'}
+                      colorPalette={selected ? 'blue' : undefined}
+                      justifyContent={{ base: 'center', md: 'flex-start' }}
+                      whiteSpace="nowrap"
+                      onClick={() => {
+                        setPendingRange(presetRange)
+                        setVisibleMonth(monthStart(parseDate(presetRange.from)))
+                        setError('')
+                        anchor.current = null
+                        selecting.current = false
+                      }}
+                    >
+                      {preset.label}
+                    </Button>
+                  )
+                })}
+              </Flex>
+              <div>
+                <Grid
+                  templateColumns={{ base: '1fr', md: '1fr 1fr' }}
+                  gap={{ base: '4', md: '5' }}
+                  p={{ base: '3', md: '5' }}
+                >
+                  <MonthCalendar
+                    month={visibleMonth}
+                    side="previous"
+                    range={pendingRange}
+                    today={today}
+                    onNavigate={(months) => months && setVisibleMonth((current) => shiftMonth(current, months))}
+                    onDatePointerDown={handlePointerDown}
+                    onDatePointerEnter={handlePointerEnter}
+                    onDateClick={(date, detail) => {
+                      if (detail === 0) startPicking(date)
+                    }}
+                  />
+                  <MonthCalendar
+                    month={shiftMonth(visibleMonth, 1)}
+                    side="next"
+                    range={pendingRange}
+                    today={today}
+                    onNavigate={(months) => months && setVisibleMonth((current) => shiftMonth(current, months))}
+                    onDatePointerDown={handlePointerDown}
+                    onDatePointerEnter={handlePointerEnter}
+                    onDateClick={(date, detail) => {
+                      if (detail === 0) startPicking(date)
+                    }}
+                  />
+                </Grid>
+                {error && (
+                  <Text role="alert" color="fg.error" fontSize="xs" px="5" pb="3">
+                    {error}
+                  </Text>
+                )}
+              </div>
+            </Grid>
+            <Flex
+              align="center"
+              justify="space-between"
+              gap="2"
+              px="4"
+              py="3"
+              borderTopWidth="1px"
+              borderColor="border"
+              wrap="wrap"
+            >
+              <Flex gap="2" wrap="wrap">
+                <Button size="sm" variant="outline" onClick={() => setVisibleMonth((month) => shiftMonth(month, -6))}>
+                  <ChevronLeft size={14} /> Back 6 months
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setVisibleMonth((month) => shiftMonth(month, 6))}>
+                  Forward 6 months <ChevronRight size={14} />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    const resetRange = presets[3].getRange(parseDate(today))
+                    setPendingRange(resetRange)
+                    setVisibleMonth(monthStart(parseDate(resetRange.from)))
+                    setError('')
+                    anchor.current = null
+                    selecting.current = false
+                  }}
+                >
+                  <RotateCcw size={14} /> Reset
+                </Button>
+              </Flex>
+              <Button size="sm" colorPalette="blue" onClick={apply}>
+                <Check size={14} /> Apply range
               </Button>
             </Flex>
-            <Button size="sm" colorPalette="blue" onClick={apply}>
-              <Check size={14} /> Apply range
-            </Button>
-          </Flex>
-        </Popover.Content>
-      </Popover.Positioner>
+          </Popover.Content>
+        </Popover.Positioner>
+      </Portal>
     </Popover.Root>
   )
 }

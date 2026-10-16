@@ -121,14 +121,16 @@ router.get('/analytics/warehouses', async (request, response) => {
   const auth = authFrom(request)
   const integrationId = integrationIdFrom(request)
   await integrationService.assertTakealotIntegration(auth.companyId, integrationId)
-  return sendSuccess(response, await dashboardService.warehouseAnalytics(integrationId))
+  const input = dashboardService.parse(dashboardService.warehouseAnalyticsSchema, request.query)
+  return sendSuccess(response, await dashboardService.warehouseAnalytics(integrationId, input))
 })
 
 router.get('/analytics/pricing-sales', async (request, response) => {
   const auth = authFrom(request)
   const integrationId = integrationIdFrom(request)
   await integrationService.assertTakealotIntegration(auth.companyId, integrationId)
-  return sendSuccess(response, await dashboardService.pricingSalesAnalytics(integrationId))
+  const input = dashboardService.parse(dashboardService.pricingSalesSchema, request.query)
+  return sendSuccess(response, await dashboardService.pricingSalesAnalytics(integrationId, input))
 })
 
 router.get('/alerts', async (request, response) => {
@@ -173,14 +175,19 @@ router.get('/products/performance', requireTakealotApiKey, async (request, respo
     companyId,
     apiKeyFrom(request),
     service.parse(service.productsSchema, request.query),
+    integrationIdFrom(request),
   )
   const { pagination, ...data } = result
   return sendPaginatedSuccess(response, data, pagination)
 })
 
 router.get('/orders', requireTakealotApiKey, async (request, response) => {
-  const result = await service.listOrders(apiKeyFrom(request), service.parse(service.ordersSchema, request.query))
-  return sendPaginatedSuccess(response, { orders: result.orders }, result.pagination)
+  const result = await service.listOrders(
+    apiKeyFrom(request),
+    service.parse(service.ordersSchema, request.query),
+    integrationIdFrom(request),
+  )
+  return sendPaginatedSuccess(response, { orders: result.orders, analytics: result.analytics }, result.pagination)
 })
 
 router.get('/inventory/summary', requireTakealotApiKey, async (request, response) => {

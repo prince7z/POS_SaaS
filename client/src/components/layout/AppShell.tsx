@@ -53,9 +53,9 @@ export function AppShell() {
   }
 
   return (
-    <Flex minH="100vh" w="100vw" overflowX="hidden">
+    <Flex minH="100vh" w="full" minW="0" maxW="100%" overflowX="hidden">
       <Sidebar collapsed={collapsed} onToggle={toggleSidebar} />
-      <Flex flex="1" direction="column" minW="0" h="100vh" overflowY="auto">
+      <Flex flex="1" direction="column" minW="0" maxW="100%" h="100vh" overflowX="hidden" overflowY="auto">
         <Navbar
           onMobileMenuToggle={() => setMobileOpen(true)}
           isAiOpen={aiOpen}
@@ -67,20 +67,15 @@ export function AppShell() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            style={{ flex: 1 }}
+            style={{ flex: 1, minWidth: 0, width: '100%', maxWidth: '100%' }}
           >
-            <Box minH="calc(100vh - 64px)">
+            <Box minH="calc(100vh - 64px)" minW="0" maxW="100%">
               <Outlet />
             </Box>
           </motion.main>
         </AnimatePresence>
       </Flex>
-      <AgentPanel
-        isOpen={aiOpen}
-        onClose={() => setAiOpen(false)}
-        width={aiWidth}
-        onWidthChange={setAiWidth}
-      />
+      <AgentPanel isOpen={aiOpen} onClose={() => setAiOpen(false)} width={aiWidth} onWidthChange={setAiWidth} />
       <MobileNavigation open={mobileOpen} onClose={() => setMobileOpen(false)} />
     </Flex>
   )

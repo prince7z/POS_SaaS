@@ -60,6 +60,7 @@ export const offersSchema = z
         'stockCpt',
         'stockJhb',
         'stockDbn',
+        'potentialGrossProfitPerUnit',
         'totalExcessStock',
         'catalogueQualityScore',
         'lastSyncedAt',
@@ -82,7 +83,49 @@ export const alertsSchema = z
     type: z.string().trim().min(1).max(60).optional(),
     severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
     warehouse: z.enum(['CPT', 'JHB', 'DBN', 'ALL']).default('ALL'),
-    sortBy: z.enum(['severity', 'type', 'title', 'sku', 'warehouse', 'quantity']).default('severity'),
+    sortBy: z
+      .enum(['severity', 'type', 'title', 'sku', 'warehouse', 'quantity', 'sellingPrice', 'costPrice'])
+      .default('severity'),
+    sortOrder: z.enum(['asc', 'desc']).default('desc'),
+  })
+  .strict()
+
+export const warehouseAnalyticsSchema = z
+  .object({
+    sortBy: z
+      .enum([
+        'warehouse',
+        'stockUnits',
+        'incomingUnits',
+        'inventoryCostValue',
+        'potentialRetailValue',
+        'potentialGrossProfit',
+        'outOfStockOffers',
+        'lowStockOffers',
+        'excessStockOffers',
+        'shareOfInventoryPercent',
+        'reportedSalesUnits',
+      ])
+      .default('stockUnits'),
+    sortOrder: z.enum(['asc', 'desc']).default('desc'),
+  })
+  .strict()
+
+export const pricingSalesSchema = z
+  .object({
+    sortBy: z
+      .enum([
+        'offerId',
+        'title',
+        'sku',
+        'sellingPrice',
+        'rrp',
+        'costPrice',
+        'potentialGrossProfitPerUnit',
+        'grossMarginPercent',
+        'reportedSalesUnits',
+      ])
+      .default('reportedSalesUnits'),
     sortOrder: z.enum(['asc', 'desc']).default('desc'),
   })
   .strict()
@@ -176,9 +219,13 @@ const aggregateSql = (integrationId: string, lowStockThreshold: number) =>
     COALESCE(SUM((COALESCE("stockCpt", 0) + COALESCE("stockJhb", 0) + COALESCE("stockDbn", 0)) * "costPrice") FILTER (WHERE "costPrice" IS NOT NULL), 0) AS "inventoryCostValue",
     COALESCE(SUM((COALESCE("stockCpt", 0) + COALESCE("stockJhb", 0) + COALESCE("stockDbn", 0)) * "sellingPrice") FILTER (WHERE "sellingPrice" IS NOT NULL), 0) AS "potentialRetailInventoryValue",
     COALESCE(SUM((COALESCE("stockCpt", 0) + COALESCE("stockJhb", 0) + COALESCE("stockDbn", 0)) * ("sellingPrice" - "costPrice")) FILTER (WHERE "sellingPrice" IS NOT NULL AND "costPrice" IS NOT NULL), 0) AS "potentialGrossProfit",
-    COUNT(*) FILTER (WHERE UPPER(COALESCE("status", '')) IN ('ACTIVE', 'LIVE', 'PUBLISHED'))::int AS "activeOffers",
-    COUNT(*) FILTER (WHERE UPPER(COALESCE("status", '')) IN ('INACTIVE', 'DISABLED', 'PAUSED'))::int AS "disabledOffers",
-    COUNT(*) FILTER (WHERE "status" IS NULL OR UPPER("status") NOT IN ('ACTIVE', 'LIVE', 'PUBLISHED', 'INACTIVE', 'DISABLED', 'PAUSED'))::int AS "otherOffers"
+    COUNT(*) FILTER (WHERE UPPER(BTRIM(COALESCE("status", ''))) IN ('BUYABLE', 'ACTIVE', 'LIVE', 'PUBLISHED'))::int AS "buyableOffers",
+    COUNT(*) FILTER (WHERE UPPER(BTRIM(COALESCE("status", ''))) = 'NOT BUYABLE')::int AS "notBuyableOffers",
+    COUNT(*) FILTER (WHERE UPPER(BTRIM(COALESCE("status", ''))) = 'DISABLED BY TAKEALOT')::int AS "disabledByTakealotOffers",
+    COUNT(*) FILTER (WHERE UPPER(BTRIM(COALESCE("status", ''))) = 'DISABLED BY SELLER')::int AS "disabledBySellerOffers",
+    COUNT(*) FILTER (WHERE UPPER(BTRIM(COALESCE("status", ''))) NOT IN (
+      'BUYABLE', 'ACTIVE', 'LIVE', 'PUBLISHED', 'NOT BUYABLE', 'DISABLED BY TAKEALOT', 'DISABLED BY SELLER'
+    ))::int AS "otherOffers"
   FROM "TakealotOffer" WHERE "integrationId" = ${integrationId}
 `)
 
@@ -205,8 +252,10 @@ export const overview = async (companyId: string, integrationId: string) => {
   return {
     totalOffers: val(row.totalOffers),
     listingStatusCounts: {
-      active: val(row.activeOffers),
-      disabled: val(row.disabledOffers),
+      buyable: val(row.buyableOffers),
+      notBuyable: val(row.notBuyableOffers),
+      disabledByTakealot: val(row.disabledByTakealotOffers),
+      disabledBySeller: val(row.disabledBySellerOffers),
       other: val(row.otherOffers),
     },
     totalStock: val(row.totalStock),
@@ -305,6 +354,7 @@ const sortColumns: Record<z.infer<typeof offersSchema>['sortBy'], Prisma.Sql> = 
   stockCpt: Prisma.sql`"stockCpt"`,
   stockJhb: Prisma.sql`"stockJhb"`,
   stockDbn: Prisma.sql`"stockDbn"`,
+  potentialGrossProfitPerUnit: Prisma.sql`CASE WHEN "sellingPrice" IS NOT NULL AND "costPrice" IS NOT NULL THEN "sellingPrice" - "costPrice" END`,
   totalExcessStock: Prisma.sql`"totalExcessStock"`,
   catalogueQualityScore: Prisma.sql`"catalogueQualityScore"`,
   lastSyncedAt: Prisma.sql`"lastSyncedAt"`,
@@ -315,7 +365,7 @@ export const listOffers = async (integrationId: string, input: z.infer<typeof of
   const lowStockThreshold = await getTakealotLowStockThreshold(integrationId)
   const where = whereSql(integrationId, input, lowStockThreshold)
   const order = input.sortOrder === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`
-  const [rows, counts] = await Promise.all([
+  const [rows, counts, accountSummaries] = await Promise.all([
     prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
       SELECT * FROM "TakealotOffer" WHERE ${where}
       ORDER BY ${sortColumns[input.sortBy]} ${order} NULLS LAST, "offerId" ASC
@@ -323,6 +373,25 @@ export const listOffers = async (integrationId: string, input: z.infer<typeof of
     `),
     prisma.$queryRaw<Array<{ total: number }>>(Prisma.sql`
       SELECT COUNT(*)::int AS total FROM "TakealotOffer" WHERE ${where}
+    `),
+    prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
+      SELECT
+        COUNT(*)::int AS "totalOffers",
+        COUNT(*) FILTER (WHERE "sellingPrice" IS NOT NULL AND "costPrice" IS NOT NULL AND "sellingPrice" > "costPrice")::int AS "positiveProfitOffers",
+        COUNT(*) FILTER (WHERE "sellingPrice" IS NOT NULL AND "costPrice" IS NOT NULL AND "sellingPrice" < "costPrice")::int AS "negativeProfitOffers",
+        COUNT(*) FILTER (WHERE "sellingPrice" IS NOT NULL AND "costPrice" IS NOT NULL AND "sellingPrice" = "costPrice")::int AS "breakEvenOffers",
+        COUNT(*) FILTER (WHERE "sellingPrice" IS NULL OR "costPrice" IS NULL)::int AS "unavailableProfitOffers",
+        COALESCE(SUM(COALESCE("stockCpt", 0)), 0) AS "capeTownStock",
+        COALESCE(SUM(COALESCE("stockJhb", 0)), 0) AS "johannesburgStock",
+        COALESCE(SUM(COALESCE("stockDbn", 0)), 0) AS "durbanStock",
+        COALESCE(SUM((COALESCE("stockCpt", 0) + COALESCE("stockJhb", 0) + COALESCE("stockDbn", 0)) * "sellingPrice")
+          FILTER (WHERE "sellingPrice" IS NOT NULL), 0) AS "potentialRetailValue",
+        COALESCE(SUM((COALESCE("stockCpt", 0) + COALESCE("stockJhb", 0) + COALESCE("stockDbn", 0)) * "costPrice")
+          FILTER (WHERE "costPrice" IS NOT NULL), 0) AS "inventoryCostValue",
+        COALESCE(SUM((COALESCE("stockCpt", 0) + COALESCE("stockJhb", 0) + COALESCE("stockDbn", 0)) * ("sellingPrice" - "costPrice"))
+          FILTER (WHERE "sellingPrice" IS NOT NULL AND "costPrice" IS NOT NULL), 0) AS "potentialGrossProfitOnCurrentStock"
+      FROM "TakealotOffer"
+      WHERE "integrationId" = ${integrationId}
     `),
   ])
   const items = rows.map((row) => {
@@ -362,9 +431,26 @@ export const listOffers = async (integrationId: string, input: z.infer<typeof of
     }
   })
   const total = counts[0]?.total ?? 0
+  const accountSummary = accountSummaries[0]
+  if (!accountSummary) throw new Error('Takealot offer summary query returned no result.')
   return {
     items,
     pagination: pageInfo(input.page, input.pageSize, total),
+    summary: {
+      totalOffers: val(accountSummary.totalOffers),
+      positiveProfitOffers: val(accountSummary.positiveProfitOffers),
+      negativeProfitOffers: val(accountSummary.negativeProfitOffers),
+      breakEvenOffers: val(accountSummary.breakEvenOffers),
+      unavailableProfitOffers: val(accountSummary.unavailableProfitOffers),
+      stockByWarehouse: {
+        capeTown: val(accountSummary.capeTownStock),
+        johannesburg: val(accountSummary.johannesburgStock),
+        durban: val(accountSummary.durbanStock),
+      },
+      potentialRetailValue: val(accountSummary.potentialRetailValue),
+      inventoryCostValue: val(accountSummary.inventoryCostValue),
+      potentialGrossProfitOnCurrentStock: val(accountSummary.potentialGrossProfitOnCurrentStock),
+    },
     lastSuccessfulSyncAt:
       (await prisma.takealotSyncState.findUnique({ where: { integrationId }, select: { lastSuccessfulSyncAt: true } }))
         ?.lastSuccessfulSyncAt ?? null,
@@ -426,7 +512,7 @@ export const inventoryAnalytics = async (integrationId: string) => {
   }
 }
 
-export const warehouseAnalytics = async (integrationId: string) => {
+export const warehouseAnalytics = async (integrationId: string, input: z.infer<typeof warehouseAnalyticsSchema>) => {
   const inventory = await inventoryAnalytics(integrationId)
   const salesByWarehouse = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
     SELECT
@@ -436,17 +522,42 @@ export const warehouseAnalytics = async (integrationId: string) => {
     FROM "TakealotOffer" WHERE "integrationId" = ${integrationId}
   `)
   const reportedSales = salesByWarehouse[0] ?? {}
+  const warehouses = inventory.warehouses.map((item) => ({
+    ...item,
+    reportedSalesUnits: val(reportedSales[item.warehouse]),
+  }))
+  const direction = input.sortOrder === 'asc' ? 1 : -1
+  warehouses.sort((left, right) => {
+    const leftValue = left[input.sortBy]
+    const rightValue = right[input.sortBy]
+    if (leftValue === null || leftValue === undefined) return rightValue === null || rightValue === undefined ? 0 : 1
+    if (rightValue === null || rightValue === undefined) return -1
+    const comparison =
+      typeof leftValue === 'string' && typeof rightValue === 'string'
+        ? leftValue.localeCompare(rightValue)
+        : Number(leftValue) - Number(rightValue)
+    return comparison === 0 ? left.warehouse.localeCompare(right.warehouse) : comparison * direction
+  })
   return {
-    warehouses: inventory.warehouses.map((item) => ({
-      ...item,
-      reportedSalesUnits: val(reportedSales[item.warehouse]),
-    })),
+    warehouses,
     currency: inventory.currency,
     financialNote: inventory.financialNote,
   }
 }
 
-export const pricingSalesAnalytics = async (integrationId: string) => {
+export const pricingSalesAnalytics = async (integrationId: string, input: z.infer<typeof pricingSalesSchema>) => {
+  const pricingSortColumns: Record<z.infer<typeof pricingSalesSchema>['sortBy'], Prisma.Sql> = {
+    offerId: Prisma.sql`"offerId"`,
+    title: Prisma.sql`"title"`,
+    sku: Prisma.sql`"sku"`,
+    sellingPrice: Prisma.sql`"sellingPrice"`,
+    rrp: Prisma.sql`"rrp"`,
+    costPrice: Prisma.sql`"costPrice"`,
+    potentialGrossProfitPerUnit: Prisma.sql`CASE WHEN "sellingPrice" IS NOT NULL AND "costPrice" IS NOT NULL THEN "sellingPrice" - "costPrice" END`,
+    grossMarginPercent: Prisma.sql`CASE WHEN "sellingPrice" > 0 AND "costPrice" IS NOT NULL THEN (("sellingPrice" - "costPrice") / "sellingPrice") * 100 END`,
+    reportedSalesUnits: Prisma.sql`COALESCE("salesUnitsCpt",0) + COALESCE("salesUnitsJhb",0) + COALESCE("salesUnitsDbn",0)`,
+  }
+  const sortOrder = input.sortOrder === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`
   const [aggregates, topBySales] = await Promise.all([
     prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
       SELECT
@@ -465,7 +576,7 @@ export const pricingSalesAnalytics = async (integrationId: string) => {
       SELECT "offerId", "title", "sku", "imageUrl", "offerUrl", "sellingPrice", "rrp", "costPrice",
         COALESCE("salesUnitsCpt",0) + COALESCE("salesUnitsJhb",0) + COALESCE("salesUnitsDbn",0) AS "reportedSalesUnits"
       FROM "TakealotOffer" WHERE "integrationId" = ${integrationId}
-      ORDER BY "reportedSalesUnits" DESC, "offerId" ASC LIMIT 10
+      ORDER BY ${pricingSortColumns[input.sortBy]} ${sortOrder} NULLS LAST, "offerId" ASC LIMIT 10
     `),
   ])
   const aggregate = aggregates[0] ?? {}
@@ -531,9 +642,22 @@ export const listAlerts = async (companyId: string, integrationId: string, input
     sku: Prisma.raw('"sku"'),
     warehouse: Prisma.raw('"warehouse"'),
     quantity: Prisma.raw('"quantity"'),
+    sellingPrice: Prisma.raw('"sellingPrice"'),
+    costPrice: Prisma.raw('"costPrice"'),
   }[input.sortBy]
   const orderDirection = input.sortOrder === 'asc' ? Prisma.raw('ASC') : Prisma.raw('DESC')
-  const rows = await prisma.$queryRaw<Array<Alert & { severityRank: number; totalCount: bigint }>>(Prisma.sql`
+  const rows = await prisma.$queryRaw<
+    Array<
+      Alert & {
+        severityRank: number
+        totalCount: bigint
+        criticalCount: number
+        highCount: number
+        mediumCount: number
+        lowCount: number
+      }
+    >
+  >(Prisma.sql`
     WITH base AS (
       SELECT "offerId", "title", "sku", "imageUrl", "offerUrl", "status", "sellingPrice", "costPrice", "rrp",
         "stockCpt", "stockJhb", "stockDbn", "stockCoverCpt", "stockCoverJhb", "stockCoverDbn",
@@ -604,25 +728,58 @@ export const listAlerts = async (companyId: string, integrationId: string, input
         AND (${input.severity ?? null}::text IS NULL OR "severity" = ${input.severity ?? null})
         AND (${input.warehouse} = 'ALL' OR "warehouse" = ${input.warehouse})
     ),
-    counted AS (SELECT COUNT(*) AS "totalCount" FROM filtered),
+    counted AS (
+      SELECT
+        COUNT(*) AS "totalCount",
+        COUNT(*) FILTER (WHERE "severity" = 'critical')::int AS "criticalCount",
+        COUNT(*) FILTER (WHERE "severity" = 'high')::int AS "highCount",
+        COUNT(*) FILTER (WHERE "severity" = 'medium')::int AS "mediumCount",
+        COUNT(*) FILTER (WHERE "severity" = 'low')::int AS "lowCount"
+      FROM filtered
+    ),
     paged AS (
       SELECT * FROM filtered
       ORDER BY ${orderColumn} ${orderDirection} NULLS LAST, "offerId" ASC, "warehouse" ASC NULLS LAST, "type" ASC
       LIMIT ${input.pageSize} OFFSET ${(input.page - 1) * input.pageSize}
     )
-    SELECT paged.*, counted."totalCount" FROM counted LEFT JOIN paged ON TRUE
+    SELECT
+      paged.*,
+      counted."totalCount",
+      counted."criticalCount",
+      counted."highCount",
+      counted."mediumCount",
+      counted."lowCount"
+    FROM counted LEFT JOIN paged ON TRUE
   `)
   const total = Number(rows[0]?.totalCount ?? 0n)
+  const summary = {
+    total,
+    critical: val(rows[0]?.criticalCount),
+    high: val(rows[0]?.highCount),
+    medium: val(rows[0]?.mediumCount),
+    low: val(rows[0]?.lowCount),
+  }
   return {
     items: rows
       .filter((row) => row.offerId !== null)
-      .map(({ severityRank: _severityRank, totalCount: _totalCount, ...alert }) => ({
-        ...alert,
-        quantity: num(alert.quantity),
-        sellingPrice: num(alert.sellingPrice),
-        costPrice: num(alert.costPrice),
-      })),
+      .map(
+        ({
+          severityRank: _severityRank,
+          totalCount: _totalCount,
+          criticalCount: _criticalCount,
+          highCount: _highCount,
+          mediumCount: _mediumCount,
+          lowCount: _lowCount,
+          ...alert
+        }) => ({
+          ...alert,
+          quantity: num(alert.quantity),
+          sellingPrice: num(alert.sellingPrice),
+          costPrice: num(alert.costPrice),
+        }),
+      ),
     pagination: pageInfo(input.page, input.pageSize, total),
+    summary,
     lastSuccessfulSyncAt: state.lastSuccessfulSyncAt,
     isStale: state.isStale,
   }
