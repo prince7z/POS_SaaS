@@ -14,12 +14,13 @@ jobs:
     steps:
       - name: Configure SSH
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          SSH_PRIVATE_KEY_BASE64: ${{ secrets.EC2_SSH_PRIVATE_KEY_BASE64 }}
           SSH_KNOWN_HOSTS: ${{ vars.EC2_SSH_KNOWN_HOSTS }}
         run: |
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          printf '%s' "$SSH_PRIVATE_KEY_BASE64" | base64 --decode > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
