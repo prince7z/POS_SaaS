@@ -65,17 +65,39 @@ function cleanExpiredDrafts() {
 
 function sanitizeEmailImages(html: string, user: { companyName?: string; companyLogoUrl?: string | null }): string {
 	const companyBrandHeader = `<div style="font-size:22px; font-weight:700; color:#0f172a; margin-bottom:20px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; letter-spacing:-0.5px;">${user.companyName || "POS SaaS"}</div>`;
+	const constrainLogo = (imgTag: string, logoUrl: string): string => {
+		const styleMatch = imgTag.match(/\sstyle\s*=\s*(["'])(.*?)\1/i);
+		const existingStyle = styleMatch?.[2] ?? "";
+		const preservedStyle = existingStyle
+			.replace(/(?:^|;)\s*(?:display|width|max-width|height|max-height|object-fit)\s*:[^;]*/gi, "")
+			.trim()
+			.replace(/^;+|;+$/g, "");
+		const logoStyle = [
+			preservedStyle,
+			"display:block",
+			"width:120px!important",
+			"max-width:120px!important",
+			"height:auto!important",
+			"max-height:48px!important",
+			"object-fit:contain",
+		].filter(Boolean).join(";");
+		const escapedStyle = logoStyle.replace(/"/g, "&quot;");
+		const withoutSizing = imgTag
+			.replace(/\sstyle\s*=\s*(["']).*?\1/i, "")
+			.replace(/\s(?:width|height)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+		return withoutSizing.replace(/<img\b/i, `<img width="120" style="${escapedStyle}"`).replace(/src=(["'])[^"']*\1/i, `src="${logoUrl}"`);
+	};
 
 	return html.replace(/<img[^>]*src=["']([^"']+)["'][^>]*\/?>/gi, (imgTag, srcUrl) => {
 		const srcLower = srcUrl.toLowerCase();
 		if (srcLower.includes(".avif") || srcLower.includes(".webp") || srcLower.includes("salesakart.com")) {
 			if (user.companyLogoUrl && !user.companyLogoUrl.toLowerCase().includes(".avif")) {
-				return imgTag.replace(srcUrl, user.companyLogoUrl);
+				return constrainLogo(imgTag, user.companyLogoUrl);
 			}
 			return companyBrandHeader;
 		}
 		if (user.companyLogoUrl) {
-			return imgTag.replace(srcUrl, user.companyLogoUrl);
+			return constrainLogo(imgTag, user.companyLogoUrl);
 		}
 		return imgTag;
 	});
@@ -179,20 +201,6 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 		}
 
 		if (step.type !== "tool") continue;
-		if (step.requiresConfirmation && step.tool !== "email_tool") {
-			const response = interrupt({
-				type: "confirmation",
-				question: `Continue with: ${step.description}?`,
-				options: [
-					{ id: "confirm", label: "Continue" },
-					{ id: "cancel", label: "Cancel" },
-				],
-			});
-			if (!isConfirmationApproved(response)) {
-				stepResults[step.id] = safeFailure("The requested action was cancelled.");
-				continue;
-			}
-		}
 		const definition = findAgentTool(step.tool, step.operation);
 		if (!definition) {
 			stepResults[step.id] = safeFailure("That capability is not available.");
@@ -202,6 +210,23 @@ export const executePlan = async (state: AgentGraphState, tracker?: AgentPerfTra
 		if (requiredAccess && !state.user.permissions.includes(requiredAccess)) {
 			stepResults[step.id] = safeFailure("You do not have access to complete that request.");
 			continue;
+		}
+		const requiresConfirmation = definition.requiresConfirmationByOperation?.[step.operation] ?? step.requiresConfirmation;
+		if (requiresConfirmation && step.tool !== "email_tool") {
+			const response = interrupt({
+				type: "confirmation",
+				confirmationId: `confirm_${Date.now()}_${step.id}`,
+				message: `Continue with: ${step.description}?`,
+				action: { label: "Confirm action" },
+				options: [
+					{ id: "confirm", label: "Continue", value: true },
+					{ id: "cancel", label: "Cancel", value: false },
+				],
+			});
+			if (!isConfirmationApproved(response)) {
+				stepResults[step.id] = safeFailure("The requested action was cancelled.");
+				continue;
+			}
 		}
 		try {
 			const toolStartTime = performance.now();

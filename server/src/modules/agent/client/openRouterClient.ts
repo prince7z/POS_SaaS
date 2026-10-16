@@ -1,8 +1,38 @@
 import { env } from "../../../config/env";
-import { AgentPerfTracker, estimateTokens } from "../utils/perfLogger";
+import { logger } from "../../../lib/logger";
+import { AgentPerfTracker, estimateTokens, estimateTokensFromCharCount } from "../utils/perfLogger";
 import { logDetailedAgentError } from "../utils/errorPrinter";
 
 const OPEN_ROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
+const LLM_ATTEMPT_TIMEOUT_MS = 30_000;
+const LLM_REQUEST_BUDGET_MS = 90_000;
+const LLM_STREAM_TIMEOUT_MS = 30_000;
+const LLM_STREAM_FALLBACK_BUDGET_MS = 45_000;
+
+type LLMCallOptions = {
+	nodeName?: string;
+	state?: Record<string, unknown>;
+	requestBudgetMs?: number;
+};
+
+const createTimeoutSignal = (parentSignal: AbortSignal | undefined, timeoutMs: number) => {
+	const controller = new AbortController();
+	const onParentAbort = () => controller.abort(parentSignal?.reason);
+	if (parentSignal?.aborted) onParentAbort();
+	else parentSignal?.addEventListener("abort", onParentAbort, { once: true });
+
+	const timer = setTimeout(() => {
+		controller.abort(new Error(`OpenRouter request timed out after ${timeoutMs}ms`));
+	}, timeoutMs);
+
+	return {
+		signal: controller.signal,
+		dispose: () => {
+			clearTimeout(timer);
+			parentSignal?.removeEventListener("abort", onParentAbort);
+		},
+	};
+};
 
 export type ChatMessage = {
 	role: "system" | "user" | "assistant";
@@ -14,6 +44,9 @@ type OpenRouterResponse = {
 		finish_reason?: string;
 		message?: {
 			content?: unknown;
+		};
+		delta?: {
+			content?: string;
 		};
 	}>;
 	usage?: {
@@ -94,19 +127,19 @@ function analyzeInputMessages(messages: ChatMessage[], stateObj?: Record<string,
 		: [];
 
 	const totalInputChars = messages.reduce((acc, m) => acc + (m.content || "").length, 0);
-	const totalInputTokens = estimateTokens(totalInputChars);
+	const totalInputTokens = estimateTokensFromCharCount(totalInputChars);
 
 	return {
 		systemPromptChars,
-		systemPromptTokens: estimateTokens(systemPromptChars),
+		systemPromptTokens: estimateTokensFromCharCount(systemPromptChars),
 		userPromptChars,
-		userPromptTokens: estimateTokens(userPromptChars),
+		userPromptTokens: estimateTokensFromCharCount(userPromptChars),
 		historyChars,
-		historyTokens: estimateTokens(historyChars),
+		historyTokens: estimateTokensFromCharCount(historyChars),
 		stateChars,
-		stateTokens: estimateTokens(stateChars),
+		stateTokens: estimateTokensFromCharCount(stateChars),
 		toolsChars,
-		toolsTokens: estimateTokens(toolsChars),
+		toolsTokens: estimateTokensFromCharCount(toolsChars),
 		messageCount: messages.length,
 		messageBreakdown,
 		totalInputChars,
@@ -116,7 +149,7 @@ function analyzeInputMessages(messages: ChatMessage[], stateObj?: Record<string,
 		numToolCalls,
 		toolNames,
 		toolResultChars: toolsChars,
-		toolResultTokens: estimateTokens(toolsChars),
+		toolResultTokens: estimateTokensFromCharCount(toolsChars),
 	};
 }
 
@@ -125,7 +158,7 @@ const request = async (
 	responseFormat?: "json_object",
 	tracker?: AgentPerfTracker,
 	signal?: AbortSignal,
-	options?: { nodeName?: string; state?: Record<string, unknown> }
+	options?: LLMCallOptions
 ) => {
 	if (!env.agent.openRouterApiKey) {
 		throw new Error("Agent model is not configured");
@@ -151,7 +184,8 @@ const request = async (
 		llmCallId,
 	});
 
-	const fetchStartPerf = performance.now();
+	const requestBudgetMs = options?.requestBudgetMs ?? LLM_REQUEST_BUDGET_MS;
+	const requestDeadline = Date.now() + requestBudgetMs;
 	let lastFailure = "OpenRouter returned an empty response";
 
 	const candidateModels = Array.from(new Set([
@@ -162,8 +196,25 @@ const request = async (
 		"openai/gpt-4o-mini",
 	]));
 
-	for (const modelToTry of candidateModels) {
+	modelLoop: for (const modelToTry of candidateModels) {
 		for (let attempt = 0; attempt < 2; attempt += 1) {
+			if (signal?.aborted) throw signal.reason ?? new Error("OpenRouter request aborted");
+			const remainingBudgetMs = requestDeadline - Date.now();
+			if (remainingBudgetMs <= 0) {
+				lastFailure = `OpenRouter request exceeded the ${requestBudgetMs}ms time budget`;
+				break modelLoop;
+			}
+			const attemptTimeoutMs = Math.min(LLM_ATTEMPT_TIMEOUT_MS, remainingBudgetMs);
+			const timeout = createTimeoutSignal(signal, attemptTimeoutMs);
+			const attemptStartPerf = performance.now();
+			const attemptStartTimestamp = new Date().toISOString();
+			tracker?.log({
+				layer: "llm",
+				module: "openRouterClient.ts",
+				operation: `LLM attempt started [${node}]`,
+				llmCallId,
+				extra: { model: modelToTry, attempt: attempt + 1, timeoutMs: attemptTimeoutMs },
+			});
 			try {
 				const response = await fetch(OPEN_ROUTER_BASE_URL, {
 					method: "POST",
@@ -180,13 +231,27 @@ const request = async (
 						max_tokens: 4000,
 						...(responseFormat ? { response_format: { type: responseFormat } } : {}),
 					}),
-					signal,
+					signal: timeout.signal,
 				});
 
-				const fetchEndPerf = performance.now();
 				const payload = (await response.json()) as OpenRouterResponse;
 				if (!response.ok) {
 					lastFailure = payload.error?.message ?? `OpenRouter request failed (${response.status})`;
+					logger.warn("[Agent LLM] OpenRouter rejected request", {
+						requestId: tracker?.requestId,
+						node,
+						model: modelToTry,
+						attempt: attempt + 1,
+						status: response.status,
+						message: lastFailure.slice(0, 300),
+					});
+					tracker?.log({
+						layer: "llm",
+						module: "openRouterClient.ts",
+						operation: `LLM provider response failed [${node}]`,
+						llmCallId,
+						extra: { model: modelToTry, attempt: attempt + 1, status: response.status, message: lastFailure.slice(0, 300) },
+					});
 					continue;
 				}
 
@@ -209,8 +274,9 @@ const request = async (
 						: "";
 
 				if (content.trim()) {
+					const fetchEndPerf = performance.now();
 					const postPerf = performance.now();
-					const totalLLMDurationMs = Math.round((fetchEndPerf - fetchStartPerf) * 100) / 100;
+					const totalLLMDurationMs = Math.round((fetchEndPerf - attemptStartPerf) * 100) / 100;
 					const postProcessingMs = Math.round((postPerf - fetchEndPerf) * 100) / 100;
 
 					tracker?.logLLMPostRequest({
@@ -218,11 +284,11 @@ const request = async (
 						requestId: tracker.requestId,
 						node,
 						model: modelToTry,
-						startTimestamp: new Date(fetchStartPerf).toISOString(),
+						startTimestamp: attemptStartTimestamp,
 						endTimestamp: new Date(fetchEndPerf).toISOString(),
-						elapsedFromPrevNodeMs: Math.round((fetchStartPerf - preStartPerf) * 100) / 100,
+						elapsedFromPrevNodeMs: Math.round((attemptStartPerf - preStartPerf) * 100) / 100,
 						...analyzed,
-						timeBeforeLLMReqMs: Math.round((fetchStartPerf - (tracker?.startPerfTime || fetchStartPerf)) * 100) / 100,
+						timeBeforeLLMReqMs: Math.round((attemptStartPerf - (tracker?.startPerfTime || attemptStartPerf)) * 100) / 100,
 						ttftMs: totalLLMDurationMs,
 						tokenGenDurationMs: 0,
 						totalLLMDurationMs,
@@ -245,8 +311,21 @@ const request = async (
 				lastFailure = `Model ${modelToTry} returned no text content (finish reason: ${choice?.finish_reason ?? "unknown"})`;
 				logDetailedAgentError(`OpenRouter Model Call Empty Response [${node}]`, lastFailure, { modelToTry, attempt }, tracker);
 			} catch (err) {
+				if (signal?.aborted) throw err;
 				const formatted = logDetailedAgentError(`OpenRouter Model Call Failed [${node}]`, err, { modelToTry, attempt }, tracker);
 				lastFailure = formatted.summary;
+				if (timeout.signal.aborted) {
+					tracker?.log({
+						layer: "llm",
+						module: "openRouterClient.ts",
+						operation: `LLM attempt timed out; trying next model [${node}]`,
+						llmCallId,
+						extra: { model: modelToTry, attempt: attempt + 1 },
+					});
+					break;
+				}
+			} finally {
+				timeout.dispose();
 			}
 		}
 	}
@@ -257,10 +336,11 @@ const request = async (
 const streamRequest = async (
 	messages: ChatMessage[],
 	onChunk: (chunk: string) => void,
+	modelToTry: string,
 	responseFormat?: "json_object",
 	tracker?: AgentPerfTracker,
 	signal?: AbortSignal,
-	options?: { nodeName?: string; state?: Record<string, unknown> }
+	options?: LLMCallOptions
 ): Promise<string> => {
 	if (!env.agent.openRouterApiKey) {
 		throw new Error("Agent model is not configured");
@@ -275,7 +355,7 @@ const streamRequest = async (
 	tracker?.logLLMPreRequest({
 		llmCallId,
 		node,
-		model: env.agent.model,
+		model: modelToTry,
 		...analyzed,
 	});
 
@@ -287,6 +367,7 @@ const streamRequest = async (
 	});
 
 	const fetchStartPerf = performance.now();
+	const timeout = createTimeoutSignal(signal, LLM_STREAM_TIMEOUT_MS);
 
 	const response = await fetch(OPEN_ROUTER_BASE_URL, {
 		method: "POST",
@@ -297,7 +378,7 @@ const streamRequest = async (
 			"X-Title": env.agent.siteName,
 		},
 		body: JSON.stringify({
-			model: env.agent.model,
+			model: modelToTry,
 			messages,
 			temperature: 0,
 			max_tokens: 4000,
@@ -305,15 +386,31 @@ const streamRequest = async (
 			stream: true,
 			...(responseFormat ? { response_format: { type: responseFormat } } : {}),
 		}),
-		signal,
+		signal: timeout.signal,
+	}).catch((error: unknown) => {
+		timeout.dispose();
+		if (!signal?.aborted) {
+			logDetailedAgentError(`OpenRouter Stream Request Failed [${node}]`, error, { model: modelToTry }, tracker);
+		}
+		throw error;
 	});
 
 	if (!response.ok) {
 		const payload = (await response.json().catch(() => ({}))) as OpenRouterResponse;
-		throw new Error(payload.error?.message ?? "OpenRouter stream request failed");
+		const message = payload.error?.message ?? `OpenRouter stream request failed (${response.status})`;
+		timeout.dispose();
+		logger.warn("[Agent LLM] OpenRouter stream rejected request", {
+			requestId: tracker?.requestId,
+			node,
+			model: modelToTry,
+			status: response.status,
+			message: message.slice(0, 300),
+		});
+		throw new Error(message);
 	}
 
 	if (!response.body) {
+		timeout.dispose();
 		throw new Error("Response body is null");
 	}
 
@@ -330,40 +427,49 @@ const streamRequest = async (
 	let finishReason = "stop";
 	let providerUsage: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined;
 
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
 
-		const nowChunk = performance.now();
-		if (!firstChunkPerf) {
-			firstChunkPerf = nowChunk;
-			const ttftMs = Math.round((firstChunkPerf - fetchStartPerf) * 100) / 100;
-			tracker?.log({
-				layer: "llm",
-				module: "openRouterClient.ts",
-				operation: `LLM first token (TTFT: ${ttftMs}ms)`,
-				llmCallId,
-			});
-		} else if (lastChunkPerf) {
-			const gap = nowChunk - lastChunkPerf;
-			totalInterChunkMs += gap;
-			if (gap > maxInterChunkGapMs) maxInterChunkGapMs = gap;
-		}
-		lastChunkPerf = nowChunk;
+			const nowChunk = performance.now();
+			if (!firstChunkPerf) {
+				firstChunkPerf = nowChunk;
+				const ttftMs = Math.round((firstChunkPerf - fetchStartPerf) * 100) / 100;
+				tracker?.log({
+					layer: "llm",
+					module: "openRouterClient.ts",
+					operation: `LLM first token (TTFT: ${ttftMs}ms)`,
+					llmCallId,
+				});
+			} else if (lastChunkPerf) {
+				const gap = nowChunk - lastChunkPerf;
+				totalInterChunkMs += gap;
+				if (gap > maxInterChunkGapMs) maxInterChunkGapMs = gap;
+			}
+			lastChunkPerf = nowChunk;
 
-		buffer += decoder.decode(value, { stream: true });
-		const lines = buffer.split("\n");
-		buffer = lines.pop() || "";
+			buffer += decoder.decode(value, { stream: true });
+			const lines = buffer.split("\n");
+			buffer = lines.pop() || "";
 
-		for (const line of lines) {
-			const trimmed = line.trim();
-			if (!trimmed || trimmed.startsWith(":")) continue;
-			if (trimmed === "data: [DONE]") continue;
+			for (const line of lines) {
+				const trimmed = line.trim();
+				if (!trimmed || trimmed.startsWith(":")) continue;
+				if (trimmed === "data: [DONE]") continue;
 
-			if (trimmed.startsWith("data: ")) {
-				try {
-					const jsonStr = trimmed.slice(6);
-					const parsed = JSON.parse(jsonStr);
+				if (trimmed.startsWith("data: ")) {
+					let parsed: OpenRouterResponse;
+					try {
+						const jsonStr = trimmed.slice(6);
+						parsed = JSON.parse(jsonStr) as OpenRouterResponse;
+					} catch (error) {
+						if (error instanceof SyntaxError) continue;
+						throw error;
+					}
+					if (parsed.error?.message) {
+						throw new Error(String(parsed.error.message));
+					}
 					if (parsed.usage) {
 						providerUsage = {
 							promptTokens: parsed.usage.prompt_tokens,
@@ -393,11 +499,22 @@ const streamRequest = async (
 
 						onChunk(delta);
 					}
-				} catch {
-					// Ignore partial JSON chunks
 				}
 			}
 		}
+	} catch (error) {
+		if (!signal?.aborted) {
+			logDetailedAgentError(`OpenRouter Stream Failed [${node}]`, error, { model: modelToTry, chunkIndex }, tracker);
+		}
+		throw error;
+	} finally {
+		timeout.dispose();
+	}
+
+	if (!accumulated.trim()) {
+		const error = new Error(`OpenRouter stream returned no text content (finish reason: ${finishReason})`);
+		logDetailedAgentError(`OpenRouter Stream Empty Response [${node}]`, error, { model: modelToTry }, tracker);
+		throw error;
 	}
 
 	const endPerf = performance.now();
@@ -410,7 +527,7 @@ const streamRequest = async (
 		llmCallId,
 		requestId: tracker?.requestId || `req_${Date.now()}`,
 		node,
-		model: env.agent.model,
+		model: modelToTry,
 		startTimestamp: new Date(fetchStartPerf).toISOString(),
 		endTimestamp: new Date(endPerf).toISOString(),
 		elapsedFromPrevNodeMs: Math.round((fetchStartPerf - preStartPerf) * 100) / 100,
@@ -433,10 +550,65 @@ const streamRequest = async (
 };
 
 export const createOpenRouterClient = () => ({
-	invoke: (messages: ChatMessage[], tracker?: AgentPerfTracker, signal?: AbortSignal, options?: { nodeName?: string; state?: Record<string, unknown> }) =>
+	invoke: (messages: ChatMessage[], tracker?: AgentPerfTracker, signal?: AbortSignal, options?: LLMCallOptions) =>
 		request(messages, undefined, tracker, signal, options),
-	invokeJson: (messages: ChatMessage[], tracker?: AgentPerfTracker, signal?: AbortSignal, options?: { nodeName?: string; state?: Record<string, unknown> }) =>
+	invokeJson: (messages: ChatMessage[], tracker?: AgentPerfTracker, signal?: AbortSignal, options?: LLMCallOptions) =>
 		request(messages, "json_object", tracker, signal, options),
-	stream: (messages: ChatMessage[], onChunk: (chunk: string) => void, tracker?: AgentPerfTracker, signal?: AbortSignal, options?: { nodeName?: string; state?: Record<string, unknown> }) =>
-		streamRequest(messages, onChunk, undefined, tracker, signal, options),
+	stream: async (messages: ChatMessage[], onChunk: (chunk: string) => void, tracker?: AgentPerfTracker, signal?: AbortSignal, options?: LLMCallOptions) => {
+		const node = options?.nodeName ?? "llm_node";
+		const streamingModels = Array.from(new Set([env.agent.model, "openai/gpt-4o-mini"]));
+		let lastStreamError: unknown;
+
+		for (const modelToTry of streamingModels) {
+			let emittedText = false;
+			try {
+				return await streamRequest(
+					messages,
+					(chunk) => {
+						emittedText = true;
+						onChunk(chunk);
+					},
+					modelToTry,
+					undefined,
+					tracker,
+					signal,
+					options,
+				);
+			} catch (streamError) {
+				if (signal?.aborted || emittedText) throw streamError;
+				lastStreamError = streamError;
+				tracker?.log({
+					layer: "llm",
+					module: "openRouterClient.ts",
+					operation: `LLM stream candidate failed before text [${node}]`,
+					extra: {
+						model: modelToTry,
+						error: streamError instanceof Error ? streamError.message : String(streamError),
+					},
+				});
+			}
+		}
+
+		tracker?.log({
+			layer: "llm",
+			module: "openRouterClient.ts",
+			operation: `All streaming candidates failed; using non-streaming fallback [${node}]`,
+			extra: { error: lastStreamError instanceof Error ? lastStreamError.message : String(lastStreamError) },
+		});
+		logger.warn("[Agent LLM] Streaming candidates failed; retrying with non-streaming response", {
+			requestId: tracker?.requestId,
+			node,
+			error: lastStreamError instanceof Error ? lastStreamError.message : String(lastStreamError),
+		});
+		try {
+			return await request(messages, undefined, tracker, signal, {
+				...options,
+				requestBudgetMs: LLM_STREAM_FALLBACK_BUDGET_MS,
+			});
+		} catch (fallbackError) {
+			const streamMessage = lastStreamError instanceof Error ? lastStreamError.message : String(lastStreamError);
+			const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+			throw new Error(`OpenRouter streaming failed before producing text (${streamMessage}); non-stream fallback failed (${fallbackMessage})`);
+		}
+	},
 });

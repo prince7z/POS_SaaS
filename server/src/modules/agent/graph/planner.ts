@@ -30,11 +30,26 @@ const plannerToolCatalog = (permissions: string[]) =>
 
 import type { AgentPerfTracker } from "../utils/perfLogger";
 
+const normalizeHumanInputOptions = (value: unknown): unknown[] | undefined => {
+	if (Array.isArray(value)) return value;
+	if (typeof value !== "object" || value === null) return undefined;
+	if ("options" in value) return normalizeHumanInputOptions(value.options);
+	if ("id" in value || "label" in value || "value" in value) return [value];
+
+	return Object.entries(value).map(([id, option]) => {
+		if (typeof option === "object" && option !== null && !Array.isArray(option)) {
+			return { id, ...option };
+		}
+		return { id, label: String(option), value: option };
+	});
+};
+
 export const createPlan = async (
 	request: string,
 	user: AgentUser,
 	history: Array<{ role: string; content: string }> = [],
-	tracker?: AgentPerfTracker
+	tracker?: AgentPerfTracker,
+	completedOperations: Array<{ tool: string; operation: string; description: string }> = []
 ): Promise<Plan> => {
 	const allTools = plannerToolCatalog(user.permissions);
 	const isTakealotRequest = /\btakealot\b|\bmarketplace\b/i.test(request);
@@ -43,14 +58,12 @@ export const createPlan = async (
 		: allTools;
 	const historyContext = history.length > 0
 		? history.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n")
-		: "No previous messages.";
+		: undefined;
 
 	const messages = [
 		{
 			role: "system" as const,
-			content: `${plannerSystemPrompt}
-Return JSON with exactly this shape:
-{"steps":[{"id":"step_1","type":"human_input","request":{"type":"question","question":"Which period would you like to analyze?","options":[{"id":"30d","label":"Last 30 days","value":"30d"},{"id":"90d","label":"Last 90 days","value":"90d"}],"allowOther":true},"description":"Clarify period","dependsOn":[]},{"id":"step_2","type":"final","description":"Finalize response","dependsOn":["step_1"]}]}`,
+			content: plannerSystemPrompt,
 		},
 		{
 			role: "user" as const,
@@ -58,8 +71,7 @@ Return JSON with exactly this shape:
 				currentRequest: request,
 				conversationHistory: historyContext,
 				availableTools,
-				instruction: `Create an ordered plan using only available tools and human_input/final steps. Use conversation history to resolve references, ask one human_input question when required details are missing, use YYYY-MM-DD date filters, and always include a final step.
-For expense requests, use finance_tool: list_expenses for recent/itemized requests, expense_summary for totals, expense_analytics for trends or categories, and pnl_dashboard for profit/loss.`,
+				...(completedOperations.length > 0 && { completedOperations }),
 			}),
 		},
 	];
@@ -112,7 +124,7 @@ For expense requests, use finance_tool: list_expenses for recent/itemized reques
 						step.request = {
 							type: reqType,
 							question: q,
-							options: req.options || step.options,
+							options: normalizeHumanInputOptions(req.options ?? step.options),
 							allowOther: req.allowOther ?? step.allowOther ?? true,
 						};
 					} else if (rawType === "tool" || rawType === "action" || "tool" in step) {

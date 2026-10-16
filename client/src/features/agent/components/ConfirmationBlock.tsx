@@ -43,7 +43,7 @@ export function ConfirmationBlock({
           <Text fontSize="xs" color="secondary">
             Decision:{' '}
             <Text as="span" fontWeight="semibold" color={approved ? 'success' : 'danger'}>
-              {approved ? 'Approved & Executed' : 'Cancelled'}
+              {approved ? 'Approved' : 'Cancelled'}
             </Text>
           </Text>
         </Box>

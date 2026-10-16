@@ -440,12 +440,13 @@ export const stream: RequestHandler = async (request, response, next) => {
 			if (update.executor?.stepResults) {
 				const stepResults = update.executor.stepResults as Record<string, unknown>;
 				for (const [stepId, res] of Object.entries(stepResults)) {
-					const resMsg = typeof res === "object" && res !== null && "summary" in res ? String((res as { summary: unknown }).summary) : "Step finished";
+					const status = toolResultStatus(res);
+					const resMsg = toolResultMessage(res);
 					writeAgentEvent(
 						response,
 						{
 							type: "tool_call",
-							data: { toolCallId: stepId, name: stepId, label: stepId, status: "completed" },
+							data: { toolCallId: stepId, name: stepId, label: stepId, status },
 						},
 						tracker
 					);
@@ -453,7 +454,7 @@ export const stream: RequestHandler = async (request, response, next) => {
 						response,
 						{
 							type: "tool_result",
-							data: { toolCallId: stepId, status: "completed", message: resMsg },
+							data: { toolCallId: stepId, status, message: resMsg },
 						},
 						tracker
 					);
@@ -461,7 +462,7 @@ export const stream: RequestHandler = async (request, response, next) => {
 						response,
 						{
 							type: "todo",
-							data: { id: stepId, title: stepId, status: "completed" },
+							data: { id: stepId, title: stepId, status },
 						},
 						tracker
 					);
@@ -632,12 +633,30 @@ export const respond: RequestHandler = async (request, response, next) => {
 
 			if (update.executor?.stepResults) {
 				const stepResults = update.executor.stepResults as Record<string, unknown>;
-				for (const [stepId] of Object.entries(stepResults)) {
+				for (const [stepId, result] of Object.entries(stepResults)) {
+					const status = toolResultStatus(result);
+					const message = toolResultMessage(result);
+					writeAgentEvent(
+						response,
+						{
+							type: "tool_call",
+							data: { toolCallId: stepId, name: stepId, label: stepId, status },
+						},
+						tracker
+					);
+					writeAgentEvent(
+						response,
+						{
+							type: "tool_result",
+							data: { toolCallId: stepId, status, message },
+						},
+						tracker
+					);
 					writeAgentEvent(
 						response,
 						{
 							type: "todo",
-							data: { id: stepId, title: stepId, status: "completed" },
+							data: { id: stepId, title: stepId, status },
 						},
 						tracker
 					);
@@ -723,8 +742,12 @@ export const respond: RequestHandler = async (request, response, next) => {
 };
 
 function questionTextFromInterrupt(value: unknown): string | undefined {
-	if (!value || typeof value !== "object" || !("questionId" in value)) return undefined;
-	const message = "message" in value ? value.message : undefined;
+	if (!value || typeof value !== "object") return undefined;
+	const interruptValue = value as { questionId?: unknown; confirmationId?: unknown; type?: unknown; message?: unknown; question?: unknown };
+	if (typeof interruptValue.questionId !== "string" &&
+		typeof interruptValue.confirmationId !== "string" &&
+		interruptValue.type !== "confirmation") return undefined;
+	const message = typeof interruptValue.message === "string" ? interruptValue.message : interruptValue.question;
 	return typeof message === "string" && message.trim() ? message.trim() : "Please clarify your request.";
 }
 
@@ -733,6 +756,19 @@ function responseText(value: unknown): string {
 	if (value === null || value === undefined) return "";
 	if (typeof value === "number" || typeof value === "boolean") return String(value);
 	return JSON.stringify(value);
+}
+
+function toolResultStatus(result: unknown): "completed" | "failed" {
+	return typeof result === "object" && result !== null && "success" in result && result.success === false
+		? "failed"
+		: "completed";
+}
+
+function toolResultMessage(result: unknown): string {
+	if (typeof result !== "object" || result === null) return "Step finished";
+	if ("safeMessage" in result && typeof result.safeMessage === "string") return result.safeMessage;
+	if ("summary" in result && typeof result.summary === "string") return result.summary;
+	return toolResultStatus(result) === "failed" ? "The operation failed." : "Step finished";
 }
 
 function handleInterrupt(response: Parameters<RequestHandler>[1], error: unknown) {
@@ -773,15 +809,19 @@ function handleInterruptPayload(response: Parameters<RequestHandler>[1], interru
 			},
 			tracker
 		);
-	} else if (interruptValue && typeof interruptValue === "object" && "confirmationId" in interruptValue) {
-		const val = interruptValue as { confirmationId: unknown; message?: unknown; action?: unknown; options?: unknown[] };
+	} else if (
+		interruptValue &&
+		typeof interruptValue === "object" &&
+		("confirmationId" in interruptValue || (interruptValue as { type?: unknown }).type === "confirmation")
+	) {
+		const val = interruptValue as { confirmationId?: unknown; message?: unknown; question?: unknown; action?: unknown; options?: unknown[] };
 		writeAgentEvent(
 			response,
 			{
 				type: "confirmation",
 				data: {
-					confirmationId: String(val.confirmationId),
-					message: String(val.message ?? "Please confirm this operation."),
+					confirmationId: String(val.confirmationId ?? `legacy_confirmation_${Date.now()}`),
+					message: String(val.message ?? val.question ?? "Please confirm this operation."),
 					action: val.action && typeof val.action === "object" ? (val.action as { label: string }) : undefined,
 					options: (val.options as Array<{ id: string; label: string; value: boolean }>) || [
 						{ id: "approve", label: "Approve", value: true },

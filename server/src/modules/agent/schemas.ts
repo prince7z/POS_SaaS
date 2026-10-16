@@ -83,6 +83,7 @@ export type AgentToolDefinition = {
 	description: string;
 	operations: readonly string[];
 	operationDescriptions?: Readonly<Record<string, string>>;
+	requiresConfirmationByOperation?: Readonly<Partial<Record<string, boolean>>>;
 	requiredAccessByOperation: Partial<Record<string, Access>>;
 };
 

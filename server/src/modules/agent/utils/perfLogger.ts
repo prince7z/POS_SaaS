@@ -23,6 +23,10 @@ export function estimateTokens(text: string | unknown): number {
 	return Math.ceil(str.length / 4);
 }
 
+export function estimateTokensFromCharCount(charCount: number): number {
+	return Math.ceil(Math.max(0, charCount) / 4);
+}
+
 export interface LLMCallMetrics {
 	llmCallId: string;
 	requestId: string;
