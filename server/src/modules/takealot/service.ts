@@ -962,10 +962,32 @@ export const listOrders = async (apiKey: string, input: z.infer<typeof ordersSch
 }
 
 export const inventorySummary = async (companyId: string, integrationId: string, apiKey: string) => {
-  const [stockCounts, stockHealth] = await Promise.all([
+  const [reportedStockCounts, stockHealth, synchronizedStock] = await Promise.all([
     takealotApi.getStockCounts(apiKey),
     takealotApi.getStockHealthStats(apiKey),
+    prisma.takealotOffer.aggregate({
+      where: { integrationId },
+      _count: { _all: true },
+      _sum: { stockCpt: true, stockJhb: true, stockDbn: true },
+    }),
   ])
+  const hasSynchronizedOffers = synchronizedStock._count._all > 0
+  const reportedTotalStockCount =
+    typeof reportedStockCounts.total_stock_count === 'number'
+      ? reportedStockCounts.total_stock_count
+      : typeof reportedStockCounts.count === 'number'
+        ? reportedStockCounts.count
+        : null
+  const synchronizedTotalStockCount =
+    Number(synchronizedStock._sum.stockCpt ?? 0) +
+    Number(synchronizedStock._sum.stockJhb ?? 0) +
+    Number(synchronizedStock._sum.stockDbn ?? 0)
+  const stockCounts = {
+    ...reportedStockCounts,
+    ...(reportedTotalStockCount !== null && { reported_total_stock_count: reportedTotalStockCount }),
+    total_stock_count: hasSynchronizedOffers ? synchronizedTotalStockCount : (reportedTotalStockCount ?? 0),
+    total_stock_count_source: hasSynchronizedOffers ? 'synchronized_offers' : 'Takealot API',
+  }
   const capturedAt = new Date()
   await prisma.takealotInventorySnapshot.create({
     data: {

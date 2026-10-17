@@ -522,6 +522,314 @@ function ChartCard({
   )
 }
 
+type OverviewSlice = { name: string; value: number; color: string; detail: string }
+
+function OverviewDonutCard({
+  title,
+  description,
+  icon: Icon,
+  totalLabel,
+  total,
+  unit,
+  slices,
+  metrics = [],
+}: {
+  title: string
+  description: string
+  icon: LucideIcon
+  totalLabel: string
+  total: number
+  unit: string
+  slices: OverviewSlice[]
+  metrics?: Array<{ label: string; value: string; detail: string; color?: string }>
+}) {
+  const [hiddenSlices, setHiddenSlices] = useState<Set<string>>(() => new Set())
+  const visibleSlices = slices.filter((slice) => !hiddenSlices.has(slice.name))
+  const option: EChartsOption = {
+    animationDuration: 450,
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    series: [
+      {
+        type: 'pie',
+        radius: ['52%', '78%'],
+        center: ['50%', '50%'],
+        avoidLabelOverlap: true,
+        label: { show: false },
+        itemStyle: { borderColor: '#fff', borderWidth: 3, borderRadius: 6 },
+        data: visibleSlices.map((slice) => ({
+          name: slice.name,
+          value: slice.value,
+          itemStyle: { color: slice.color },
+        })),
+      },
+    ],
+  }
+
+  return (
+    <MotionCard
+      variant="outline"
+      minW="0"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.24, ease: 'easeOut' }}
+      whileHover={{ y: -2 }}
+    >
+      <Card.Header>
+        <Flex align="start" justify="space-between" gap="3" wrap="wrap">
+          <Box>
+            <Flex align="center" gap="2">
+              <Icon size={17} aria-hidden="true" />
+              <Card.Title>{title}</Card.Title>
+            </Flex>
+            <Card.Description mt="1">{description}</Card.Description>
+          </Box>
+          <Box textAlign={{ base: 'start', sm: 'end' }}>
+            <Text fontSize="xs" color="fg.muted">
+              {totalLabel}
+            </Text>
+            <Heading size="lg">{formatNumber(total)}</Heading>
+          </Box>
+        </Flex>
+      </Card.Header>
+      <Card.Body pt="0">
+        <Grid
+          templateColumns={{ base: 'minmax(0, 1fr)', md: 'minmax(180px, 0.75fr) minmax(0, 1.5fr)' }}
+          alignItems="center"
+          gap={{ base: '3', md: '6' }}
+        >
+          <Box minW="0">
+            {visibleSlices.some((slice) => slice.value > 0) ? (
+              <EChart option={option} height="230px" ariaLabel={`${title}; selected categories shown in the chart`} />
+            ) : (
+              <Flex h="230px" align="center" justify="center" textAlign="center" px="4">
+                <Text fontSize="sm" color="fg.muted">
+                  All categories are hidden. Select a legend item to display the chart.
+                </Text>
+              </Flex>
+            )}
+          </Box>
+          <SimpleGrid columns={{ base: 1, sm: 2 }} gap="2" minW="0">
+            {slices.map((slice) => {
+              const hidden = hiddenSlices.has(slice.name)
+              const share = total > 0 ? `${((slice.value / total) * 100).toFixed(1)}%` : '—'
+              return (
+                <Button
+                  key={slice.name}
+                  type="button"
+                  variant="ghost"
+                  justifyContent="start"
+                  h="auto"
+                  minH="16"
+                  minW="0"
+                  whiteSpace="normal"
+                  textAlign="left"
+                  px="3"
+                  py="2"
+                  opacity={hidden ? 0.55 : 1}
+                  aria-pressed={!hidden}
+                  aria-label={`${hidden ? 'Show' : 'Hide'} ${slice.name}: ${formatNumber(slice.value)} ${unit}`}
+                  onClick={() =>
+                    setHiddenSlices((current) => {
+                      const next = new Set(current)
+                      if (next.has(slice.name)) next.delete(slice.name)
+                      else next.add(slice.name)
+                      return next
+                    })
+                  }
+                >
+                  <Flex align="start" gap="2" w="full" minW="0">
+                    <Box w="3" h="3" mt="1" borderRadius="sm" bg={slice.color} flexShrink="0" aria-hidden="true" />
+                    <Box minW="0" flex="1">
+                      <Flex justify="space-between" gap="2">
+                        <Text fontSize="sm" fontWeight="semibold" textDecoration={hidden ? 'line-through' : undefined}>
+                          {slice.name}
+                        </Text>
+                        <Text fontSize="sm" fontWeight="bold" flexShrink="0">
+                          {formatNumber(slice.value)}
+                        </Text>
+                      </Flex>
+                      <Flex justify="space-between" gap="2" mt="1">
+                        <Text fontSize="xs" color="fg.muted" overflowWrap="anywhere">
+                          {slice.detail}
+                        </Text>
+                        <Text fontSize="xs" color="fg.muted" flexShrink="0">
+                          {share}
+                        </Text>
+                      </Flex>
+                    </Box>
+                  </Flex>
+                </Button>
+              )
+            })}
+          </SimpleGrid>
+        </Grid>
+        {metrics.length > 0 && (
+          <SimpleGrid columns={{ base: 1, sm: 2, xl: 4 }} gap="3" mt="4">
+            {metrics.map((metric) => (
+              <Box key={metric.label} borderWidth="1px" borderColor="border" borderRadius="md" p="3" minW="0">
+                <Text fontSize="xs" color="fg.muted">
+                  {metric.label}
+                </Text>
+                <Heading size="md" mt="1" color={metric.color}>
+                  {metric.value}
+                </Heading>
+                <Text fontSize="xs" color="fg.muted" mt="1">
+                  {metric.detail}
+                </Text>
+              </Box>
+            ))}
+          </SimpleGrid>
+        )}
+      </Card.Body>
+    </MotionCard>
+  )
+}
+
+function OverviewValueCard({
+  values,
+  margin,
+}: {
+  values: Array<{ name: string; value: number; color: string; detail: string }>
+  margin: number | null
+}) {
+  const [hiddenValues, setHiddenValues] = useState<Set<string>>(() => new Set())
+  const visibleValues = values.filter((item) => !hiddenValues.has(item.name))
+  const option: EChartsOption = {
+    animationDuration: 450,
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      valueFormatter: (value) => formatCurrency(Number(value)),
+    },
+    grid: { left: 132, right: 24, top: 12, bottom: 30 },
+    xAxis: {
+      type: 'value',
+      axisLabel: { formatter: (value: number) => formatCurrency(Number(value)) },
+    },
+    yAxis: { type: 'category', data: visibleValues.map((item) => item.name) },
+    series: [
+      {
+        type: 'bar',
+        barMaxWidth: 32,
+        data: visibleValues.map((item) => ({ value: item.value, itemStyle: { color: item.color, borderRadius: 5 } })),
+        label: {
+          show: true,
+          position: 'right',
+          formatter: (params) => formatCurrency(Number(params.value)),
+          fontSize: 11,
+        },
+      },
+    ],
+  }
+
+  return (
+    <MotionCard
+      variant="outline"
+      minW="0"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.24, ease: 'easeOut' }}
+      whileHover={{ y: -2 }}
+    >
+      <Card.Header>
+        <Flex align="start" justify="space-between" gap="3" wrap="wrap">
+          <Flex align="center" gap="2">
+            <CircleDollarSign size={17} aria-hidden="true" />
+            <Card.Title>Potential inventory value</Card.Title>
+          </Flex>
+          <Badge colorPalette={margin === null ? 'gray' : margin >= 0 ? 'green' : 'red'}>
+            {margin === null ? 'Margin unavailable' : `${margin.toFixed(1)}% potential margin`}
+          </Badge>
+        </Flex>
+        <Card.Description>
+          Current stock valued at current prices and known costs; estimates, not realized sales or net profit.
+        </Card.Description>
+      </Card.Header>
+      <Card.Body pt="0">
+        <SimpleGrid columns={{ base: 1, sm: 2, xl: 4 }} gap="3" mb="3">
+          {values.map((item) => (
+            <Box key={item.name} borderWidth="1px" borderColor="border" borderRadius="md" p="3" minW="0">
+              <Text fontSize="xs" color="fg.muted">
+                {item.name}
+              </Text>
+              <Heading size="md" mt="1" color={item.color}>
+                {formatCurrency(item.value)}
+              </Heading>
+              <Text fontSize="xs" color="fg.muted" mt="1">
+                {item.detail}
+              </Text>
+            </Box>
+          ))}
+          <Box borderWidth="1px" borderColor="border" borderRadius="md" p="3" minW="0">
+            <Text fontSize="xs" color="fg.muted">
+              Potential gross margin
+            </Text>
+            <Heading size="md" mt="1">
+              {margin === null ? 'Unavailable' : `${margin.toFixed(1)}%`}
+            </Heading>
+            <Text fontSize="xs" color="fg.muted" mt="1">
+              Potential gross profit ÷ potential retail value.
+            </Text>
+          </Box>
+        </SimpleGrid>
+        <Grid templateColumns={{ base: 'minmax(0, 1fr)', md: 'minmax(0, 1.5fr) minmax(220px, 0.8fr)' }} gap="4">
+          <Box minW="0">
+            {visibleValues.length > 0 ? (
+              <EChart option={option} height="220px" ariaLabel="Interactive comparison of potential inventory values" />
+            ) : (
+              <Flex h="220px" align="center" justify="center">
+                <Text fontSize="sm" color="fg.muted">
+                  All value categories are hidden. Select a legend item to show them.
+                </Text>
+              </Flex>
+            )}
+          </Box>
+          <Stack gap="2" justify="center">
+            {values.map((item) => {
+              const hidden = hiddenValues.has(item.name)
+              return (
+                <Button
+                  key={item.name}
+                  type="button"
+                  variant="ghost"
+                  justifyContent="start"
+                  h="auto"
+                  minH="12"
+                  whiteSpace="normal"
+                  textAlign="left"
+                  opacity={hidden ? 0.55 : 1}
+                  aria-pressed={!hidden}
+                  aria-label={`${hidden ? 'Show' : 'Hide'} ${item.name}`}
+                  onClick={() =>
+                    setHiddenValues((current) => {
+                      const next = new Set(current)
+                      if (next.has(item.name)) next.delete(item.name)
+                      else next.add(item.name)
+                      return next
+                    })
+                  }
+                >
+                  <Flex align="start" gap="2">
+                    <Box w="3" h="3" mt="1" borderRadius="sm" bg={item.color} flexShrink="0" aria-hidden="true" />
+                    <Box>
+                      <Text fontSize="sm" fontWeight="semibold" textDecoration={hidden ? 'line-through' : undefined}>
+                        {item.name}
+                      </Text>
+                      <Text fontSize="xs" color="fg.muted">
+                        {item.detail}
+                      </Text>
+                    </Box>
+                  </Flex>
+                </Button>
+              )
+            })}
+          </Stack>
+        </Grid>
+      </Card.Body>
+    </MotionCard>
+  )
+}
+
 function donutOption(data: Array<{ name: string; value: number; color?: string }>, showLegend = true): EChartsOption {
   return {
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
@@ -859,11 +1167,85 @@ function SummarySkeleton({ titleWidth = '48%' }: { titleWidth?: string }) {
 function OverviewSkeleton() {
   return (
     <Stack gap="4" aria-label="Loading Takealot overview" aria-busy="true">
-      <LoadingCards count={16} />
-      <ChartSkeletons />
+      <OverviewGroupSkeleton kind="donut" />
+      <OverviewGroupSkeleton kind="donut" metrics />
+      <OverviewGroupSkeleton kind="bars" />
       <LoadingCards count={4} />
       <TableSkeleton titleWidth="32%" rows={5} />
     </Stack>
+  )
+}
+
+function OverviewGroupSkeleton({ kind, metrics = false }: { kind: 'donut' | 'bars'; metrics?: boolean }) {
+  return (
+    <SkeletonEntrance>
+      <Card.Root variant="outline" minW="0" aria-hidden="true">
+        <Card.Header>
+          <Flex justify="space-between" gap="4">
+            <Stack gap="2" flex="1">
+              <Skeleton h="5" w="48" />
+              <Skeleton h="3" w="4/5" />
+            </Stack>
+            <Stack gap="2" align="end">
+              <Skeleton h="3" w="20" />
+              <Skeleton h="7" w="28" />
+            </Stack>
+          </Flex>
+        </Card.Header>
+        <Card.Body pt="0">
+          <Grid
+            templateColumns={{ base: 'minmax(0, 1fr)', md: 'minmax(180px, 0.75fr) minmax(0, 1.5fr)' }}
+            alignItems="center"
+            gap="5"
+          >
+            <Flex justify="center" align="center">
+              {kind === 'donut' ? (
+                <Box
+                  w="40"
+                  h="40"
+                  borderWidth="12px"
+                  borderColor="bg.muted"
+                  borderRadius="full"
+                  display="grid"
+                  placeItems="center"
+                >
+                  <Skeleton w="12" h="12" borderRadius="full" />
+                </Box>
+              ) : (
+                <Stack w="full" gap="4" py="4">
+                  {[0, 1, 2].map((index) => (
+                    <Flex key={index} align="center" gap="3">
+                      <Skeleton h="3" w="24" />
+                      <Skeleton h="5" w={`${55 + index * 10}%`} borderRadius="sm" />
+                    </Flex>
+                  ))}
+                </Stack>
+              )}
+            </Flex>
+            <SimpleGrid columns={{ base: 1, sm: 2 }} gap="3">
+              {[0, 1, 2, 3].map((index) => (
+                <Box key={index} borderWidth="1px" borderColor="border" borderRadius="md" p="3">
+                  <Skeleton h="3" w="2/5" />
+                  <Skeleton h="5" w="1/3" mt="2" />
+                  <Skeleton h="3" w="4/5" mt="2" />
+                </Box>
+              ))}
+            </SimpleGrid>
+          </Grid>
+          {metrics && (
+            <SimpleGrid columns={{ base: 1, sm: 2, xl: 4 }} gap="3" mt="4">
+              {[0, 1, 2, 3].map((index) => (
+                <Box key={index} borderWidth="1px" borderColor="border" borderRadius="md" p="3">
+                  <Skeleton h="3" w="2/5" />
+                  <Skeleton h="5" w="1/3" mt="2" />
+                  <Skeleton h="3" w="4/5" mt="2" />
+                </Box>
+              ))}
+            </SimpleGrid>
+          )}
+        </Card.Body>
+      </Card.Root>
+    </SkeletonEntrance>
   )
 }
 
@@ -994,137 +1376,135 @@ function OverviewPanel({
   return (
     <Stack gap="4">
       <ResourceNotice resource={resource} retry={resource.refresh} />
-      <SimpleGrid columns={{ base: 1, sm: 2, xl: 4 }} gap="4">
-        <MetricCard
-          label="Total offers"
-          value={formatNumber(data.totalOffers)}
-          detail="Count of saved Takealot offers for this seller connection."
-          icon={Package}
-        />
-        <MetricCard
-          label="Buyable listings"
-          value={formatNumber(data.listingStatusCounts.buyable)}
-          detail="Offers currently reported as Buyable by Takealot."
-          icon={Activity}
-        />
-        <MetricCard
-          label="Not buyable"
-          value={formatNumber(data.listingStatusCounts.notBuyable)}
-          detail="Offers reported as Not Buyable by Takealot."
-          icon={AlertCircle}
-        />
-        <MetricCard
-          label="Disabled by Takealot"
-          value={formatNumber(data.listingStatusCounts.disabledByTakealot)}
-          detail="Listings disabled by Takealot."
-          icon={AlertCircle}
-        />
-        <MetricCard
-          label="Disabled by seller"
-          value={formatNumber(data.listingStatusCounts.disabledBySeller)}
-          detail="Listings disabled by the seller."
-          icon={AlertCircle}
-        />
-        <MetricCard
-          label="Stock units"
-          value={formatNumber(data.totalStock)}
-          detail="CPT + JHB + DBN stock currently held by Takealot."
-          icon={Warehouse}
-        />
-        <MetricCard
-          label="Incoming units"
-          value={formatNumber(data.totalIncomingStock)}
-          detail="Sum of units currently on the way to Takealot warehouses."
-          icon={ShoppingCart}
-        />
-        <MetricCard
-          label="Inventory cost value"
-          value={formatCurrency(data.inventoryCostValue)}
-          detail="Σ (warehouse stock × known unit cost); offers without cost are excluded."
-          icon={CircleDollarSign}
-        />
-        <MetricCard
-          label="Potential retail value"
-          value={formatCurrency(data.potentialRetailInventoryValue)}
-          detail="Σ (warehouse stock × current selling price); an estimate, not sales revenue."
-          icon={CircleDollarSign}
-        />
-        <MetricCard
-          label="Potential gross profit"
-          value={formatCurrency(data.potentialGrossProfit)}
-          detail="Σ (warehouse stock × (selling price − known unit cost)); excludes fees and uncosted items."
-          icon={CircleDollarSign}
-          valueColor={data.potentialGrossProfit >= 0 ? 'green.fg' : 'fg.error'}
-        />
-        <MetricCard
-          label="Potential gross margin"
-          value={
-            data.potentialGrossMarginPercent === null
-              ? 'Unavailable'
-              : `${data.potentialGrossMarginPercent.toFixed(1)}%`
-          }
-          detail="Potential gross profit ÷ potential retail value × 100."
-          icon={ChartNoAxesCombined}
-        />
-        <MetricCard
-          label="Out of stock"
-          value={formatNumber(data.outOfStockOffers)}
-          detail="Offers with zero or fewer units across CPT, JHB, and DBN."
-          icon={AlertCircle}
-        />
-        <MetricCard
-          label="Low stock"
-          value={formatNumber(data.lowStockOffers)}
-          detail="Offers with positive stock at or below the configured low-stock threshold."
-          icon={AlertCircle}
-        />
-        <MetricCard
-          label="Excess stock"
-          value={formatNumber(data.excessStockOffers)}
-          detail="Offers with Takealot-reported excess stock above zero."
-          icon={Package}
-        />
-        <MetricCard
-          label="Missing cost"
-          value={formatNumber(data.missingCostOffers)}
-          detail="Offers with no usable unit cost from SKU parsing or catalog cost."
-          icon={ReceiptText}
-        />
-        <MetricCard
-          label="Missing RRP"
-          value={formatNumber(data.missingRrpOffers)}
-          detail="Offers with no recommended retail price recorded."
-          icon={ReceiptText}
-        />
-      </SimpleGrid>
-      <SimpleGrid columns={{ base: 1, xl: 2 }} gap="4">
-        <ChartCard
-          title="Listing status mix"
-          description="Share of saved offers by listing status."
-          icon={Activity}
-          height="280px"
-          option={donutOption([
-            { name: 'Buyable', value: data.listingStatusCounts.buyable, color: '#16a34a' },
-            { name: 'Not Buyable', value: data.listingStatusCounts.notBuyable, color: '#f59e0b' },
-            { name: 'Disabled by Takealot', value: data.listingStatusCounts.disabledByTakealot, color: '#dc2626' },
-            { name: 'Disabled by Seller', value: data.listingStatusCounts.disabledBySeller, color: '#2563eb' },
-            ...(data.listingStatusCounts.other > 0
-              ? [{ name: 'Other / unmapped', value: data.listingStatusCounts.other, color: '#64748b' }]
-              : []),
-          ])}
-        />
-        <ChartCard
-          title="Stock by warehouse"
-          description="Current synced units stored at each Takealot warehouse."
-          icon={Warehouse}
-          height="280px"
-          option={donutOption([
-            { name: 'Cape Town', value: data.stockByWarehouse.CPT, color: '#2563eb' },
-            { name: 'Johannesburg', value: data.stockByWarehouse.JHB, color: '#8b5cf6' },
-            { name: 'Durban', value: data.stockByWarehouse.DBN, color: '#14b8a6' },
-          ])}
-        />
-      </SimpleGrid>
+      <OverviewDonutCard
+        title="Listing status"
+        description="All synchronized Takealot offers grouped by current listing status. Select legend items to show or hide chart segments."
+        icon={Package}
+        totalLabel="Total offers"
+        total={data.totalOffers}
+        unit="offers"
+        slices={[
+          {
+            name: 'Buyable',
+            value: data.listingStatusCounts.buyable,
+            color: '#16a34a',
+            detail: 'Can currently be purchased.',
+          },
+          {
+            name: 'Not buyable',
+            value: data.listingStatusCounts.notBuyable,
+            color: '#f59e0b',
+            detail: 'Currently unavailable to customers.',
+          },
+          {
+            name: 'Disabled by Takealot',
+            value: data.listingStatusCounts.disabledByTakealot,
+            color: '#dc2626',
+            detail: 'Disabled by the marketplace.',
+          },
+          {
+            name: 'Disabled by seller',
+            value: data.listingStatusCounts.disabledBySeller,
+            color: '#2563eb',
+            detail: 'Disabled by the seller.',
+          },
+          ...(data.listingStatusCounts.other > 0
+            ? [
+                {
+                  name: 'Other / unmapped',
+                  value: data.listingStatusCounts.other,
+                  color: '#64748b',
+                  detail: 'Statuses not mapped to the categories above.',
+                },
+              ]
+            : []),
+        ]}
+      />
+      <OverviewDonutCard
+        title="Inventory and stock health"
+        description="Warehouse distribution and stock health based on the current synchronized offer data."
+        icon={Warehouse}
+        totalLabel="Total stock units"
+        total={data.totalStock}
+        unit="units"
+        slices={[
+          {
+            name: 'Cape Town',
+            value: data.stockByWarehouse.CPT,
+            color: '#2563eb',
+            detail: 'Units held at CPT.',
+          },
+          {
+            name: 'Johannesburg',
+            value: data.stockByWarehouse.JHB,
+            color: '#8b5cf6',
+            detail: 'Units held at JHB.',
+          },
+          {
+            name: 'Durban',
+            value: data.stockByWarehouse.DBN,
+            color: '#14b8a6',
+            detail: 'Units held at DBN.',
+          },
+        ]}
+        metrics={[
+          {
+            label: 'Incoming units',
+            value: formatNumber(data.totalIncomingStock),
+            detail: 'Units on the way to Takealot warehouses.',
+          },
+          {
+            label: 'Out of stock',
+            value: formatNumber(data.outOfStockOffers),
+            detail: 'Offers with no stock across the three warehouses.',
+            color: data.outOfStockOffers > 0 ? '#dc2626' : undefined,
+          },
+          {
+            label: 'Low stock',
+            value: formatNumber(data.lowStockOffers),
+            detail: 'Offers at or below the configured low-stock threshold.',
+            color: data.lowStockOffers > 0 ? '#d97706' : undefined,
+          },
+          {
+            label: 'Excess stock',
+            value: formatNumber(data.excessStockOffers),
+            detail: 'Offers with Takealot-reported excess stock.',
+          },
+          {
+            label: 'Missing unit cost',
+            value: formatNumber(data.missingCostOffers),
+            detail: 'Offers without usable SKU or catalog unit cost.',
+          },
+          {
+            label: 'Missing RRP',
+            value: formatNumber(data.missingRrpOffers),
+            detail: 'Offers without a recommended retail price.',
+          },
+        ]}
+      />
+      <OverviewValueCard
+        values={[
+          {
+            name: 'Inventory cost',
+            value: data.inventoryCostValue,
+            color: '#8b5cf6',
+            detail: 'Stock × known unit cost; uncosted offers excluded.',
+          },
+          {
+            name: 'Potential retail',
+            value: data.potentialRetailInventoryValue,
+            color: '#2563eb',
+            detail: 'Stock × current selling price; estimate, not sales.',
+          },
+          {
+            name: 'Potential gross profit',
+            value: data.potentialGrossProfit,
+            color: data.potentialGrossProfit >= 0 ? '#16a34a' : '#dc2626',
+            detail: 'Known-cost stock × (selling price − unit cost); before fees.',
+          },
+        ]}
+        margin={data.potentialGrossMarginPercent}
+      />
       {pricing.data && (
         <>
           <SimpleGrid columns={{ base: 1, sm: 2, xl: 4 }} gap="4">
@@ -3522,7 +3902,7 @@ function StockPanel({
   const chart: EChartsOption = useMemo(
     () => ({
       tooltip: { trigger: 'axis', valueFormatter: (value) => formatNumber(Number(value)) },
-      legend: { data: ['Offers with stock', 'Unbalanced stock'], bottom: 0 },
+      legend: { data: ['Total stock units', 'Unbalanced stock'], bottom: 0 },
       grid: { left: 70, right: 24, top: 24, bottom: 60 },
       xAxis: {
         type: 'category',
@@ -3532,7 +3912,7 @@ function StockPanel({
       yAxis: { type: 'value', axisLabel: { formatter: (value: number) => formatNumber(Number(value)) } },
       series: [
         {
-          name: 'Offers with stock',
+          name: 'Total stock units',
           type: 'line',
           smooth: true,
           data: inventoryPoints.map((point) => recordNumber(point.stockCounts, 'total_stock_count') ?? null),
@@ -3598,9 +3978,13 @@ function StockPanel({
       )}
       <SimpleGrid columns={{ base: 1, sm: 2, xl: 4 }} gap="4">
         <MetricCard
-          label="Offers with stock"
+          label="Total stock units"
           value={total === undefined ? undefined : formatNumber(total)}
-          detail="Reported count of offers with available warehouse stock."
+          detail={
+            stockCounts?.total_stock_count_source === 'synchronized_offers'
+              ? 'Sum of available CPT, JHB, and DBN units from synchronized Takealot offers.'
+              : 'Total stock count reported by Takealot.'
+          }
           icon={Package}
         />
         <MetricCard
@@ -3903,15 +4287,9 @@ export function TakealotDashboardPage() {
     void reloadIntegrations()
     window.addEventListener('pos-company-updated', reloadIntegrations)
     window.addEventListener('pos-integrations-updated', reloadIntegrations)
-    window.addEventListener('storage', reloadIntegrations)
-    window.addEventListener('focus', reloadIntegrations)
-    document.addEventListener('visibilitychange', reloadIntegrations)
     return () => {
       window.removeEventListener('pos-company-updated', reloadIntegrations)
       window.removeEventListener('pos-integrations-updated', reloadIntegrations)
-      window.removeEventListener('storage', reloadIntegrations)
-      window.removeEventListener('focus', reloadIntegrations)
-      document.removeEventListener('visibilitychange', reloadIntegrations)
     }
   }, [reloadIntegrations])
 

@@ -1,5 +1,18 @@
 import { apiRequest } from '../client'
 
+const integrationsCacheMs = 15_000
+let integrationsCache: { value: Integration[]; expiresAt: number } | undefined
+let integrationsRequest: Promise<Integration[]> | undefined
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('pos-integrations-updated', () => {
+    integrationsCache = undefined
+  })
+  window.addEventListener('pos-company-updated', () => {
+    integrationsCache = undefined
+  })
+}
+
 export interface Integration {
   id: string
   type: string
@@ -30,7 +43,21 @@ export interface UpdateTakealotIntegration {
 }
 
 export function getIntegrations() {
-  return apiRequest<Integration[]>('/integrations')
+  if (integrationsCache && integrationsCache.expiresAt > Date.now()) {
+    return Promise.resolve(integrationsCache.value)
+  }
+  if (integrationsRequest) return integrationsRequest
+
+  integrationsRequest = apiRequest<Integration[]>('/integrations')
+    .then((integrations) => {
+      integrationsCache = { value: integrations, expiresAt: Date.now() + integrationsCacheMs }
+      return integrations
+    })
+    .finally(() => {
+      integrationsRequest = undefined
+    })
+
+  return integrationsRequest
 }
 
 export function createTakealotIntegration(input: CreateTakealotIntegration) {

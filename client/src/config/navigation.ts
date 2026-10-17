@@ -284,12 +284,10 @@ export function useFilteredNavigation(): NavGroup[] {
     const reload = () => void loadTakealotItems()
     window.addEventListener('pos-company-updated', reload)
     window.addEventListener('pos-integrations-updated', reload)
-    window.addEventListener('focus', reload)
     return () => {
       cancelled = true
       window.removeEventListener('pos-company-updated', reload)
       window.removeEventListener('pos-integrations-updated', reload)
-      window.removeEventListener('focus', reload)
     }
   }, [])
 

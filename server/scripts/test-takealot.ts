@@ -56,6 +56,15 @@ const main = async (): Promise<void> => {
   }
   const originalIntegrationFindFirst = integrationModel.findFirst
   const originalIntegrationFindMany = integrationModel.findMany
+  const offerModel = prisma.takealotOffer as unknown as {
+    aggregate: (input: unknown) => Promise<{
+      _count: { _all: number }
+      _sum: { stockCpt: number; stockJhb: number; stockDbn: number }
+    }>
+    findMany: (input: unknown) => Promise<Array<{ sku: string | null; offerId: string; imageUrl: string | null }>>
+  }
+  const originalOfferAggregate = offerModel.aggregate
+  const originalOfferFindMany = offerModel.findMany
   const companyUserModel = prisma.companyUser as unknown as {
     findFirst: (input: unknown) => Promise<{ userId: string; companyId: string; accesses: never[] } | null>
   }
@@ -89,6 +98,11 @@ const main = async (): Promise<void> => {
     isActive: true,
   })
   integrationModel.findMany = async () => [{ id: integrationId }]
+  offerModel.aggregate = async () => ({
+    _count: { _all: 1 },
+    _sum: { stockCpt: 560, stockJhb: 752, stockDbn: 128 },
+  })
+  offerModel.findMany = async () => []
   companyUserModel.findFirst = async () => ({
     userId: 'permission-test-user',
     companyId: 'permission-test-company',
@@ -521,8 +535,10 @@ const main = async (): Promise<void> => {
     assert.equal(products.status, 200)
     assert.deepEqual((dataOf(products).products as Array<Record<string, unknown>>)[0], {
       sku: 'SKU-R10-A',
+      offerId: 55,
       tsin: 100,
       title: 'Alpha item',
+      imageUrl: null,
       unitCost: 10,
       totalCost: 30,
       totalFee: 3,
@@ -608,16 +624,20 @@ const main = async (): Promise<void> => {
     const orderRows = dataOf(orders).orders as Array<Record<string, unknown>>
     assert.equal(orderRows.length, 1)
     assert.equal((orderRows[0].order_items as unknown[]).length, 2)
-    assert.equal(upstreamCalls.at(-1)?.url.pathname, '/v1/sales/orders')
-    assert.equal(upstreamCalls.at(-1)?.url.searchParams.get('start_date'), '2026-10-01')
-    assert.equal(upstreamCalls.at(-1)?.url.searchParams.get('end_date'), '2026-10-02')
-    assert.equal(upstreamCalls.at(-1)?.url.searchParams.get('filters'), null)
+    const ordersCall = upstreamCalls.filter((call) => call.url.pathname === '/v1/sales/orders').at(-1)
+    assert.ok(ordersCall)
+    assert.equal(ordersCall.url.searchParams.get('start_date'), '2026-10-01')
+    assert.equal(ordersCall.url.searchParams.get('end_date'), '2026-10-02')
+    assert.equal(ordersCall.url.searchParams.get('sku'), 'SKU-A')
     logPass('orders use the dedicated endpoint and preserve separate order-item rows')
 
     const inventory = await request('/takealot/inventory/summary')
     assert.equal(inventory.status, 200)
     assert.equal(snapshotRows.length, 1)
     assert.equal(dataOf(inventory).stockCounts.count, 15)
+    assert.equal(dataOf(inventory).stockCounts.reported_total_stock_count, 15)
+    assert.equal(dataOf(inventory).stockCounts.total_stock_count, 1440)
+    assert.equal(dataOf(inventory).stockCounts.total_stock_count_source, 'synchronized_offers')
     assert.equal(snapshotRows[0].companyId, 'a2b8e672-7f09-4783-81ba-51a572205b71')
     assert.equal(snapshotRows[0].integrationId, integrationId)
     logPass('inventory refresh saves a timestamped seller-scoped snapshot')
@@ -663,6 +683,8 @@ const main = async (): Promise<void> => {
     snapshotModel.findMany = originalFindMany
     integrationModel.findFirst = originalIntegrationFindFirst
     integrationModel.findMany = originalIntegrationFindMany
+    offerModel.aggregate = originalOfferAggregate
+    offerModel.findMany = originalOfferFindMany
     companyUserModel.findFirst = originalCompanyUserFindFirst
     productModel.findMany = originalProductFindMany
     const { closeTakealotSyncQueue } = await import('../src/modules/takealot/sync.queue')
