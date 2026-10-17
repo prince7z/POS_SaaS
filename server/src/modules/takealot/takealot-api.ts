@@ -92,6 +92,69 @@ export interface TakealotOffersPage {
   offers: Record<string, unknown>[]
 }
 
+export const takealotTransactionTypes = [
+  'charge-subscription-fee',
+  'charge-fulfilment-fee',
+  'charge-storage-fee',
+  'charge-success-fee',
+  'reversal-success-fee',
+  'payment-customer-order',
+  'reversal-customer-order',
+  'disbursement-disbursement',
+  'reversal-disbursement',
+  'payment-eft-payment',
+  'charge-manual',
+  'disbursement-manual',
+  'reversal-manual',
+  'payment-manual',
+  'payment-debit-order',
+  'reversal-debit-order',
+  'payment-storage-fee-rebate',
+  'reversal-storage-fee-rebate-reversal',
+  'charge-order-cancellation-penalty',
+  'charge-courier-collection-fee',
+  'charge-removal-order',
+  'charge-stock-transfer-fee',
+  'charge-ad-credit-purchase',
+  'reversal-fulfilment-fee',
+  'reversal-courier-collection-fee',
+  'reversal-removal-order-fee-reversal',
+  'payment-stock-loss-payment',
+  'reversal-stock-loss-reversal',
+  'charge-stock-loss-success-fee',
+  'reversal-stock-loss-success-fee-reversal',
+  'charge-stock-loss-fulfilment-fee',
+  'reversal-stock-loss-fulfilment-fee-reversal',
+  'payment-return-dispute-payment',
+  'charge-removal-order-fee',
+  'charge-takealot-removal-order-fee',
+  'charge-returns-removal-order-fee',
+  'funding-repayment-funding-repayment-seller-capital',
+] as const
+
+export type TakealotTransactionType = (typeof takealotTransactionTypes)[number]
+
+export interface TakealotTransaction {
+  transaction_id: number
+  transaction_type: TakealotTransactionType
+  amount_incl_vat: number
+  vat_multiplier: number
+  created_at: string
+  references?: Record<string, unknown>
+}
+
+export interface TakealotTransactionsPage {
+  items: TakealotTransaction[]
+  continuation_token: string | null
+  count?: number
+}
+
+export interface TakealotBalances {
+  current: number
+  available: number
+  held_back: number
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -181,6 +244,74 @@ const parseOrdersPage = (value: unknown): TakealotOrdersPage => {
 const parseObject = (value: unknown): Record<string, unknown> => {
   if (!isRecord(value)) return invalidResponse()
   return value
+}
+
+const transactionTypeSet = new Set<string>(takealotTransactionTypes)
+const parseTransactionsPage = (value: unknown): TakealotTransactionsPage => {
+  const root = parseObject(value)
+  const data = isRecord(root.data) ? root.data : root
+  if (!Array.isArray(data.items) || !data.items.every(isRecord)) return invalidResponse()
+  const items = data.items.map((item): TakealotTransaction => {
+    if (
+      !Number.isSafeInteger(item.transaction_id) ||
+      typeof item.transaction_type !== 'string' ||
+      !transactionTypeSet.has(item.transaction_type) ||
+      typeof item.amount_incl_vat !== 'number' ||
+      !Number.isFinite(item.amount_incl_vat) ||
+      typeof item.vat_multiplier !== 'number' ||
+      !Number.isFinite(item.vat_multiplier) ||
+      typeof item.created_at !== 'string' ||
+      !Number.isFinite(Date.parse(item.created_at))
+    ) {
+      return invalidResponse()
+    }
+    if (item.references !== undefined && !isRecord(item.references)) {
+      return invalidResponse()
+    }
+    return {
+      transaction_id: item.transaction_id as number,
+      transaction_type: item.transaction_type as TakealotTransactionType,
+      amount_incl_vat: item.amount_incl_vat,
+      vat_multiplier: item.vat_multiplier,
+      created_at: item.created_at,
+      ...(isRecord(item.references) && { references: item.references }),
+    }
+  })
+  if (
+    data.continuation_token !== undefined &&
+    data.continuation_token !== null &&
+    typeof data.continuation_token !== 'string'
+  ) {
+    return invalidResponse()
+  }
+  if (data.count !== undefined && (!Number.isSafeInteger(data.count) || Number(data.count) < 0)) {
+    return invalidResponse()
+  }
+  return {
+    items,
+    continuation_token:
+      typeof data.continuation_token === 'string' && data.continuation_token.length > 0
+        ? data.continuation_token
+        : null,
+    ...(typeof data.count === 'number' && { count: data.count }),
+  }
+}
+
+const parseBalances = (value: unknown): TakealotBalances => {
+  const root = parseObject(value)
+  const balances = isRecord(root.balances) ? root.balances : root
+  if (
+    !['current', 'available', 'held_back'].every(
+      (key) => typeof balances[key] === 'number' && Number.isFinite(balances[key]),
+    )
+  ) {
+    return invalidResponse()
+  }
+  return {
+    current: balances.current as number,
+    available: balances.available as number,
+    held_back: balances.held_back as number,
+  }
 }
 
 const parseOffersPage = (value: unknown): TakealotOffersPage => {
@@ -301,5 +432,32 @@ export const takealotApi = {
   async getStockHealthStats(apiKey: string) {
     const response = await takealotClient.request<unknown>(apiKey, '/v1/offers/stock_health_stats')
     return parseObject(response)
+  },
+
+  async getTransactions(
+    apiKey: string,
+    input: {
+      from: string
+      to: string
+      types?: readonly TakealotTransactionType[]
+      continuationToken?: string
+    },
+  ) {
+    const response = await takealotClient.marketplaceRequest<unknown>(apiKey, '/v1/transactions', {
+      ...(input.types?.length && { transaction_type__in: input.types }),
+      created_at__gte: input.from,
+      created_at__lte: input.to,
+      limit: 100,
+      fields: ['transaction_id', 'transaction_type', 'amount_incl_vat', 'vat_multiplier', 'created_at'],
+      expands: ['references'],
+      ...(input.continuationToken && { continuation_token: input.continuationToken }),
+      include_count: input.continuationToken ? undefined : true,
+    })
+    return parseTransactionsPage(response)
+  },
+
+  async getBalances(apiKey: string) {
+    const response = await takealotClient.marketplaceRequest<unknown>(apiKey, '/v1/balances')
+    return parseBalances(response)
   },
 }

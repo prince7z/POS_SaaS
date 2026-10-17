@@ -155,6 +155,85 @@ export interface TakealotInventorySummary {
   capturedAt: string
 }
 
+export const TAKEALOT_TRANSACTION_TYPES = [
+  'charge-subscription-fee',
+  'charge-fulfilment-fee',
+  'charge-storage-fee',
+  'charge-success-fee',
+  'reversal-success-fee',
+  'payment-customer-order',
+  'reversal-customer-order',
+  'disbursement-disbursement',
+  'reversal-disbursement',
+  'payment-eft-payment',
+  'charge-manual',
+  'disbursement-manual',
+  'reversal-manual',
+  'payment-manual',
+  'payment-debit-order',
+  'reversal-debit-order',
+  'payment-storage-fee-rebate',
+  'reversal-storage-fee-rebate-reversal',
+  'charge-order-cancellation-penalty',
+  'charge-courier-collection-fee',
+  'charge-removal-order',
+  'charge-stock-transfer-fee',
+  'charge-ad-credit-purchase',
+  'reversal-fulfilment-fee',
+  'reversal-courier-collection-fee',
+  'reversal-removal-order-fee-reversal',
+  'payment-stock-loss-payment',
+  'reversal-stock-loss-reversal',
+  'charge-stock-loss-success-fee',
+  'reversal-stock-loss-success-fee-reversal',
+  'charge-stock-loss-fulfilment-fee',
+  'reversal-stock-loss-fulfilment-fee-reversal',
+  'payment-return-dispute-payment',
+  'charge-removal-order-fee',
+  'charge-takealot-removal-order-fee',
+  'charge-returns-removal-order-fee',
+  'funding-repayment-funding-repayment-seller-capital',
+] as const
+
+export type TakealotTransactionType = (typeof TAKEALOT_TRANSACTION_TYPES)[number]
+
+const parseTransactionType = (value: unknown): TakealotTransactionType => {
+  const type = requireString(value, 'transaction type')
+  const match = TAKEALOT_TRANSACTION_TYPES.find((candidate) => candidate === type)
+  if (!match) throw new Error('Takealot returned an unsupported transaction type.')
+  return match
+}
+
+export interface TakealotTransaction {
+  transaction_id: number
+  transaction_type: TakealotTransactionType
+  amount_incl_vat: number
+  vat_multiplier: number
+  created_at: string
+  references?: Record<string, unknown>
+}
+
+export interface TakealotTransactionsReport {
+  transactions: TakealotTransaction[]
+  summary: {
+    count: number
+    inflow: number
+    outflow: number
+    net: number
+    averageTransaction: number
+    byType: Array<{ type: TakealotTransactionType; count: number; amount: number; inflow: number; outflow: number }>
+    trend: Array<{ date: string; inflow: number; outflow: number; net: number; count: number }>
+  }
+  balance: { current: number; available: number; held_back: number }
+  balanceRetrievedAt: string
+  availableTypes: TakealotTransactionType[]
+  currency: string
+  timeZone: string
+  reportedCount: number | null
+  definitions: { inflow: string; outflow: string; net: string; balance: string }
+  pagination: ApiPagination
+}
+
 export interface TakealotInventoryHistory {
   interval: 'day' | 'week' | 'month'
   series: Array<TakealotInventorySnapshot & { date: string }>
@@ -769,6 +848,123 @@ export function getTakealotInventoryAnalytics(
     integrationPath(integrationId, `/analytics/warehouses${query(filters)}`),
     { signal },
   )
+}
+
+export function getTakealotTransactions(
+  integrationId: string,
+  filters: {
+    from: string
+    to: string
+    types?: TakealotTransactionType[]
+    search?: string
+    page: number
+    limit: number
+    sortBy: 'createdAt' | 'transactionType' | 'amount' | 'transactionId'
+    sortOrder: 'asc' | 'desc'
+  },
+  signal?: AbortSignal,
+): Promise<TakealotTransactionsReport> {
+  const params = new URLSearchParams()
+  params.set('from', filters.from)
+  params.set('to', filters.to)
+  params.set('page', String(filters.page))
+  params.set('limit', String(filters.limit))
+  params.set('sortBy', filters.sortBy)
+  params.set('sortOrder', filters.sortOrder)
+  if (filters.search) params.set('search', filters.search)
+  filters.types?.forEach((type) => params.append('types', type))
+  return apiRequestWithMeta<Omit<TakealotTransactionsReport, 'pagination'>>(
+    integrationPath(integrationId, `/transactions?${params.toString()}`),
+    { signal },
+  ).then((response) => {
+    const data = requireRecord(response.data, 'transactions report')
+    if (!Array.isArray(data.transactions) || !Array.isArray(data.availableTypes)) {
+      throw new Error('Takealot returned invalid transaction data.')
+    }
+    const transactions = data.transactions.map((item: unknown) => {
+      const row = requireRecord(item, 'transaction')
+      const transaction: TakealotTransaction = {
+        transaction_id: requireNumber(row.transaction_id, 'transaction ID'),
+        transaction_type: parseTransactionType(row.transaction_type),
+        amount_incl_vat: requireNumber(row.amount_incl_vat, 'transaction amount'),
+        vat_multiplier: requireNumber(row.vat_multiplier, 'transaction VAT multiplier'),
+        created_at: requireString(row.created_at, 'transaction date'),
+      }
+      if (!Number.isFinite(Date.parse(transaction.created_at))) {
+        throw new Error('Takealot returned an invalid transaction date.')
+      }
+      if (row.references !== undefined) {
+        transaction.references = requireRecord(row.references, 'transaction references')
+      }
+      return transaction
+    })
+    const summary = requireRecord(data.summary, 'transaction summary')
+    const byType = summary.byType
+    const trend = summary.trend
+    if (!Array.isArray(byType) || !Array.isArray(trend)) {
+      throw new Error('Takealot returned invalid transaction analytics.')
+    }
+    const summaryData = {
+      count: requireNumber(summary.count, 'transaction summary count'),
+      inflow: requireNumber(summary.inflow, 'transaction inflow'),
+      outflow: requireNumber(summary.outflow, 'transaction outflow'),
+      net: requireNumber(summary.net, 'transaction net movement'),
+      averageTransaction: requireNumber(summary.averageTransaction, 'average transaction'),
+      byType: byType.map((item: unknown) => {
+        const row = requireRecord(item, 'transaction type summary')
+        return {
+          type: parseTransactionType(row.type),
+          count: requireNumber(row.count, 'transaction count'),
+          amount: requireNumber(row.amount, 'transaction type amount'),
+          inflow: requireNumber(row.inflow, 'transaction type inflow'),
+          outflow: requireNumber(row.outflow, 'transaction type outflow'),
+        }
+      }),
+      trend: trend.map((item: unknown) => {
+        const row = requireRecord(item, 'daily transaction summary')
+        return {
+          date: requireString(row.date, 'transaction trend date'),
+          inflow: requireNumber(row.inflow, 'daily inflow'),
+          outflow: requireNumber(row.outflow, 'daily outflow'),
+          net: requireNumber(row.net, 'daily net movement'),
+          count: requireNumber(row.count, 'daily transaction count'),
+        }
+      }),
+    }
+    const balance = requireRecord(data.balance, 'balance')
+    const balanceData = {
+      current: requireNumber(balance.current, 'balance current'),
+      available: requireNumber(balance.available, 'balance available'),
+      held_back: requireNumber(balance.held_back, 'balance held back'),
+    }
+    if (!response.pagination) throw new Error('Takealot returned invalid transaction pagination metadata.')
+    const definitions = requireRecord(data.definitions, 'transaction definitions')
+    const reportedCount =
+      data.reportedCount === null ? null : requireNumber(data.reportedCount, 'reported transaction count')
+    return {
+      transactions,
+      summary: summaryData,
+      balance: balanceData,
+      balanceRetrievedAt: requireString(data.balanceRetrievedAt, 'balance retrieval date'),
+      availableTypes: data.availableTypes.map((type: unknown) => parseTransactionType(type)),
+      currency: requireString(data.currency, 'transaction currency'),
+      timeZone: requireString(data.timeZone, 'transaction time zone'),
+      reportedCount,
+      definitions: {
+        inflow: requireString(definitions.inflow, 'inflow definition'),
+        outflow: requireString(definitions.outflow, 'outflow definition'),
+        net: requireString(definitions.net, 'net definition'),
+        balance: requireString(definitions.balance, 'balance definition'),
+      },
+      pagination: {
+        page: response.pagination.page,
+        limit: filters.limit,
+        total: response.pagination.total,
+        totalPages: response.pagination.totalPages,
+        hasMore: response.pagination.hasMore,
+      },
+    }
+  })
 }
 
 export function getTakealotPricingSalesAnalytics(

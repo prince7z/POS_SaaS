@@ -130,7 +130,7 @@ const main = async (): Promise<void> => {
       return
     originalConsoleError(...args)
   }
-  const upstreamCalls: Array<{ url: URL; authorization: string | null }> = []
+  const upstreamCalls: Array<{ url: URL; authorization: string | null; apiKey: string | null }> = []
   let retryAttempts = 0
   const sales = [
     {
@@ -207,7 +207,42 @@ const main = async (): Promise<void> => {
   globalThis.fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
     const authorization = new Headers(init?.headers).get('authorization')
-    upstreamCalls.push({ url, authorization })
+    const apiKey = new Headers(init?.headers).get('X-API-Key')
+    upstreamCalls.push({ url, authorization, apiKey })
+    if (url.hostname === 'marketplace-api.takealot.com' && url.pathname === '/v1/balances') {
+      return Response.json({ balances: { current: 120, available: 100, held_back: 20 } })
+    }
+    if (url.hostname === 'marketplace-api.takealot.com' && url.pathname === '/v1/transactions') {
+      const types = url.searchParams.getAll('transaction_type__in')
+      const customerPayment = {
+        transaction_id: 501,
+        transaction_type: 'payment-customer-order',
+        amount_incl_vat: 100,
+        vat_multiplier: 0.15,
+        created_at: '2026-10-01T10:00:00+02:00',
+        references: { order_id: 10 },
+      }
+      const fulfilmentCharge = {
+        transaction_id: 502,
+        transaction_type: 'charge-fulfilment-fee',
+        amount_incl_vat: -25,
+        vat_multiplier: 0.15,
+        created_at: '2026-10-02T11:30:00+02:00',
+        references: { order_id: 10 },
+      }
+      if (types.length > 0) {
+        const filtered = [customerPayment, fulfilmentCharge].filter((item) => types.includes(item.transaction_type))
+        return Response.json({ items: filtered, continuation_token: null, count: filtered.length })
+      }
+      if (url.searchParams.get('continuation_token') === 'transactions-page-2') {
+        return Response.json({ items: [fulfilmentCharge], continuation_token: null })
+      }
+      return Response.json({
+        items: [customerPayment],
+        continuation_token: 'transactions-page-2',
+        count: 2,
+      })
+    }
     if (url.pathname === '/v1/test/retry') {
       retryAttempts++
       if (retryAttempts === 1) {
@@ -371,6 +406,65 @@ const main = async (): Promise<void> => {
     assert.equal(dataOf(overview).inventory.stockCounts.count, 15)
     assert.equal(dataOf(overview).inventory.stockHealth.storage_fee_enabled_offer_count, 2)
     logPass('overview combines the documented summary and current stock endpoints without claiming date filtering')
+
+    const futureDate = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
+    const invalidTransactionRange = await request(
+      `/takealot/transactions?from=${futureDate}&to=${futureDate}&page=1&limit=25&sortBy=createdAt&sortOrder=desc`,
+    )
+    assert.equal(invalidTransactionRange.status, 400)
+    const oversizedTransactionRange = await request(
+      '/takealot/transactions?from=2026-01-01&to=2026-07-01&page=1&limit=25&sortBy=createdAt&sortOrder=desc',
+    )
+    assert.equal(oversizedTransactionRange.status, 400)
+    const transactionReport = await request(
+      '/takealot/transactions?from=2026-10-01&to=2026-10-02&page=1&limit=1&sortBy=amount&sortOrder=asc',
+    )
+    assert.equal(transactionReport.status, 200, JSON.stringify(transactionReport.body))
+    const transactionData = dataOf(transactionReport)
+    assert.equal((transactionData.transactions as Array<Record<string, unknown>>).length, 1)
+    assert.equal((transactionData.transactions as Array<Record<string, unknown>>)[0].transaction_id, 502)
+    assert.deepEqual(transactionData.summary, {
+      count: 2,
+      inflow: 100,
+      outflow: 25,
+      net: 75,
+      averageTransaction: 37.5,
+      byType: [
+        { type: 'payment-customer-order', count: 1, amount: 100, inflow: 100, outflow: 0 },
+        { type: 'charge-fulfilment-fee', count: 1, amount: -25, inflow: 0, outflow: 25 },
+      ],
+      trend: [
+        { date: '2026-10-01', inflow: 100, outflow: 0, net: 100, count: 1 },
+        { date: '2026-10-02', inflow: 0, outflow: 25, net: -25, count: 1 },
+      ],
+    })
+    assert.deepEqual(transactionData.balance, { current: 120, available: 100, held_back: 20 })
+    assert.equal((transactionReport.body.pagination as Record<string, unknown>).total, 2)
+    assert.equal((transactionReport.body.pagination as Record<string, unknown>).hasMore, true)
+    const filteredTransactions = await request(
+      '/takealot/transactions?from=2026-10-01&to=2026-10-02&page=1&limit=25&sortBy=createdAt&sortOrder=desc&types=charge-fulfilment-fee',
+    )
+    assert.equal(filteredTransactions.status, 200)
+    assert.equal((dataOf(filteredTransactions).summary as Record<string, unknown>).count, 1)
+    assert.equal((dataOf(filteredTransactions).transactions as Array<Record<string, unknown>>)[0].transaction_id, 502)
+    const marketplaceCalls = upstreamCalls.filter((call) => call.url.hostname === 'marketplace-api.takealot.com')
+    assert.equal(marketplaceCalls.length, 5)
+    assert.ok(marketplaceCalls.every((call) => call.apiKey === 'test-api-key' && call.authorization === null))
+    const marketplaceTransactionCalls = marketplaceCalls.filter((call) => call.url.pathname === '/v1/transactions')
+    assert.equal(marketplaceTransactionCalls.length, 3)
+    assert.deepEqual(marketplaceTransactionCalls[0].url.searchParams.getAll('transaction_type__in'), [])
+    assert.equal(marketplaceTransactionCalls[0].url.searchParams.get('created_at__gte'), '2026-10-01T00:00:00+02:00')
+    assert.equal(
+      marketplaceTransactionCalls[0].url.searchParams.get('created_at__lte'),
+      '2026-10-02T23:59:59.999+02:00',
+    )
+    assert.deepEqual(marketplaceTransactionCalls[2].url.searchParams.getAll('transaction_type__in'), [
+      'charge-fulfilment-fee',
+    ])
+    assert.equal(transactionData.currency, 'ZAR')
+    logPass(
+      'transactions fetch all continuation pages, aggregate signed totals, filter/sort/page, and keep current balance distinct',
+    )
 
     const offersPage = await takealotApi.getOffers('test-api-key', 1, 100)
     assert.equal(offersPage.page_summary.total_results, 1)

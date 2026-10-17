@@ -15,9 +15,12 @@ export type TakealotPayload = Readonly<Record<string, string | number | boolean 
 type TakealotRequestOptions = {
   notFoundAsNull?: boolean
   errorCode?: string
+  baseUrl?: string
+  apiKeyHeader?: 'Authorization' | 'X-API-Key'
 }
 
-const baseUrl = 'https://seller-api.takealot.com'
+const sellerApiBaseUrl = 'https://seller-api.takealot.com'
+const marketplaceApiBaseUrl = 'https://marketplace-api.takealot.com'
 const timeoutMs = 10_000
 const maxAttempts = 3
 
@@ -67,7 +70,7 @@ async function request<T>(
     throw new AppError('Invalid Takealot API path.', 500, 'TAKEALOT_INVALID_PATH')
   }
 
-  const url = new URL(api, baseUrl)
+  const url = new URL(api, options.baseUrl ?? sellerApiBaseUrl)
   for (const [key, value] of Object.entries(payload)) {
     if (value === undefined) continue
     if (Array.isArray(value)) {
@@ -84,7 +87,10 @@ async function request<T>(
     try {
       response = await fetch(url, {
         method: 'GET',
-        headers: { Authorization: `Key ${apiKey}`, Accept: 'application/json' },
+        headers: {
+          [options.apiKeyHeader ?? 'Authorization']: options.apiKeyHeader === 'X-API-Key' ? apiKey : `Key ${apiKey}`,
+          Accept: 'application/json',
+        },
         signal: AbortSignal.timeout(timeoutMs),
       })
     } catch (error) {
@@ -147,6 +153,13 @@ async function request<T>(
 
 export const takealotClient = {
   request,
+  marketplaceRequest<T>(apiKey: string, api: string, payload?: TakealotPayload): Promise<T> {
+    return request<T>(apiKey, api, payload, {
+      baseUrl: marketplaceApiBaseUrl,
+      apiKeyHeader: 'X-API-Key',
+      errorCode: 'TAKEALOT_MARKETPLACE_API_FAILED',
+    })
+  },
   async findOffer(apiKey: string, identifierType: OfferIdentifierType, identifier: string): Promise<unknown> {
     const encodedIdentifier = encodeURIComponent(identifier)
     const path = identifierType === 'OFFER_ID' ? encodedIdentifier : `${identifierType}${encodedIdentifier}`

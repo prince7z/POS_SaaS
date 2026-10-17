@@ -197,6 +197,16 @@ router.get('/inventory/summary', requireTakealotApiKey, async (request, response
   )
 })
 
+router.get('/transactions', requireTakealotApiKey, async (request, response) => {
+  const auth = authFrom(request)
+  const integrationId = integrationIdFrom(request)
+  await integrationService.assertTakealotIntegration(auth.companyId, integrationId)
+  const input = service.parse(service.transactionsSchema, request.query)
+  const result = await service.transactionsReport(auth.companyId, integrationId, apiKeyFrom(request), input)
+  const { pagination, ...data } = result
+  return sendPaginatedSuccess(response, data, pagination)
+})
+
 router.get('/inventory/snapshots', async (request, response) => {
   const auth = authFrom(request)
   const integrationId = integrationIdFrom(request)

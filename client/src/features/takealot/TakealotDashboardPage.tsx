@@ -51,6 +51,7 @@ import {
   getTakealotPricingSalesAnalytics,
   getTakealotProducts,
   getTakealotSyncStatus,
+  getTakealotTransactions,
   stopTakealotSync,
   streamTakealotSync,
   getTakealotTrends,
@@ -67,6 +68,7 @@ import {
   type TakealotTopOfferSortBy,
   type TakealotSale,
   type TakealotSyncStatus,
+  type TakealotTransactionType,
   type TakealotWarehouseSortBy,
 } from '@/api/endpoints/takealot'
 import { getIntegrations, type Integration } from '@/api/endpoints/integrations'
@@ -83,7 +85,7 @@ import { TakealotDateRangePicker, type TakealotDateRange } from './components/Ta
 
 type DateRange = TakealotDateRange
 type Granularity = 'day' | 'week' | 'month'
-type Section = 'overview' | 'analytics' | 'products' | 'orders' | 'stock' | 'offers' | 'alerts'
+type Section = 'overview' | 'analytics' | 'products' | 'orders' | 'transactions' | 'stock' | 'offers' | 'alerts'
 type ResourceMeta = { savedAt: number; stale: boolean; cached: boolean; loading?: boolean }
 type DashboardIdentity = { configured: boolean; companyId: string; userId: string; integrationId: string }
 type TableSort<K extends string = string> = { key: K; direction: 'asc' | 'desc' }
@@ -4154,6 +4156,461 @@ function StockPanel({
   )
 }
 
+type TransactionSort = 'createdAt' | 'transactionType' | 'amount' | 'transactionId'
+const transactionTypeLabel = (value: TakealotTransactionType) =>
+  value
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+const transactionTypeDescriptions: Record<TakealotTransactionType, string> = {
+  'charge-subscription-fee': 'Monthly subscription fee charged to the seller account.',
+  'charge-fulfilment-fee': 'Fulfilment fee associated with preparing or fulfilling a customer order.',
+  'charge-storage-fee': 'Fee for stock stored in Takealot warehouses.',
+  'charge-success-fee': 'Marketplace success or commission fee associated with a customer order.',
+  'reversal-success-fee': 'Reversal of a previously charged success fee, commonly after a return or cancellation.',
+  'payment-customer-order': 'Sales proceeds credited for a customer order.',
+  'reversal-customer-order': 'Reversal of customer-order proceeds, for example after a return or cancellation.',
+  'disbursement-disbursement': 'A regular disbursement of funds from Takealot to the seller.',
+  'reversal-disbursement': 'Reversal or correction of a previously recorded disbursement.',
+  'payment-eft-payment': 'Funds received through an electronic funds transfer payment.',
+  'charge-manual': 'A fee or debit manually recorded on the seller account; check references for context.',
+  'disbursement-manual': 'A seller payout manually recorded on the account.',
+  'reversal-manual': 'A manual reversal of a previously recorded transaction.',
+  'payment-manual': 'A payment or credit manually recorded on the seller account.',
+  'payment-debit-order': 'A debit-order payment recorded against the seller account.',
+  'reversal-debit-order': 'Reversal of a debit-order payment.',
+  'payment-storage-fee-rebate': 'A credit or rebate relating to previously charged storage fees.',
+  'reversal-storage-fee-rebate-reversal': 'A reversal of a previously applied storage-fee rebate.',
+  'charge-order-cancellation-penalty': 'Penalty charged when an order is cancelled under a fee-bearing condition.',
+  'charge-courier-collection-fee': 'Courier collection fee associated with an order.',
+  'charge-removal-order': 'Charge associated with a stock removal order; consult references for operation details.',
+  'charge-stock-transfer-fee': 'Fee for transferring stock between Takealot locations or warehouses.',
+  'charge-ad-credit-purchase': 'Purchase of credit for sponsored advertising.',
+  'reversal-fulfilment-fee': 'Reversal of a previously charged fulfilment fee.',
+  'reversal-courier-collection-fee': 'Reversal of a previously charged courier collection fee.',
+  'reversal-removal-order-fee-reversal': 'Reversal associated with a previously charged removal-order fee.',
+  'payment-stock-loss-payment': 'Compensation credited for stock recorded as lost.',
+  'reversal-stock-loss-reversal': 'Reversal of a previously credited stock-loss payment.',
+  'charge-stock-loss-success-fee': 'Success fee charged in relation to a stock-loss payment.',
+  'reversal-stock-loss-success-fee-reversal': 'Reversal of a stock-loss success fee.',
+  'charge-stock-loss-fulfilment-fee': 'Fulfilment fee charged in relation to a stock-loss transaction.',
+  'reversal-stock-loss-fulfilment-fee-reversal': 'Reversal of a stock-loss fulfilment fee.',
+  'payment-return-dispute-payment': 'Credit related to the resolution of a return dispute.',
+  'charge-removal-order-fee': 'Fee for a removal order; check transaction references for the specific removal.',
+  'charge-takealot-removal-order-fee': 'Removal-order fee specifically identified as a Takealot removal charge.',
+  'charge-returns-removal-order-fee': 'Removal-order fee associated with stock being removed due to returns.',
+  'funding-repayment-funding-repayment-seller-capital':
+    'Repayment collected against a Takealot Seller Capital funding facility.',
+}
+const transactionReferenceLabel = (references?: Record<string, unknown>) =>
+  references
+    ? Object.entries(references)
+        .map(
+          ([key, value]) => `${key}: ${typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value))}`,
+        )
+        .join(' · ')
+    : ''
+
+function TransactionsPanel({
+  enabled,
+  identity,
+  range,
+  refreshToken,
+  onMeta,
+  onRetry,
+}: {
+  enabled: boolean
+  identity: DashboardIdentity
+  range: DateRange
+  refreshToken: number
+  onMeta: (meta: ResourceMeta, refreshToken: number, outcome?: 'success' | 'error') => void
+  onRetry: () => void
+}) {
+  const [selectedType, setSelectedType] = useState<TakealotTransactionType | ''>('')
+  const [searchText, setSearchText] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [sort, setSort] = useState<TableSort<TransactionSort>>({ key: 'createdAt', direction: 'desc' })
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(searchText.trim()), 250)
+    return () => window.clearTimeout(timer)
+  }, [searchText])
+  const parameters = {
+    ...range,
+    type: selectedType || undefined,
+    search: debouncedSearch || undefined,
+    page,
+    sort,
+  }
+  const key = cacheKey(identity, 'transactions', parameters)
+  const fetcher = useCallback(
+    (signal: AbortSignal) =>
+      getTakealotTransactions(
+        identity.integrationId,
+        {
+          from: range.from,
+          to: range.to,
+          types: selectedType ? [selectedType] : undefined,
+          search: debouncedSearch || undefined,
+          page,
+          limit: 25,
+          sortBy: sort.key,
+          sortOrder: sort.direction,
+        },
+        signal,
+      ),
+    [debouncedSearch, identity.integrationId, page, range.from, range.to, selectedType, sort],
+  )
+  const resource = useCachedResource(enabled, key, fetcher, refreshToken, onMeta)
+  const report = resource.data
+  const amountFormatter = (amount: number) => formatCurrency(amount, report?.currency ?? 'ZAR')
+  const transactionTrend: EChartsOption = useMemo(
+    () => ({
+      color: ['#16a34a', '#ef4444', '#2563eb'],
+      tooltip: {
+        trigger: 'axis',
+        valueFormatter: (value) => amountFormatter(Number(value)),
+      },
+      legend: { top: 0, data: ['Money in', 'Money out', 'Net movement'] },
+      grid: { left: 12, right: 18, top: 42, bottom: 8, containLabel: true },
+      xAxis: {
+        type: 'category',
+        data: report?.summary.trend.map((point) => dateLabel(point.date)) ?? [],
+        axisLabel: { hideOverlap: true },
+      },
+      yAxis: { type: 'value', axisLabel: { formatter: (value: number) => formatNumber(value) } },
+      series: [
+        {
+          name: 'Money in',
+          type: 'bar',
+          stack: 'cash-flow',
+          data: report?.summary.trend.map((point) => point.inflow) ?? [],
+          itemStyle: { borderRadius: [4, 4, 0, 0] },
+        },
+        {
+          name: 'Money out',
+          type: 'bar',
+          stack: 'cash-flow',
+          data: report?.summary.trend.map((point) => -point.outflow) ?? [],
+          itemStyle: { borderRadius: [0, 0, 4, 4] },
+        },
+        {
+          name: 'Net movement',
+          type: 'line',
+          smooth: true,
+          data: report?.summary.trend.map((point) => point.net) ?? [],
+          symbolSize: 6,
+          lineStyle: { width: 3 },
+        },
+      ],
+    }),
+    [amountFormatter, report],
+  )
+  const typeBreakdown: EChartsOption = useMemo(
+    () => ({
+      tooltip: {
+        trigger: 'item',
+        formatter: (parameters) => {
+          const item = Array.isArray(parameters) ? parameters[0] : parameters
+          return `${escapeChartText(String(item.name))}<br/>${amountFormatter(Number(item.value))}`
+        },
+      },
+      legend: {
+        type: 'scroll',
+        orient: 'horizontal',
+        left: '5%',
+        bottom: 0,
+        width: '90%',
+        height: '24%',
+        itemGap: 14,
+        textStyle: { fontSize: 11 },
+      },
+      series: [
+        {
+          name: 'Absolute transaction value',
+          type: 'pie',
+          radius: ['35%', '55%'],
+          center: ['50%', '38%'],
+          avoidLabelOverlap: true,
+          itemStyle: { borderRadius: 5, borderColor: 'transparent', borderWidth: 2 },
+          label: { show: false },
+          data:
+            report?.summary.byType.map((item) => ({
+              name: transactionTypeLabel(item.type),
+              value: item.inflow + item.outflow,
+            })) ?? [],
+        },
+      ],
+    }),
+    [amountFormatter, report],
+  )
+  const selectSort = (column: TransactionSort) => {
+    setSort((current) => toggleTableSort(current, column))
+    setPage(1)
+  }
+
+  if (resource.loading && !report) {
+    return (
+      <SimpleGrid columns={{ base: 1, md: 2 }} gap="4" aria-label="Loading transaction dashboard">
+        {[0, 1, 2, 3].map((item) => (
+          <Card.Root key={item} variant="outline">
+            <Card.Body gap="3">
+              <Skeleton height="5" width="40%" />
+              <Skeleton height={item < 2 ? '32' : '56'} />
+              <Skeleton height="4" width="70%" />
+            </Card.Body>
+          </Card.Root>
+        ))}
+      </SimpleGrid>
+    )
+  }
+  if (resource.error && !report) {
+    return (
+      <Card.Root variant="outline" borderColor="border.error">
+        <Card.Body>
+          <Stack gap="3" align="start">
+            <Text color="fg.error" fontWeight="semibold">
+              Transactions could not be loaded
+            </Text>
+            <Text color="fg.muted">{resource.error}</Text>
+            <Button size="sm" variant="outline" onClick={onRetry}>
+              Try again
+            </Button>
+          </Stack>
+        </Card.Body>
+      </Card.Root>
+    )
+  }
+
+  return (
+    <Stack gap="5">
+      {resource.error && (
+        <Card.Root variant="outline" borderColor="border.warning">
+          <Card.Body>
+            <Text color="fg.warning">Showing previously loaded data. Refresh failed: {resource.error}</Text>
+          </Card.Body>
+        </Card.Root>
+      )}
+      {report && (
+        <>
+          <Text fontSize="sm" color="fg.muted">
+            Transaction dates and daily charts use {report.timeZone}. Transaction totals follow the selected date range.
+            Balances are a current snapshot retrieved {new Date(report.balanceRetrievedAt).toLocaleString()} and are not
+            date-filtered.
+          </Text>
+          <SimpleGrid columns={{ base: 1, sm: 2, xl: 3 }} gap="3">
+            {[
+              { title: 'Money in', value: report.summary.inflow, color: 'green.fg' },
+              { title: 'Money out', value: report.summary.outflow, color: 'red.fg' },
+              {
+                title: 'Net movement',
+                value: report.summary.net,
+                color: report.summary.net >= 0 ? 'blue.fg' : 'red.fg',
+              },
+              { title: 'Current balance', value: report.balance.current, color: 'purple.fg' },
+              { title: 'Current available', value: report.balance.available, color: 'teal.fg' },
+              { title: 'Held back', value: report.balance.held_back, color: 'orange.fg' },
+            ].map((metric) => (
+              <MotionCard key={metric.title} variant="outline" whileHover={{ y: -2 }}>
+                <Card.Body gap="1">
+                  <Text fontSize="sm" color="fg.muted">
+                    {metric.title}
+                  </Text>
+                  <Text fontSize={{ base: 'xl', md: '2xl' }} fontWeight="bold" color={metric.color}>
+                    {amountFormatter(metric.value)}
+                  </Text>
+                </Card.Body>
+              </MotionCard>
+            ))}
+          </SimpleGrid>
+          <SimpleGrid columns={{ base: 1, xl: 3 }} gap="4">
+            <Box gridColumn={{ xl: 'span 2' }}>
+              <ChartCard
+                title="Daily money movement"
+                description="Positive amounts are credits; negative amounts are charges. Net movement is not an account balance."
+                option={transactionTrend}
+                icon={ChartNoAxesCombined}
+                height="320px"
+              />
+            </Box>
+            <ChartCard
+              title="Transaction mix"
+              description="Absolute value grouped by transaction type; use the legend to focus the chart."
+              option={typeBreakdown}
+              icon={ReceiptText}
+              height="380px"
+            />
+          </SimpleGrid>
+          <Card.Root variant="outline">
+            <Card.Header>
+              <Flex align="center" justify="space-between" gap="3" wrap="wrap">
+                <Box>
+                  <Card.Title>Transactions</Card.Title>
+                  <Card.Description>
+                    {formatNumber(report.pagination.total)} transactions match the current filters
+                  </Card.Description>
+                </Box>
+                <Flex gap="2" wrap="wrap" flex={{ base: '1 1 100%', md: '0 1 auto' }}>
+                  <Input
+                    aria-label="Search transaction ID"
+                    placeholder="Search transaction ID"
+                    value={searchText}
+                    maxLength={100}
+                    onChange={(event) => {
+                      setSearchText(event.target.value)
+                      setPage(1)
+                    }}
+                    maxW={{ base: 'full', md: '220px' }}
+                  />
+                  <DashboardSelect
+                    value={selectedType}
+                    onChange={(value) => {
+                      setSelectedType(report.availableTypes.find((type) => type === value) ?? '')
+                      setPage(1)
+                    }}
+                    placeholder="All transaction types"
+                    width="260px"
+                    options={[
+                      { value: '', label: 'All transaction types' },
+                      ...report.availableTypes.map((type) => ({ value: type, label: transactionTypeLabel(type) })),
+                    ]}
+                  />
+                </Flex>
+              </Flex>
+            </Card.Header>
+            <Card.Body pt="0">
+              <Box display={{ base: 'none', md: 'block' }} overflowX="auto">
+                <Table.Root size="sm" variant="outline">
+                  <Table.Header>
+                    <Table.Row>
+                      <SortableColumnHeader label="Date" sortKey="createdAt" sort={sort} onSort={selectSort} />
+                      <SortableColumnHeader label="Type" sortKey="transactionType" sort={sort} onSort={selectSort} />
+                      <SortableColumnHeader
+                        label="Transaction ID"
+                        sortKey="transactionId"
+                        sort={sort}
+                        onSort={selectSort}
+                      />
+                      <SortableColumnHeader
+                        label="Amount"
+                        sortKey="amount"
+                        sort={sort}
+                        onSort={selectSort}
+                        textAlign="end"
+                      />
+                      <Table.ColumnHeader textAlign="end">VAT rate</Table.ColumnHeader>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {report.transactions.map((transaction) => (
+                      <Table.Row key={transaction.transaction_id}>
+                        <Table.Cell whiteSpace="nowrap">{new Date(transaction.created_at).toLocaleString()}</Table.Cell>
+                        <Table.Cell>{transactionTypeLabel(transaction.transaction_type)}</Table.Cell>
+                        <Table.Cell>
+                          {transaction.transaction_id}
+                          {transactionReferenceLabel(transaction.references) ? (
+                            <Text fontSize="xs" color="fg.muted">
+                              {transactionReferenceLabel(transaction.references)}
+                            </Text>
+                          ) : null}
+                        </Table.Cell>
+                        <Table.Cell textAlign="end">
+                          <Text color={transaction.amount_incl_vat >= 0 ? 'green.fg' : 'red.fg'}>
+                            {amountFormatter(transaction.amount_incl_vat)}
+                          </Text>
+                        </Table.Cell>
+                        <Table.Cell textAlign="end">{formatNumber(transaction.vat_multiplier * 100)}%</Table.Cell>
+                      </Table.Row>
+                    ))}
+                  </Table.Body>
+                </Table.Root>
+              </Box>
+              <Stack display={{ base: 'flex', md: 'none' }} gap="2">
+                {report.transactions.map((transaction) => (
+                  <Card.Root key={transaction.transaction_id} variant="subtle">
+                    <Card.Body gap="2" p="3">
+                      <Flex justify="space-between" align="start" gap="3">
+                        <Stack gap="1">
+                          <Text fontWeight="semibold">{transactionTypeLabel(transaction.transaction_type)}</Text>
+                          <Text fontSize="xs" color="fg.muted">
+                            ID {transaction.transaction_id} · {new Date(transaction.created_at).toLocaleString()}
+                            {transactionReferenceLabel(transaction.references)
+                              ? ` · ${transactionReferenceLabel(transaction.references)}`
+                              : ''}
+                          </Text>
+                        </Stack>
+                        <Text fontWeight="bold" color={transaction.amount_incl_vat >= 0 ? 'green.fg' : 'red.fg'}>
+                          {amountFormatter(transaction.amount_incl_vat)}
+                        </Text>
+                      </Flex>
+                    </Card.Body>
+                  </Card.Root>
+                ))}
+              </Stack>
+              {report.transactions.length === 0 && (
+                <Text py="6" textAlign="center" color="fg.muted">
+                  No transactions match the selected date range and filters.
+                </Text>
+              )}
+              <Flex align="center" justify="space-between" gap="3" mt="4" wrap="wrap">
+                <Text fontSize="sm" color="fg.muted">
+                  Page {report.pagination.page} of {Math.max(1, report.pagination.totalPages)}
+                </Text>
+                <Flex gap="2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page <= 1}
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!report.pagination.hasMore}
+                    onClick={() => setPage((current) => current + 1)}
+                  >
+                    Next
+                  </Button>
+                </Flex>
+              </Flex>
+            </Card.Body>
+          </Card.Root>
+          <Card.Root variant="outline">
+            <Card.Header>
+              <Card.Title>Transaction type notes</Card.Title>
+              <Card.Description>
+                These are Takealot’s transaction categories. Amount signs indicate the account movement; use each
+                transaction’s references for order-specific context.
+              </Card.Description>
+            </Card.Header>
+            <Card.Body pt="0">
+              <Box as="details">
+                <Text as="summary" cursor="pointer" color="fg.muted" fontSize="sm" fontWeight="medium">
+                  View all {report.availableTypes.length} transaction types and meanings
+                </Text>
+                <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} gap="3" mt="4">
+                  {report.availableTypes.map((type) => (
+                    <Box key={type} borderWidth="1px" borderColor="border" borderRadius="md" p="3">
+                      <Text fontSize="sm" fontWeight="semibold">
+                        {transactionTypeLabel(type)}
+                      </Text>
+                      <Text fontSize="sm" color="fg.muted" mt="1">
+                        {transactionTypeDescriptions[type]}
+                      </Text>
+                    </Box>
+                  ))}
+                </SimpleGrid>
+              </Box>
+            </Card.Body>
+          </Card.Root>
+        </>
+      )}
+    </Stack>
+  )
+}
+
 export function TakealotDashboardPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -4175,6 +4632,7 @@ export function TakealotDashboardPage() {
     analytics: 0,
     products: 0,
     orders: 0,
+    transactions: 0,
     stock: 0,
     offers: 0,
     alerts: 0,
@@ -4212,6 +4670,11 @@ export function TakealotDashboardPage() {
   )
   const onOrdersMeta = useCallback(
     (meta: ResourceMeta, token: number, outcome?: 'success' | 'error') => reportMeta('orders', meta, token, outcome),
+    [reportMeta],
+  )
+  const onTransactionsMeta = useCallback(
+    (meta: ResourceMeta, token: number, outcome?: 'success' | 'error') =>
+      reportMeta('transactions', meta, token, outcome),
     [reportMeta],
   )
   const onStockMeta = useCallback(
@@ -4329,6 +4792,7 @@ export function TakealotDashboardPage() {
             analytics: current.analytics + 1,
             products: current.products + 1,
             orders: current.orders + 1,
+            transactions: current.transactions + 1,
             stock: current.stock + 1,
             offers: current.offers + 1,
             alerts: current.alerts + 1,
@@ -4398,11 +4862,12 @@ export function TakealotDashboardPage() {
     { id: 'analytics', label: 'Sales Analytics', icon: Activity },
     { id: 'products', label: 'Product Performance', icon: Package },
     { id: 'orders', label: 'Orders', icon: ShoppingCart },
+    { id: 'transactions', label: 'Transactions', icon: ReceiptText },
     { id: 'stock', label: 'Stock Health', icon: Warehouse },
     { id: 'offers', label: 'Offers', icon: Package },
     { id: 'alerts', label: 'Alerts', icon: AlertCircle },
   ]
-  const sectionUsesDateRange = ['analytics', 'products', 'orders', 'stock'].includes(activeSection)
+  const sectionUsesDateRange = ['analytics', 'products', 'orders', 'transactions', 'stock'].includes(activeSection)
   const sectionUsesGranularity = activeSection === 'analytics' || activeSection === 'stock'
   return (
     <PageContainer className="takealot-dashboard-page">
@@ -4656,6 +5121,16 @@ export function TakealotDashboardPage() {
                     range={range}
                     refreshToken={refreshTokens.orders}
                     onMeta={onOrdersMeta}
+                  />
+                )}
+                {activeSection === 'transactions' && (
+                  <TransactionsPanel
+                    enabled
+                    identity={identity}
+                    range={range}
+                    refreshToken={refreshTokens.transactions}
+                    onMeta={onTransactionsMeta}
+                    onRetry={refresh}
                   />
                 )}
                 {activeSection === 'stock' && (

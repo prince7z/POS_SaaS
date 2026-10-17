@@ -10,6 +10,9 @@ import {
   type TakealotOrderRecord,
   type TakealotSale,
   type TakealotSalesFilters,
+  type TakealotTransaction,
+  type TakealotTransactionType,
+  takealotTransactionTypes,
 } from './takealot-api'
 
 const pageSchema = z.coerce.number().int().min(1).default(1)
@@ -148,6 +151,40 @@ export const inventorySnapshotsSchema = z
   })
   .strict()
   .superRefine((value, context) => dateRangeIssue(value, context, true))
+
+const takealotTimezoneOffsetMs = 2 * 60 * 60 * 1000
+const takealotToday = () => new Date(Date.now() + takealotTimezoneOffsetMs).toISOString().slice(0, 10)
+const transactionDateSchema = dateSchema.refine((value) => value <= takealotToday(), {
+  message: 'Transaction dates cannot be in the future',
+})
+export const transactionsSchema = z
+  .object({
+    from: transactionDateSchema,
+    to: transactionDateSchema,
+    types: z
+      .union([
+        z.array(z.enum(takealotTransactionTypes)).max(takealotTransactionTypes.length),
+        z.enum(takealotTransactionTypes),
+      ])
+      .optional()
+      .transform((value) => (value === undefined ? undefined : Array.isArray(value) ? value : [value])),
+    search: z.string().trim().max(100).optional(),
+    page: pageSchema,
+    limit: limitSchema,
+    sortBy: z.enum(['createdAt', 'transactionType', 'amount', 'transactionId']).default('createdAt'),
+    sortOrder: z.enum(['asc', 'desc']).default('desc'),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    dateRangeIssue(value, context, true)
+    if (value.from && value.to) {
+      const rangeInDays =
+        (Date.parse(`${value.to}T00:00:00.000Z`) - Date.parse(`${value.from}T00:00:00.000Z`)) / 86_400_000
+      if (Number.isFinite(rangeInDays) && rangeInDays > 180) {
+        context.addIssue({ code: 'custom', path: ['to'], message: 'Transaction date ranges cannot exceed 180 days' })
+      }
+    }
+  })
 
 export const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   const result = schema.safeParse(value)
@@ -999,6 +1036,205 @@ export const inventorySummary = async (companyId: string, integrationId: string,
     },
   })
   return { stockCounts, stockHealth, capturedAt }
+}
+
+type TransactionDataset = {
+  transactions: TakealotTransaction[]
+  balance: Awaited<ReturnType<typeof takealotApi.getBalances>>
+  balanceRetrievedAt: string
+  reportedCount: number | null
+}
+
+const transactionDatasetCache = new Map<string, { expiresAt: number; value: TransactionDataset }>()
+const transactionDatasetRequests = new Map<string, Promise<TransactionDataset>>()
+const transactionDatasetTtlMs = 60_000
+const maximumTransactionPages = 500
+
+const transactionDataset = (
+  companyId: string,
+  integrationId: string,
+  apiKey: string,
+  input: Pick<z.infer<typeof transactionsSchema>, 'from' | 'to' | 'types'>,
+): Promise<TransactionDataset> => {
+  const cacheKey = JSON.stringify({ companyId, integrationId, ...input })
+  const cached = transactionDatasetCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.value)
+  const pending = transactionDatasetRequests.get(cacheKey)
+  if (pending) return pending
+
+  const request = (async () => {
+    const from = `${input.from}T00:00:00+02:00`
+    const to = `${input.to}T23:59:59.999+02:00`
+    const [transactions, balance] = await Promise.all([
+      (async () => {
+        const records = new Map<number, TakealotTransaction>()
+        const seenTokens = new Set<string>()
+        let continuationToken: string | undefined
+        let reportedCount: number | null = null
+        let pages = 0
+        do {
+          if (pages >= maximumTransactionPages) {
+            throw new AppError(
+              `The selected range contains more than ${maximumTransactionPages * 100} transactions. Narrow the date range or transaction types.`,
+              422,
+              'TAKEALOT_TRANSACTION_RANGE_TOO_LARGE',
+            )
+          }
+          const page = await takealotApi.getTransactions(apiKey, {
+            from,
+            to,
+            types: input.types,
+            continuationToken,
+          })
+          pages += 1
+          if (pages === 1) reportedCount = page.count ?? null
+          for (const transaction of page.items) records.set(transaction.transaction_id, transaction)
+          continuationToken = page.continuation_token ?? undefined
+          if (continuationToken && seenTokens.has(continuationToken)) {
+            throw new AppError(
+              'Takealot repeated a transaction continuation token.',
+              502,
+              'TAKEALOT_INCOMPLETE_RESPONSE',
+            )
+          }
+          if (continuationToken) seenTokens.add(continuationToken)
+        } while (continuationToken)
+        if (reportedCount !== null && records.size !== reportedCount) {
+          throw new AppError(
+            'Takealot returned an incomplete transactions result.',
+            502,
+            'TAKEALOT_INCOMPLETE_RESPONSE',
+          )
+        }
+        return { transactions: [...records.values()], reportedCount }
+      })(),
+      takealotApi.getBalances(apiKey),
+    ])
+    const value = {
+      ...transactions,
+      balance,
+      balanceRetrievedAt: new Date().toISOString(),
+    }
+    transactionDatasetCache.set(cacheKey, { expiresAt: Date.now() + transactionDatasetTtlMs, value })
+    while (transactionDatasetCache.size > 10) {
+      const oldestKey = transactionDatasetCache.keys().next().value
+      if (oldestKey === undefined) break
+      transactionDatasetCache.delete(oldestKey)
+    }
+    return value
+  })().finally(() => transactionDatasetRequests.delete(cacheKey))
+
+  transactionDatasetRequests.set(cacheKey, request)
+  return request
+}
+
+export const transactionsReport = async (
+  companyId: string,
+  integrationId: string,
+  apiKey: string,
+  input: z.infer<typeof transactionsSchema>,
+) => {
+  const dataset = await transactionDataset(companyId, integrationId, apiKey, input)
+  const filteredTransactions = input.search
+    ? dataset.transactions.filter((transaction) => String(transaction.transaction_id).includes(input.search!))
+    : dataset.transactions
+  const transactionTypeTotals = new Map<
+    TakealotTransactionType,
+    { count: number; amount: number; inflow: number; outflow: number }
+  >()
+  const dailyTotals = new Map<string, { inflow: number; outflow: number; net: number; count: number }>()
+  let inflow = 0
+  let outflow = 0
+  let net = 0
+
+  for (const transaction of filteredTransactions) {
+    const amount = transaction.amount_incl_vat
+    const positiveAmount = Math.max(amount, 0)
+    const negativeAmount = Math.abs(Math.min(amount, 0))
+    inflow += positiveAmount
+    outflow += negativeAmount
+    net += amount
+
+    const typeTotals = transactionTypeTotals.get(transaction.transaction_type) ?? {
+      count: 0,
+      amount: 0,
+      inflow: 0,
+      outflow: 0,
+    }
+    typeTotals.count += 1
+    typeTotals.amount += amount
+    typeTotals.inflow += positiveAmount
+    typeTotals.outflow += negativeAmount
+    transactionTypeTotals.set(transaction.transaction_type, typeTotals)
+
+    const date = new Date(Date.parse(transaction.created_at) + takealotTimezoneOffsetMs).toISOString().slice(0, 10)
+    const day = dailyTotals.get(date) ?? { inflow: 0, outflow: 0, net: 0, count: 0 }
+    day.inflow += positiveAmount
+    day.outflow += negativeAmount
+    day.net += amount
+    day.count += 1
+    dailyTotals.set(date, day)
+  }
+
+  const direction = input.sortOrder === 'asc' ? 1 : -1
+  const compareValues = (left: string | number, right: string | number) =>
+    typeof left === 'string' && typeof right === 'string'
+      ? left.localeCompare(right, undefined, { numeric: true })
+      : Number(left) - Number(right)
+  const sortedTransactions = [...filteredTransactions].sort((left, right) => {
+    const values: Record<typeof input.sortBy, [string | number, string | number]> = {
+      createdAt: [left.created_at, right.created_at],
+      transactionType: [left.transaction_type, right.transaction_type],
+      amount: [left.amount_incl_vat, right.amount_incl_vat],
+      transactionId: [left.transaction_id, right.transaction_id],
+    }
+    const comparison = compareValues(...values[input.sortBy])
+    return (comparison || left.transaction_id - right.transaction_id) * direction
+  })
+  const start = (input.page - 1) * input.limit
+  const total = filteredTransactions.length
+  return {
+    transactions: sortedTransactions.slice(start, start + input.limit),
+    pagination: pageResult(input.page, input.limit, total),
+    summary: {
+      count: total,
+      inflow: roundMoney(inflow),
+      outflow: roundMoney(outflow),
+      net: roundMoney(net),
+      averageTransaction: total ? roundMoney(net / total) : 0,
+      byType: [...transactionTypeTotals.entries()]
+        .map(([type, values]) => ({
+          type,
+          count: values.count,
+          amount: roundMoney(values.amount),
+          inflow: roundMoney(values.inflow),
+          outflow: roundMoney(values.outflow),
+        }))
+        .sort((left, right) => Math.abs(right.amount) - Math.abs(left.amount)),
+      trend: [...dailyTotals.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([date, values]) => ({
+          date,
+          inflow: roundMoney(values.inflow),
+          outflow: roundMoney(values.outflow),
+          net: roundMoney(values.net),
+          count: values.count,
+        })),
+    },
+    balance: dataset.balance,
+    balanceRetrievedAt: dataset.balanceRetrievedAt,
+    availableTypes: takealotTransactionTypes,
+    currency: 'ZAR',
+    timeZone: 'Africa/Johannesburg',
+    reportedCount: dataset.reportedCount,
+    definitions: {
+      inflow: 'Sum of positive amount_incl_vat values in the selected range.',
+      outflow: 'Absolute sum of negative amount_incl_vat values in the selected range.',
+      net: 'Signed sum of amount_incl_vat values in the selected range; not an account balance.',
+      balance:
+        'Current balance figures are returned by the separate Takealot balances endpoint and are not filtered by the selected date range.',
+    },
+  }
 }
 
 const snapshotBucket = (date: Date, interval: 'day' | 'week' | 'month'): string => {
